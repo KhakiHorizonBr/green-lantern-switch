@@ -1,0 +1,16 @@
+# Copy this file next to the NRO and rename it to green_lantern.toml.
+# ReXGlue reads this TOML before initializing NVK.
+
+# Stock Switch GPU profile; 0 means leave the system default.
+switch_gpu_mhz = 460
+
+# Keep disabled unless testing confirms the higher memory clock is stable.
+switch_allow_ram_1600 = false
+
+# 0 keeps libnx's default transfer-memory allocation. Avoid increasing it
+# without a specific NVK allocation-tracking error in the log.
+switch_nvmap_mb = 0
+
+# NVK currently reports sparse residency unavailable on this Switch build,
+# so enabling this does not avoid the full 512 MiB Xenos shared-memory buffer.
+vulkan_sparse_shared_memory = true

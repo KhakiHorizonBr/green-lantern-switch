@@ -1,0 +1,497 @@
+# ReXGlue project manifest for local Green Lantern analysis.
+[project]
+name = "green_lantern"
+sdk_version = "0.10.0"
+game_root = "../extracted"
+
+[entrypoint]
+file_path = "../extracted/default.xex"
+out_directory_path = "generated/hinted"
+includes = []
+
+[entrypoint.functions."0x826800B0"]
+name = "manual_826800B0"
+
+[entrypoint.functions."0x8267181C"]
+name = "manual_8267181C"
+
+[entrypoint.functions."0x82671704"]
+name = "manual_82671704"
+
+[entrypoint.functions."0x82615340"]
+name = "manual_82615340"
+
+[entrypoint.functions."0x82680038"]
+name = "manual_82680038"
+
+[entrypoint.functions."0x826177E0"]
+name = "manual_826177E0"
+
+[entrypoint.functions."0x82680190"]
+name = "manual_82680190"
+
+[entrypoint.functions."0x82680180"]
+name = "manual_82680180"
+
+[entrypoint.functions."0x82680170"]
+name = "manual_82680170"
+
+[entrypoint.functions."0x82680160"]
+name = "manual_82680160"
+
+[entrypoint.functions."0x8266D0E8"]
+name = "manual_8266D0E8"
+
+[entrypoint.functions."0x82654F04"]
+name = "manual_82654F04"
+
+[entrypoint.functions."0x822D5D40"]
+name = "manual_822D5D40"
+
+[entrypoint.functions."0x823697D0"]
+name = "manual_823697D0"
+
+[entrypoint.functions."0x82295960"]
+name = "manual_82295960"
+
+[entrypoint.functions."0x82295940"]
+name = "manual_82295940"
+
+[entrypoint.functions."0x823204B8"]
+name = "manual_823204B8"
+
+[entrypoint.functions."0x825CAC40"]
+name = "manual_825CAC40"
+
+[entrypoint.functions."0x825CAC58"]
+name = "manual_825CAC58"
+
+[entrypoint.functions."0x825CAC60"]
+name = "manual_825CAC60"
+
+[entrypoint.functions."0x825CAC68"]
+name = "manual_825CAC68"
+
+[entrypoint.functions."0x825CAC70"]
+name = "manual_825CAC70"
+
+[entrypoint.functions."0x825CAC78"]
+name = "manual_825CAC78"
+
+[entrypoint.functions."0x825D0F20"]
+name = "manual_825D0F20"
+
+[entrypoint.functions."0x825D0F28"]
+name = "manual_825D0F28"
+
+[entrypoint.functions."0x825D0F30"]
+name = "manual_825D0F30"
+
+
+[entrypoint.functions."0x825D0F50"]
+name = "manual_825D0F50"
+
+[entrypoint.functions."0x825D0F58"]
+name = "manual_825D0F58"
+
+[entrypoint.functions."0x825D1210"]
+name = "manual_825D1210"
+
+[entrypoint.functions."0x825D1218"]
+name = "manual_825D1218"
+
+[entrypoint.functions."0x82613268"]
+name = "manual_82613268"
+
+[entrypoint.functions."0x8233FDB8"]
+name = "manual_8233FDB8"
+
+[entrypoint.functions."0x825DFB38"]
+name = "manual_825DFB38"
+
+[entrypoint.functions."0x825E4F28"]
+name = "manual_825E4F28"
+
+[entrypoint.functions."0x826133E0"]
+name = "manual_826133E0"
+
+[entrypoint.functions."0x826133E8"]
+name = "manual_826133E8"
+
+[entrypoint.functions."0x82613450"]
+name = "manual_82613450"
+
+[entrypoint.functions."0x82613458"]
+name = "manual_82613458"
+
+[entrypoint.functions."0x82613508"]
+name = "manual_82613508"
+
+[entrypoint.functions."0x8261F5CC"]
+name = "manual_8261F5CC"
+
+[entrypoint.functions."0x82634E7C"]
+name = "manual_82634E7C"
+
+[entrypoint.functions."0x82758F18"]
+name = "manual_82758F18"
+
+[entrypoint.functions."0x82771968"]
+name = "manual_82771968"
+
+[entrypoint.functions."0x8220D2D0"]
+name = "manual_8220D2D0"
+
+[entrypoint.functions."0x825D0F48"]
+name = "manual_825D0F48"
+
+[entrypoint.functions."0x8214AD10"]
+name = "manual_8214AD10"
+
+[entrypoint.functions."0x82257960"]
+name = "manual_82257960"
+
+[entrypoint.functions."0x8228ED90"]
+name = "manual_8228ED90"
+
+[entrypoint.functions."0x822FC76C"]
+name = "manual_822FC76C"
+
+[entrypoint.functions."0x822FC8F8"]
+name = "manual_822FC8F8"
+
+[entrypoint.functions."0x822FC904"]
+name = "manual_822FC904"
+
+[entrypoint.functions."0x822FEB48"]
+name = "manual_822FEB48"
+
+[entrypoint.functions."0x822FEB78"]
+name = "manual_822FEB78"
+
+[entrypoint.functions."0x822FF148"]
+name = "manual_822FF148"
+
+[entrypoint.functions."0x822FFA2C"]
+name = "manual_822FFA2C"
+
+[entrypoint.functions."0x822FFD94"]
+name = "manual_822FFD94"
+
+[entrypoint.functions."0x822FFDBC"]
+name = "manual_822FFDBC"
+
+[entrypoint.functions."0x8230031C"]
+name = "manual_8230031C"
+
+[entrypoint.functions."0x8230034C"]
+name = "manual_8230034C"
+
+[entrypoint.functions."0x823004C4"]
+name = "manual_823004C4"
+
+[entrypoint.functions."0x82304F50"]
+name = "manual_82304F50"
+
+[entrypoint.functions."0x82308D78"]
+name = "manual_82308D78"
+
+[entrypoint.functions."0x82375734"]
+name = "manual_82375734"
+
+[entrypoint.functions."0x8237574C"]
+name = "manual_8237574C"
+
+[entrypoint.functions."0x82375758"]
+name = "manual_82375758"
+
+[entrypoint.functions."0x82530200"]
+name = "manual_82530200"
+
+[entrypoint.functions."0x825744E4"]
+name = "manual_825744E4"
+
+[entrypoint.functions."0x82575A40"]
+name = "manual_82575A40"
+
+[entrypoint.functions."0x82576A34"]
+name = "manual_82576A34"
+
+[entrypoint.functions."0x82576A84"]
+name = "manual_82576A84"
+
+[entrypoint.functions."0x825781CC"]
+name = "manual_825781CC"
+
+[entrypoint.functions."0x8257B2F0"]
+name = "manual_8257B2F0"
+
+[entrypoint.functions."0x8257B2FC"]
+name = "manual_8257B2FC"
+
+[entrypoint.functions."0x8257B30C"]
+name = "manual_8257B30C"
+
+[entrypoint.functions."0x8257B480"]
+name = "manual_8257B480"
+
+[entrypoint.functions."0x8257B5C4"]
+name = "manual_8257B5C4"
+
+[entrypoint.functions."0x8257B5CC"]
+name = "manual_8257B5CC"
+
+[entrypoint.functions."0x8257B624"]
+name = "manual_8257B624"
+
+[entrypoint.functions."0x8257B62C"]
+name = "manual_8257B62C"
+
+[entrypoint.functions."0x8257B6F8"]
+name = "manual_8257B6F8"
+
+[entrypoint.functions."0x8257B934"]
+name = "manual_8257B934"
+
+[entrypoint.functions."0x8257BFE8"]
+name = "manual_8257BFE8"
+
+[entrypoint.functions."0x8257C4A0"]
+name = "manual_8257C4A0"
+
+[entrypoint.functions."0x8257C6E8"]
+name = "manual_8257C6E8"
+
+[entrypoint.functions."0x8257CA38"]
+name = "manual_8257CA38"
+
+[entrypoint.functions."0x8257D408"]
+name = "manual_8257D408"
+
+[entrypoint.functions."0x8257F460"]
+name = "manual_8257F460"
+
+[entrypoint.functions."0x8257F480"]
+name = "manual_8257F480"
+
+[entrypoint.functions."0x8257F48C"]
+name = "manual_8257F48C"
+
+[entrypoint.functions."0x825809D0"]
+name = "manual_825809D0"
+
+[entrypoint.functions."0x82580CEC"]
+name = "manual_82580CEC"
+
+[entrypoint.functions."0x82580D2C"]
+name = "manual_82580D2C"
+
+[entrypoint.functions."0x82581AC4"]
+name = "manual_82581AC4"
+
+[entrypoint.functions."0x82582130"]
+name = "manual_82582130"
+
+[entrypoint.functions."0x82582150"]
+name = "manual_82582150"
+
+[entrypoint.functions."0x8258248C"]
+name = "manual_8258248C"
+
+[entrypoint.functions."0x825825AC"]
+name = "manual_825825AC"
+
+[entrypoint.functions."0x82582890"]
+name = "manual_82582890"
+
+[entrypoint.functions."0x825841B4"]
+name = "manual_825841B4"
+
+[entrypoint.functions."0x825841C0"]
+name = "manual_825841C0"
+
+[entrypoint.functions."0x825841D0"]
+name = "manual_825841D0"
+
+[entrypoint.functions."0x82584348"]
+name = "manual_82584348"
+
+[entrypoint.functions."0x8258453C"]
+name = "manual_8258453C"
+
+[entrypoint.functions."0x825845A8"]
+name = "manual_825845A8"
+
+[entrypoint.functions."0x8258467C"]
+name = "manual_8258467C"
+
+[entrypoint.functions."0x82584D40"]
+name = "manual_82584D40"
+
+[entrypoint.functions."0x82584D4C"]
+name = "manual_82584D4C"
+
+[entrypoint.functions."0x82584D5C"]
+name = "manual_82584D5C"
+
+[entrypoint.functions."0x8259A8E0"]
+name = "manual_8259A8E0"
+
+[entrypoint.functions."0x8259A900"]
+name = "manual_8259A900"
+
+[entrypoint.functions."0x8259A90C"]
+name = "manual_8259A90C"
+
+[entrypoint.functions."0x825C6880"]
+name = "manual_825C6880"
+
+[entrypoint.functions."0x825C6888"]
+name = "manual_825C6888"
+
+[entrypoint.functions."0x825C6898"]
+name = "manual_825C6898"
+
+[entrypoint.functions."0x825C89F8"]
+name = "manual_825C89F8"
+
+[entrypoint.functions."0x825CAC48"]
+name = "manual_825CAC48"
+
+[entrypoint.functions."0x825D0F38"]
+name = "manual_825D0F38"
+
+[entrypoint.functions."0x825D1200"]
+name = "manual_825D1200"
+
+[entrypoint.functions."0x825D17F0"]
+name = "manual_825D17F0"
+
+[entrypoint.functions."0x825D24F0"]
+name = "manual_825D24F0"
+
+[entrypoint.functions."0x825D3240"]
+name = "manual_825D3240"
+
+[entrypoint.functions."0x825D3728"]
+name = "manual_825D3728"
+
+[entrypoint.functions."0x825D6078"]
+name = "manual_825D6078"
+
+[entrypoint.functions."0x825DFB1C"]
+name = "manual_825DFB1C"
+
+[entrypoint.functions."0x825E2408"]
+name = "manual_825E2408"
+
+[entrypoint.functions."0x825E2410"]
+name = "manual_825E2410"
+
+[entrypoint.functions."0x825E2428"]
+name = "manual_825E2428"
+
+[entrypoint.functions."0x8261F558"]
+name = "manual_8261F558"
+
+[entrypoint.functions."0x8261F55C"]
+name = "manual_8261F55C"
+
+[entrypoint.functions."0x8261F56C"]
+name = "manual_8261F56C"
+
+[entrypoint.functions."0x8261F5DC"]
+name = "manual_8261F5DC"
+
+[entrypoint.functions."0x8261F640"]
+name = "manual_8261F640"
+
+[entrypoint.functions."0x8261F644"]
+name = "manual_8261F644"
+
+[entrypoint.functions."0x8261F654"]
+name = "manual_8261F654"
+
+[entrypoint.functions."0x8261F6B8"]
+name = "manual_8261F6B8"
+
+[entrypoint.functions."0x8261F6BC"]
+name = "manual_8261F6BC"
+
+[entrypoint.functions."0x8261F6CC"]
+name = "manual_8261F6CC"
+
+[entrypoint.functions."0x82634DDC"]
+name = "manual_82634DDC"
+
+[entrypoint.functions."0x82634DE4"]
+name = "manual_82634DE4"
+
+[entrypoint.functions."0x82634DF4"]
+name = "manual_82634DF4"
+
+[entrypoint.functions."0x82634E8C"]
+name = "manual_82634E8C"
+
+[entrypoint.functions."0x82634F14"]
+name = "manual_82634F14"
+
+[entrypoint.functions."0x82634F18"]
+name = "manual_82634F18"
+
+[entrypoint.functions."0x82634F28"]
+name = "manual_82634F28"
+
+[entrypoint.functions."0x82634FAC"]
+name = "manual_82634FAC"
+
+[entrypoint.functions."0x82634FB0"]
+name = "manual_82634FB0"
+
+[entrypoint.functions."0x82634FC0"]
+name = "manual_82634FC0"
+
+[entrypoint.functions."0x82647528"]
+name = "manual_82647528"
+
+[entrypoint.functions."0x8264DB90"]
+name = "manual_8264DB90"
+
+[entrypoint.functions."0x82654E90"]
+name = "manual_82654E90"
+
+[entrypoint.functions."0x82657DF8"]
+name = "manual_82657DF8"
+
+[entrypoint.functions."0x82671698"]
+name = "manual_82671698"
+
+[entrypoint.functions."0x826717B0"]
+name = "manual_826717B0"
+
+[entrypoint.functions."0x8274294C"]
+name = "manual_8274294C"
+
+[entrypoint.functions."0x82742BEC"]
+name = "manual_82742BEC"
+
+[entrypoint.functions."0x8275468C"]
+name = "manual_8275468C"
+
+[entrypoint.functions."0x82754690"]
+name = "manual_82754690"
+
+[entrypoint.functions."0x8275E37C"]
+name = "manual_8275E37C"
+
+[entrypoint.functions."0x8275E4BC"]
+name = "manual_8275E4BC"
+
+[entrypoint.functions."0x8275E5A0"]
+name = "manual_8275E5A0"
+
+[entrypoint.functions."0x82764650"]
+name = "manual_82764650"
+
+[entrypoint.functions."0x82764700"]
+name = "manual_82764700"

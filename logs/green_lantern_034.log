@@ -1,0 +1,107 @@
+[2026-10-14 01:11:10.238] [info] [core] [t7128490501600864866] Vulkan instance API version 1.4.354. Enabled layers and extensions:
+[2026-10-14 01:11:10.246] [info] [core] [t7128490501600864866] * VK_KHR_surface
+[2026-10-14 01:11:10.249] [info] [core] [t7128490501600864866] * VK_EXT_debug_utils
+[2026-10-14 01:11:10.253] [info] [core] [t7128490501600864866] * VK_NN_vi_surface
+[2026-10-14 01:11:10.273] [warning] [core] [t7128490501600864866] Available Vulkan physical devices (use the 'vulkan_device' configuration variable to force a specific device):
+[2026-10-14 01:11:10.279] [warning] [core] [t7128490501600864866] * 0: NVIDIA Tegra X1 (GM20B) (NVK GM20B)
+[2026-10-14 01:11:10.283] [info] [core] [t7128490501600864866] Vulkan device 'NVIDIA Tegra X1 (GM20B) (NVK GM20B)': API 1.4.354, vendor 0x10DE, device 0x0FE0, driver version 0x6802003
+[2026-10-14 01:11:10.288] [info] [core] [t7128490501600864866] Enabled Vulkan device extensions:
+[2026-10-14 01:11:10.291] [info] [core] [t7128490501600864866] * VK_KHR_swapchain
+[2026-10-14 01:11:10.294] [info] [core] [t7128490501600864866] * VK_EXT_custom_border_color
+[2026-10-14 01:11:10.297] [info] [core] [t7128490501600864866] * VK_EXT_fragment_shader_interlock
+[2026-10-14 01:11:10.305] [info] [core] [t7128490501600864866] * VK_EXT_memory_budget
+[2026-10-14 01:11:10.309] [info] [core] [t7128490501600864866] * VK_EXT_non_seamless_cube_map
+[2026-10-14 01:11:10.312] [info] [core] [t7128490501600864866] * VK_EXT_robustness2
+[2026-10-14 01:11:10.318] [info] [core] [t7128490501600864866] Vulkan device properties and enabled features:
+[2026-10-14 01:11:10.321] [info] [core] [t7128490501600864866] * driverID: MesaNvk
+[2026-10-14 01:11:10.325] [info] [core] [t7128490501600864866] * driverName: NVK
+[2026-10-14 01:11:10.328] [info] [core] [t7128490501600864866] * driverInfo: Mesa 26.2.3 (git-d4a00ea0ab)
+[2026-10-14 01:11:10.332] [info] [core] [t7128490501600864866] * conformanceVersion: 0.0.0.0
+[2026-10-14 01:11:10.335] [info] [core] [t7128490501600864866] * timestampPeriod: 1
+[2026-10-14 01:11:10.338] [info] [core] [t7128490501600864866] * maxImageDimension2D: 16384
+[2026-10-14 01:11:10.341] [info] [core] [t7128490501600864866] * maxImageDimension3D: 16384
+[2026-10-14 01:11:10.345] [info] [core] [t7128490501600864866] * maxImageDimensionCube: 32768
+[2026-10-14 01:11:10.348] [info] [core] [t7128490501600864866] * maxImageArrayLayers: 2048
+[2026-10-14 01:11:10.356] [info] [core] [t7128490501600864866] * maxStorageBufferRange: 4294967295
+[2026-10-14 01:11:10.359] [info] [core] [t7128490501600864866] * maxSamplerAllocationCount: 4000
+[2026-10-14 01:11:10.363] [info] [core] [t7128490501600864866] * maxPerStageDescriptorSamplers: 1048576
+[2026-10-14 01:11:10.366] [info] [core] [t7128490501600864866] * maxPerStageDescriptorStorageBuffers: 1048576
+[2026-10-14 01:11:10.370] [info] [core] [t7128490501600864866] * maxPerStageDescriptorSampledImages: 1048576
+[2026-10-14 01:11:10.373] [info] [core] [t7128490501600864866] * maxPerStageResources: 4294967295
+[2026-10-14 01:11:10.376] [info] [core] [t7128490501600864866] * maxVertexOutputComponents: 128
+[2026-10-14 01:11:10.379] [info] [core] [t7128490501600864866] * maxTessellationEvaluationOutputComponents: 128
+[2026-10-14 01:11:10.383] [info] [core] [t7128490501600864866] * maxGeometryInputComponents: 128
+[2026-10-14 01:11:10.389] [info] [core] [t7128490501600864866] * maxGeometryOutputComponents: 128
+[2026-10-14 01:11:10.392] [info] [core] [t7128490501600864866] * maxFragmentInputComponents: 128
+[2026-10-14 01:11:10.401] [info] [core] [t7128490501600864866] * maxFragmentCombinedOutputResources: 1048584
+[2026-10-14 01:11:10.405] [info] [core] [t7128490501600864866] * maxSamplerAnisotropy: 16
+[2026-10-14 01:11:10.408] [info] [core] [t7128490501600864866] * maxViewportDimensions[0]: 32768
+[2026-10-14 01:11:10.411] [info] [core] [t7128490501600864866] * maxViewportDimensions[1]: 32768
+[2026-10-14 01:11:10.415] [info] [core] [t7128490501600864866] * minUniformBufferOffsetAlignment: 256
+[2026-10-14 01:11:10.418] [info] [core] [t7128490501600864866] * minStorageBufferOffsetAlignment: 16
+[2026-10-14 01:11:10.421] [info] [core] [t7128490501600864866] * maxFramebufferWidth: 16384
+[2026-10-14 01:11:10.427] [info] [core] [t7128490501600864866] * maxFramebufferHeight: 16384
+[2026-10-14 01:11:10.431] [info] [core] [t7128490501600864866] * framebufferColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.434] [info] [core] [t7128490501600864866] * framebufferDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.437] [info] [core] [t7128490501600864866] * framebufferStencilSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.441] [info] [core] [t7128490501600864866] * framebufferNoAttachmentsSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.443] [info] [core] [t7128490501600864866] * sampledImageColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.446] [info] [core] [t7128490501600864866] * sampledImageIntegerSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.449] [info] [core] [t7128490501600864866] * sampledImageDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.454] [info] [core] [t7128490501600864866] * sampledImageStencilSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-14 01:11:10.472] [info] [core] [t7128490501600864866] * standardSampleLocations: 1
+[2026-10-14 01:11:10.476] [info] [core] [t7128490501600864866] * optimalBufferCopyOffsetAlignment: 1
+[2026-10-14 01:11:10.480] [info] [core] [t7128490501600864866] * optimalBufferCopyRowPitchAlignment: 1
+[2026-10-14 01:11:10.483] [info] [core] [t7128490501600864866] * nonCoherentAtomSize: 128
+[2026-10-14 01:11:10.486] [info] [core] [t7128490501600864866] * robustBufferAccess
+[2026-10-14 01:11:10.490] [info] [core] [t7128490501600864866] * fullDrawIndexUint32
+[2026-10-14 01:11:10.494] [info] [core] [t7128490501600864866] * independentBlend
+[2026-10-14 01:11:10.501] [info] [core] [t7128490501600864866] * geometryShader
+[2026-10-14 01:11:10.504] [info] [core] [t7128490501600864866] * tessellationShader
+[2026-10-14 01:11:10.513] [info] [core] [t7128490501600864866] * sampleRateShading
+[2026-10-14 01:11:10.517] [info] [core] [t7128490501600864866] * depthClamp
+[2026-10-14 01:11:10.520] [info] [core] [t7128490501600864866] * fillModeNonSolid
+[2026-10-14 01:11:10.523] [info] [core] [t7128490501600864866] * samplerAnisotropy
+[2026-10-14 01:11:10.527] [info] [core] [t7128490501600864866] * occlusionQueryPrecise
+[2026-10-14 01:11:10.530] [info] [core] [t7128490501600864866] * vertexPipelineStoresAndAtomics
+[2026-10-14 01:11:10.536] [info] [core] [t7128490501600864866] * fragmentStoresAndAtomics
+[2026-10-14 01:11:10.539] [info] [core] [t7128490501600864866] * shaderClipDistance
+[2026-10-14 01:11:10.543] [info] [core] [t7128490501600864866] * shaderCullDistance
+[2026-10-14 01:11:10.547] [info] [core] [t7128490501600864866] * samplerMirrorClampToEdge
+[2026-10-14 01:11:10.550] [info] [core] [t7128490501600864866] * uniformBufferStandardLayout
+[2026-10-14 01:11:10.553] [info] [core] [t7128490501600864866] * scalarBlockLayout
+[2026-10-14 01:11:10.557] [info] [core] [t7128490501600864866] * shaderDemoteToHelperInvocation
+[2026-10-14 01:11:10.561] [info] [core] [t7128490501600864866] * dynamicRendering
+[2026-10-14 01:11:10.567] [info] [core] [t7128490501600864866] * constantAlphaColorBlendFactors
+[2026-10-14 01:11:10.570] [info] [core] [t7128490501600864866] * imageViewFormatReinterpretation
+[2026-10-14 01:11:10.574] [info] [core] [t7128490501600864866] * imageViewFormatSwizzle
+[2026-10-14 01:11:10.578] [info] [core] [t7128490501600864866] * pointPolygons
+[2026-10-14 01:11:10.581] [info] [core] [t7128490501600864866] * separateStencilMaskRef
+[2026-10-14 01:11:10.584] [info] [core] [t7128490501600864866] * shaderSampleRateInterpolationFunctions
+[2026-10-14 01:11:10.588] [info] [core] [t7128490501600864866] * shaderSignedZeroInfNanPreserveFloat32: 1
+[2026-10-14 01:11:10.591] [info] [core] [t7128490501600864866] * shaderDenormFlushToZeroFloat32: 1
+[2026-10-14 01:11:10.597] [info] [core] [t7128490501600864866] * shaderRoundingModeRTEFloat32: 1
+[2026-10-14 01:11:10.601] [info] [core] [t7128490501600864866] * fragmentShaderSampleInterlock
+[2026-10-14 01:11:10.604] [info] [core] [t7128490501600864866] * fragmentShaderPixelInterlock
+[2026-10-14 01:11:10.608] [info] [core] [t7128490501600864866] * nonSeamlessCubeMap
+[2026-10-14 01:11:10.618] [info] [core] [t7128490501600864866] * customBorderColors
+[2026-10-14 01:11:10.621] [info] [core] [t7128490501600864866] * customBorderColorWithoutFormat
+[2026-10-14 01:11:10.625] [info] [core] [t7128490501600864866] * maxCustomBorderColorSamplers: 4000
+[2026-10-14 01:11:10.632] [info] [core] [t7128490501600864866] * nullDescriptor
+[2026-10-14 01:11:10.648] [info] [core] [t7128490501600864866] [native] Native graphics system (stage A): SDK presenter, no Xenos emulation
+[2026-10-14 01:11:10.656] [info] [core] [t7128490501600864866] WindowSwitch: handheld mode, display resolution 1280x720
+[2026-10-14 01:11:10.671] [info] [core] [t7128490501600864866] VulkanPresenter: Created 1280x720 swapchain with format 37, color space 0, presentation mode 0
+[2026-10-14 01:11:10.680] [info] [sys] [t7128490501600864866] Guest memory arena mapped: virtual base 0x0000006C6B5A7000, physical base 0x0000006D6B5A7000
+[2026-10-14 01:11:10.686] [info] [sys] [t7128490501600864866] Switch guest allocation: heap=physical range=0x00000000-0x00FFFFFF size=16 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-14 01:11:10.693] [info] [core] [t7128490501600864866] Switch guest backing request: window_address=0x0000006D6B5A7000 window_offset=0x100000000 mapping_offset=0x100000000 size=16 MiB operation=commit
+[2026-10-14 01:11:10.708] [info] [sys] [t7128490501600864866] Switch guest allocation: heap=physical range=0xC0000000-0xC0FFFFFF size=16 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-14 01:11:10.711] [info] [core] [t7128490501600864866] Switch guest backing request: window_address=0x0000006D2B5A7000 window_offset=0xC0000000 mapping_offset=0x100000000 size=16 MiB operation=commit
+[2026-10-14 01:11:10.714] [info] [sys] [t7128490501600864866] Switch guest allocation: heap=physical range=0xBFCB0000-0xBFFEFFFF size=3 MiB operation=reserve committed_before=0 MiB reserved_before=0 MiB
+[2026-10-14 01:11:10.754] [warning] [sys] [t7128490501600864866] Too few processor cores - scheduling will be wonky
+[2026-10-14 01:11:11.076] [info] [core] [t7128490501600864866] [native] Renderer ready: 160 MB stream, 1 shared memory binding(s)
+[2026-10-14 01:11:11.085] [error] [core] [t7128490501600864866] pthread_create(stack_size=1048576, priority=0) failed: 12
+[2026-10-14 01:11:11.093] [error] [sys] [t7128490501600864866] CreateThread failed: guest_tid=4 guest_stack=131072 host_stack=1048576 name='GPU ring native (F800001C)'
+[2026-10-14 01:11:11.097] [info] [sys] [t7128490501600864866] Switch guest allocation: heap=xex range=0x82E00000-0x83A8FFFF size=12 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-14 01:11:11.100] [info] [core] [t7128490501600864866] Switch guest backing request: window_address=0x0000006CEE3A7000 window_offset=0x82E00000 mapping_offset=0x82E00000 size=12 MiB operation=commit
+[2026-10-14 01:11:11.110] [info] [core] [t7128490501600864866] Function table initialized for module: code=82140000-827758EC, image=82000000-82E00000
+

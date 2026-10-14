@@ -1,0 +1,22 @@
+set(CMAKE_SYSTEM_NAME NintendoSwitch)
+set(CMAKE_SYSTEM_PROCESSOR aarch64 CACHE STRING "Target processor" FORCE)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
+set(DEVKITPRO "C:/devkitPro" CACHE PATH "devkitPro installation")
+set(DEVKITA64 "${DEVKITPRO}/devkitA64" CACHE PATH "devkitA64 installation")
+set(LIBNX_ROOT "${DEVKITPRO}/libnx" CACHE PATH "libnx installation")
+set(REXGLUE_SWITCH_OVERLAY_DIR "${CMAKE_CURRENT_LIST_DIR}/include" CACHE PATH "Project Horizon compatibility headers")
+set(CMAKE_C_COMPILER "${DEVKITA64}/bin/aarch64-none-elf-gcc.exe")
+set(CMAKE_CXX_COMPILER "${DEVKITA64}/bin/aarch64-none-elf-g++.exe")
+set(CMAKE_ASM_COMPILER "${DEVKITA64}/bin/aarch64-none-elf-gcc.exe")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+set(CMAKE_C_FLAGS_INIT "-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -D__SWITCH__ -D_GNU_SOURCE -isystem ${LIBNX_ROOT}/include -fPIE -ftls-model=local-exec -ffunction-sections -fdata-sections")
+set(CMAKE_CXX_FLAGS_INIT "-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -D__SWITCH__ -D_GNU_SOURCE -DSPDLOG_NO_TZ_OFFSET -DFMT_USE_FALLBACK_FILE=1 -isystem ${LIBNX_ROOT}/include -fPIE -ftls-model=local-exec -ffunction-sections -fdata-sections")
+set(CMAKE_ASM_FLAGS_INIT "-march=armv8-a+crc+crypto -mtune=cortex-a57 -D__SWITCH__")
+
+set(CMAKE_FIND_ROOT_PATH "${DEVKITA64}/aarch64-none-elf" "${LIBNX_ROOT}")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
