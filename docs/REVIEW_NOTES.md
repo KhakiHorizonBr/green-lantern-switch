@@ -1,76 +1,96 @@
-# Hardware evidence and current candidate — 2026-10-14
+# Evidências do console e versão atual para teste — 14/10/2026
 
-## Current blocker
+## Bloqueio atual
 
-Log 035 initializes NVK on Tegra X1, creates a 1280x720 swapchain and reports
+O log 035 inicializa o NVK no Tegra X1, cria uma swapchain de 1280 × 720 e registra:
 `Renderer ready: 160 MB stream, 1 shared memory binding(s)`.
-Both native GPU XHostThreads then fail in `pthread_create(stack_size=524288)` with errno 12.
-The function table initializes afterward, but there is no guest ring/swap/frame evidence.
+Em seguida, as duas `XHostThread` da GPU nativa falham em
+`pthread_create(stack_size=524288)`, com `errno` 12.
+A tabela de funções inicializa depois disso, mas o log não demonstra o processamento da fila de
+comandos do jogo, a apresentação de imagens ou a renderização de um quadro.
 
-At each failure, successful Horizon queries report **13 / 96 threads** and **1281 / 3189 MiB**
-of process memory resources. These counters rule out reaching those two reported quotas at that
-instant. They do not measure the largest available allocation in the fixed malloc heap.
+Em cada falha, consultas bem-sucedidas ao Horizon informam **13 de 96 threads** e
+**1281 de 3189 MiB** de recursos de memória do processo. Esses contadores mostram que os dois
+limites consultados ainda não tinham sido atingidos naquele instante. Eles não medem o maior
+bloco disponível para alocação na área fixa de memória do `malloc`.
 
-Log 033 used 2 MiB helper host stacks; both helpers failed. Log 034 used 1 MiB and logged a failure
-only for the ring helper. Log 035 used 512 KiB and both failed again. Smaller stacks did not reliably
-solve startup; absence of a creation-error line in 034 is not a frame-success result.
+O log 033 usou pilhas de 2 MiB para as threads auxiliares, e ambas falharam. O log 034 usou 1 MiB
+e registrou falha apenas para a thread da fila de comandos. No log 035, com 512 KiB, as duas
+voltaram a falhar. Diminuir as pilhas não resolveu a inicialização de forma consistente; a ausência
+de uma linha de erro no log 034 não comprova que houve renderização.
 
-The linked libnx binary was inspected: `__syscall_thread_create` returns ENOMEM after failure in
-`threadCreate`, `svcSetThreadCoreMask`, or `threadStart`, and on pthread metadata allocation failure.
-The errno alone therefore cannot identify the failing operation.
-`threadCreate` also allocates page-aligned stack/TLS/reent backing and maps it with `svcMapMemory`.
-TLS in the previous executable was 0x540 bytes, so this was not a huge TLS allocation.
+Foi inspecionado o binário do libnx vinculado ao executável: `__syscall_thread_create` retorna
+`ENOMEM` quando falham `threadCreate`, `svcSetThreadCoreMask`, `threadStart` ou a alocação dos
+metadados do pthread. Portanto, o `errno` sozinho não identifica qual operação falhou.
+`threadCreate` também aloca memória alinhada por página para pilha/TLS/reent e a mapeia com
+`svcMapMemory`. O TLS do executável anterior tinha 0x540 bytes; seu tamanho não era uma grande
+alocação oculta por thread.
 
-## Current correction candidate (not hardware validated)
+## Correção candidata atual: ainda sem validação no console
 
-- Reserve two page-aligned stack backings of 1088 KiB each before NVK initialization. Only the
-  named native VSync/ring helper creations use these buffers; guest execution keeps 2 MiB host stacks.
-- libnx retains responsibility for stack mapping, thread creation, TLS, priorities and joining.
-  The reserve provides backing, and each slot is returned only after successful `threadClose`.
-- Report the raw Results for stack mapping, kernel thread creation, core-mask assignment and start.
-  Failed stack maps also report source memory type, attributes and permissions.
-- Check both GPU worker `Create()` results. Previously these were ignored and GPU setup returned
-  success with missing workers. Startup now propagates failure and stops an already-started VSync
-  worker if ring creation fails.
-- Report malloc usage/free/top statistics alongside the existing Horizon resource counters.
+- Reserva dois blocos de 1088 KiB, alinhados por página, para as pilhas antes da inicialização do
+  NVK. Só as threads nativas de VSync e da fila de comandos usam esses blocos. As threads que
+  executam o código recompilado do jogo continuam com pilhas do sistema hospedeiro de 2 MiB.
+- O libnx continua responsável por mapear as pilhas, criar as threads e cuidar de TLS, prioridades
+  e espera pelo encerramento. A reserva fornece a memória de suporte; cada bloco só fica disponível
+  novamente após um `threadClose` bem-sucedido.
+- Registra os códigos `Result` originais das operações de mapeamento de pilha, criação da thread
+  no kernel, definição da máscara de núcleos e início da execução. As falhas de mapeamento também
+  registram tipo, atributos e permissões da memória de origem.
+- Verifica o resultado de `Create()` das duas threads gráficas. Antes, esses resultados eram
+  ignorados, e a configuração da GPU retornava sucesso mesmo sem as threads. Agora a falha é
+  propagada; se a criação da thread da fila falhar, a thread de VSync já iniciada é encerrada.
+- Registra os valores de memória usada, livre e do bloco superior do `malloc`, junto dos contadores
+  de recursos do Horizon que já existiam.
 
-The underlying failure in 035 is **not yet identified**. Early stack backing addresses an aligned
-allocation/source-page hypothesis; it does not prove that hypothesis. This candidate is an actual
-allocation/order change combined with error reporting, not a confirmed fix.
+A causa da falha do log 035 **ainda não foi identificada**. A reserva antecipada trata uma hipótese
+relacionada à alocação alinhada ou às páginas de origem; ela não comprova essa hipótese. A versão
+altera a forma e a ordem da alocação e acrescenta informações de erro, mas ainda não é uma correção
+confirmada no console.
 
-NRO: `green_lantern_native_renderer_reserved_threads.nro`, 53,356,741 bytes.
+NRO: `green_lantern_native_renderer_reserved_threads.nro`, com 53.356.741 bytes.
 SHA-256: `536ED663A17562F5990C53259F8BAF8658B112997B6657BED26C850B1958E15A`.
-Cross-build/package succeeded. The linked executable calls all five diagnostic wrappers.
-Previous NROs are preserved locally. The NRO contains generated game code and is not in this repo.
+A compilação para Switch e a geração do pacote terminaram com sucesso. Foi verificado que o
+executável final chama os cinco interceptadores de diagnóstico. Os NROs anteriores estão
+preservados localmente. O NRO contém código gerado do jogo e não está neste repositório.
 
-## How to interpret the next run
+## Como interpretar a próxima execução
 
-- `Both GPU worker threads created successfully`: this startup blocker is bypassed. Look next
-  for the guest ring, swaps and rendering; thread creation alone does not demonstrate a game frame.
-- `stack map raw failure`: inspect the raw kernel Result and source-page metadata.
-- `threadCreate raw failure` without a stack-map/kernel-create failure: inspect allocation or
-  argument validation and malloc stats; the reserve is logged explicitly.
-- `thread core-mask raw failure` / `threadStart raw failure`: investigate that operation and
-  process capabilities rather than treating errno 12 as a RAM capacity measurement.
+- `Both GPU worker threads created successfully`: este bloqueio de inicialização foi ultrapassado.
+  Procurar em seguida a fila de comandos do jogo, as apresentações de imagem e a renderização.
+  Criar as threads, por si só, não comprova a exibição de um quadro do jogo.
+- `stack map raw failure`: examinar o `Result` original do kernel e os metadados da página de origem.
+- `threadCreate raw failure`, sem uma falha de mapeamento ou criação no kernel: examinar a alocação,
+  a validação dos argumentos e as estatísticas do `malloc`. O uso da reserva é registrado no log.
+- `thread core-mask raw failure` ou `threadStart raw failure`: investigar a operação indicada e as
+  capacidades do processo. O `errno` 12 não deve ser tratado como uma medição da RAM disponível.
 
-## Earlier Xenos renderer path
+## Caminho anterior: renderizador Xenos
 
-A 256 MiB early guest-backing arena bypassed the original aligned-allocation failure for a 35 MiB
-guest request. It later exhausted on a 16 MiB slab with only 12 MiB free. A 384 MiB arena instead
-hit NVK OOM on a depth target earlier. The 320 MiB arena was built as a compromise; its original
-Xenos NRO has not been hardware tested. The current native experiment also uses the 320 MiB arena.
+Uma arena de 256 MiB, reservada cedo para a memória de suporte do Xbox 360, ultrapassou a falha
+original de alocação alinhada durante um pedido de 35 MiB do jogo. Depois, faltou espaço para um
+bloco de 16 MiB, quando restavam apenas 12 MiB livres. Com uma arena de 384 MiB, o NVK ficou sem
+memória antes disso, ao criar um alvo de profundidade. Foi compilada uma versão com arena de
+320 MiB como valor intermediário; seu NRO original com Xenos ainda não foi testado no console.
+O experimento atual com renderizador nativo também usa a arena de 320 MiB.
 
-Current fixed malloc heap: 1280 MiB. STREAMDATA test cap: 32 MiB. Native stream: 160 MiB.
-The Xenos non-sparse shared buffer (512 MiB) explains much of the old path's graphics memory use;
-the native experiment is a different renderer and should not be assumed to have the same budget.
+Área fixa do `malloc`: 1280 MiB. Limite experimental do STREAMDATA: 32 MiB.
+Buffer de fluxo de dados do renderizador nativo: 160 MiB.
+O buffer compartilhado de 512 MiB do Xenos, alocado integralmente quando não há residência esparsa,
+explica grande parte do consumo gráfico do caminho antigo. O experimento nativo usa outro
+renderizador; seu orçamento de memória precisa ser avaliado separadamente.
 
-## Questions for the Project8 developer
+## Perguntas para o desenvolvedor do Project8
 
-1. Did your port encounter libnx stack backing/map failures after NVK setup? Is early explicit
-   backing sufficient, or must heap page attributes / stack mirror placement be handled specially?
-2. How do you budget the libnx heap, guest backing and NVK's host-visible allocations in title
-   takeover? Do you preserve a dedicated host allocation reserve as well as guest slabs?
-3. Are there SDK/version differences affecting libnx core-mask/start calls or guest MMIO registration
-   before GPU worker creation? The raw diagnostics should now distinguish these failure sites.
+1. Seu port encontrou falhas de alocação ou mapeamento das pilhas do libnx depois de inicializar
+   o NVK? Fornecer memória reservada antecipadamente foi suficiente ou foi preciso tratar os
+   atributos das páginas da heap e o posicionamento dos espelhos das pilhas?
+2. Como você divide o orçamento entre a heap do libnx, a memória de suporte do Xbox 360 e as
+   alocações do NVK acessíveis pela CPU no modo de aplicação completa? Você mantém uma reserva
+   para as alocações do próprio runtime, além dos blocos de memória do jogo?
+3. Existem diferenças de versão do SDK que afetem as chamadas de máscara de núcleos ou de início
+   das threads do libnx, ou o registro de MMIO do jogo antes de criar as threads gráficas?
+   Os novos diagnósticos devem permitir distinguir esses pontos de falha.
 
-Hardware launches use title takeover (R while opening a game), rather than Album applet mode.
+Os testes no console usam o modo de aplicação completa: segurar R ao abrir um jogo para entrar
+no homebrew. Eles não são executados pelo Álbum em modo applet.

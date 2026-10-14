@@ -1,45 +1,51 @@
-# Green Lantern: Rise of the Manhunters — Switch port research
+# Green Lantern: Rise of the Manhunters — pesquisa do port para Switch
 
-Experimental Xbox 360 to Nintendo Switch port using ReXGlue, libnx and Mesa/NVK.
-The Windows recompilation has been played locally. The Switch build currently initializes Vulkan,
-the swapchain and an experimental native renderer, but has **not displayed a game frame**.
+Port experimental da versão de Xbox 360 para Nintendo Switch, usando ReXGlue, libnx e Mesa/NVK.
+A recompilação para Windows já foi jogada localmente. No Switch, a versão atual inicializa o Vulkan,
+a cadeia de apresentação de imagens (swapchain) e um renderizador nativo experimental, mas
+**ainda não exibiu nenhum quadro do jogo**.
 
-This is a source review snapshot for other port developers. It includes the platform changes,
-native renderer adaptation, build definitions, analysis manifest and recent hardware logs.
-Game executables, assets, saves, generated game recompilation sources and NRO binaries are omitted.
+Este repositório reúne uma cópia dos fontes para revisão por outros desenvolvedores de ports.
+Inclui as adaptações de plataforma, o renderizador nativo, as definições de compilação, o manifesto
+de análise e os logs recentes do console. Os executáveis, recursos e saves do jogo, os fontes
+gerados pela recompilação e os binários NRO ficam fora deste repositório.
 
-## Where to start
+## Por onde começar
 
-- [Current blocker, evidence and questions](docs/REVIEW_NOTES.md)
-- [Latest hardware log: 035](logs/green_lantern_035.log)
-- [Native graphics startup](project/switch/native_experiment/native/native_system.cpp)
-- [Early native-worker stack reserve](sdk-overlay/src/core/threading_switch.cpp)
-- [Raw libnx failure reporting and reserved-stack handoff](sdk-overlay/src/ui/switch_perf.cpp)
-- [Guest backing allocator](sdk-overlay/src/core/guest_memory_switch.cpp)
-- [SDK patch](patches/rexglue-sdk.patch) and [base revision](SDK_BASE.txt)
+- [Bloqueio atual, evidências e perguntas para revisão](docs/REVIEW_NOTES.md)
+- [Último log do console: 035](logs/green_lantern_035.log)
+- [Inicialização do sistema gráfico nativo](project/switch/native_experiment/native/native_system.cpp)
+- [Reserva antecipada das pilhas das threads gráficas](sdk-overlay/src/core/threading_switch.cpp)
+- [Erros originais do libnx e uso das pilhas reservadas](sdk-overlay/src/ui/switch_perf.cpp)
+- [Alocador da memória de suporte do Xbox 360](sdk-overlay/src/core/guest_memory_switch.cpp)
+- [Patch do SDK](patches/rexglue-sdk.patch) e [revisão usada como base](SDK_BASE.txt)
 
-## Source layout
+## Organização dos fontes
 
-`sdk-overlay/` contains complete copies of changed and added files against ReXGlue commit
-`c94f5ebdcb3c9d1a460ca48e04f9758448f8d518`. They are easy to read directly and can be copied onto that
-checkout. The patch contains tracked-file edits only; the overlay also contains newly added files.
+`sdk-overlay/` contém cópias completas dos arquivos alterados e adicionados sobre o commit
+`c94f5ebdcb3c9d1a460ca48e04f9758448f8d518` do ReXGlue. É possível ler os arquivos diretamente ou
+copiá-los sobre uma cópia do SDK nessa revisão. O patch contém apenas as alterações dos arquivos
+que já eram rastreados pelo Git; a pasta também inclui os arquivos novos.
 
-`project/` contains the Green Lantern integration and the Switch renderer/runtime sources.
-This repository is not a standalone build: generated C++ must be produced locally from the user's
-own Xbox 360 files, and the external SDK/driver dependencies must be supplied.
-See [build and provenance notes](docs/BUILD_AND_PROVENANCE.md).
+`project/` contém a integração do Green Lantern e os fontes do renderizador e do runtime do Switch.
+Este repositório depende de arquivos externos para compilar: o C++ gerado precisa ser produzido
+localmente a partir dos arquivos de Xbox 360 do usuário, e as dependências do SDK e do driver
+precisam ser fornecidas. Consulte as [notas de compilação e origem](docs/BUILD_AND_PROVENANCE.md).
 
-## Licences and attribution
+## Licenças e créditos
 
-The native renderer adaptation comes from **The Simpsons Game NX**, retaining GPL-3.0-or-later
-headers and its licence text in [LICENSE](LICENSE). Its ReXGlue/Xenia-derived portions retain
-their BSD notices. ReXGlue platform code retains [BSD-3-Clause](LICENSES/ReXGlue-BSD-3-Clause.txt).
-Third-party source headers retain their original notices. This snapshot does not claim ownership
-of the upstream ports or of the original game.
+A adaptação do renderizador nativo veio de **The Simpsons Game NX**, preservando os avisos
+GPL-3.0-or-later nos cabeçalhos e o texto da licença em [LICENSE](LICENSE). As partes derivadas de
+ReXGlue/Xenia preservam os avisos BSD. O código de plataforma do ReXGlue mantém sua
+[licença BSD-3-Clause](LICENSES/ReXGlue-BSD-3-Clause.txt). Os cabeçalhos de terceiros conservam os
+avisos originais. Este projeto não reivindica a autoria dos ports de referência nem do jogo original.
 
-## Para quem acompanha em português
+Os textos das licenças, os identificadores do código e as mensagens dos logs conservam a forma
+original para preservar os avisos legais e permitir a busca exata dos erros.
+
+## Estado atual em linguagem simples
 
 O jogo ainda não mostrou imagem no Switch. A última versão falhou ao iniciar duas tarefas gráficas,
 mesmo com folga nos limites gerais do processo. O novo NRO reserva espaço para essas tarefas antes
 da inicialização gráfica e registra o erro original se falharem. Ele compilou, mas ainda aguarda teste
-no console. Os arquivos desta pasta permitem que outro desenvolvedor revise exatamente esse trabalho.
+no console. Os arquivos deste repositório permitem que outro desenvolvedor revise esse trabalho.

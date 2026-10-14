@@ -1,16 +1,16 @@
-# Copy this file next to the NRO and rename it to green_lantern.toml.
-# ReXGlue reads this TOML before initializing NVK.
+# Copie este arquivo para a mesma pasta do NRO e renomeie para green_lantern.toml.
+# O ReXGlue lê este TOML antes de inicializar o NVK.
 
-# Stock Switch GPU profile; 0 means leave the system default.
+# Perfil de GPU do Switch sem overclock; 0 mantém o padrão do sistema.
 switch_gpu_mhz = 460
 
-# Keep disabled unless testing confirms the higher memory clock is stable.
+# Mantenha desativado até que testes confirmem a estabilidade do clock de memória maior.
 switch_allow_ram_1600 = false
 
-# 0 keeps libnx's default transfer-memory allocation. Avoid increasing it
-# without a specific NVK allocation-tracking error in the log.
+# 0 mantém a alocação padrão de memória de transferência do libnx. Só aumente
+# se o log apontar um erro específico de rastreamento das alocações do NVK.
 switch_nvmap_mb = 0
 
-# NVK currently reports sparse residency unavailable on this Switch build,
-# so enabling this does not avoid the full 512 MiB Xenos shared-memory buffer.
+# O NVK informa que a residência esparsa não está disponível nesta versão para Switch.
+# Ativar esta opção não evita a alocação integral do buffer compartilhado de 512 MiB do Xenos.
 vulkan_sparse_shared_memory = true
