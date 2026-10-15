@@ -341,6 +341,8 @@ void SwitchInputDriver::Poll(size_t index) {
  */
 /* From the profiler (switch_perf.cpp): turns the GPU A/B test lap on and off. */
 extern "C" void RexSwitchPerfToggleAb(void);
+// Optional project hook: the SDK also links without the native renderer.
+extern "C" void GreenLanternRequestGraphicsCapture(void) __attribute__((weak));
 
 void SwitchInputDriver::DispatchMenuShortcuts(Slot& slot, uint64_t held) {
   struct Atajo {
@@ -356,6 +358,14 @@ void SwitchInputDriver::DispatchMenuShortcuts(Slot& slot, uint64_t held) {
   };
 
   const bool modificador = (held & kModificador) == kModificador;
+  const uint64_t capture_bit = uint64_t(1) << 9;
+  const bool capture_now = modificador && (held & HidNpadButton_Minus);
+  if (capture_now && !(slot.menu_shortcuts & capture_bit) &&
+      GreenLanternRequestGraphicsCapture) {
+    GreenLanternRequestGraphicsCapture();
+  }
+  slot.menu_shortcuts = capture_now ? slot.menu_shortcuts | capture_bit
+                                    : slot.menu_shortcuts & ~capture_bit;
   for (size_t i = 0; i < std::size(kAtajos); ++i) {
     const uint64_t bit = uint64_t(1) << i;
     const bool ahora = modificador && (held & kAtajos[i].boton) != 0;

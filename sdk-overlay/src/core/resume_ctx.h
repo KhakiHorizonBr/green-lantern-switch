@@ -27,12 +27,12 @@
  *   1. The dump is copied to the stack of the faulting thread, below its sp,
  *      where nothing overwrites it. The global libnx dump could be overwritten
  *      by a fault in another thread.
- *   2. NEON, x9-x28 and fp are loaded from that copy.
+ *   2. x9-x28 and fp are loaded from that copy.
  *   3. An exception is raised on purpose (the udf in RexResumeTrap), with x8
  *      pointing to the copy.
  *   4. The exception entry (exception_handler_switch.cpp) recognizes the trap
  *      address, writes x0-x8, lr, sp, pc and pstate from the copy into the
- *      frame, and calls svcReturnFromException without touching anything else.
+ *      frame, then restores NEON, FPCR and FPSR immediately before returning.
  *
  * It costs one extra exception per resume, and in exchange not a single bit is
  * lost: every register gets back the value of the corrected dump.
@@ -96,24 +96,8 @@ __asm__(
     "    cmp  x11, x12\n"
     "    b.lo 1b\n"
     "    mov  x8,  x9\n"
-    /* 2. full NEON: the faulting access may have been floating point */
-    "    add  x1,  x8, #288\n"
-    "    ldp  q0,  q1,  [x1, #0]\n"
-    "    ldp  q2,  q3,  [x1, #32]\n"
-    "    ldp  q4,  q5,  [x1, #64]\n"
-    "    ldp  q6,  q7,  [x1, #96]\n"
-    "    ldp  q8,  q9,  [x1, #128]\n"
-    "    ldp  q10, q11, [x1, #160]\n"
-    "    ldp  q12, q13, [x1, #192]\n"
-    "    ldp  q14, q15, [x1, #224]\n"
-    "    ldp  q16, q17, [x1, #256]\n"
-    "    ldp  q18, q19, [x1, #288]\n"
-    "    ldp  q20, q21, [x1, #320]\n"
-    "    ldp  q22, q23, [x1, #352]\n"
-    "    ldp  q24, q25, [x1, #384]\n"
-    "    ldp  q26, q27, [x1, #416]\n"
-    "    ldp  q28, q29, [x1, #448]\n"
-    "    ldp  q30, q31, [x1, #480]\n"
+    // Restore SIMD in the resume exception entry, after the trap, so the
+    // corrected vectors do not have to survive another exception delivery.
     /* x9-x28 and fp, including x16, x17 and x18 */
     "    ldp  x9,  x10, [x8, #88]\n"
     "    ldp  x11, x12, [x8, #104]\n"

@@ -16,6 +16,7 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <malloc.h>
 #include <thread>
 #include <unordered_set>
 
@@ -38,6 +39,10 @@ extern "C" {
 #include <rex/graphics/pipeline/texture/util.h>
 #include <rex/system/xmemory.h>
 #include <rex/ui/vulkan/util.h>
+
+extern "C" size_t __nx_heap_size;
+REXCVAR_DEFINE_BOOL(nx_auto_memory, true, "Switch",
+                    "Adapt stale texture eviction and bound queued texture staging under pressure");
 
 namespace green_lantern::native {
 
@@ -469,7 +474,25 @@ void RunUntile(const UntileJob& j) {
 
 // A texture created off the renderer thread: the image, and staging memory of
 // its own with the untiled data, which a later submission copies in.
+std::atomic<uint64_t> pending_staging_bytes{0};
+std::atomic<uint64_t> deferred_stream_jobs{0};
+
+bool ReserveStagingBytes(uint64_t bytes, uint64_t cap) {
+  uint64_t used = pending_staging_bytes.load(std::memory_order_relaxed);
+  for (;;) {
+    // A single texture larger than the cap may run alone; never defer it forever.
+    const uint64_t limit = std::max(cap, bytes);
+    if (bytes > limit || used > limit - bytes) return false;
+    if (pending_staging_bytes.compare_exchange_weak(used, used + bytes,
+          std::memory_order_relaxed)) return true;
+  }
+}
+
 struct StreamJob {
+  uint64_t reserved_staging_bytes = 0;
+  ~StreamJob() {
+    if (reserved_staging_bytes) pending_staging_bytes.fetch_sub(reserved_staging_bytes, std::memory_order_relaxed);
+  }
   UntileJob untile;
   VkImageCreateInfo info = {};
   VkImage image = VK_NULL_HANDLE;
@@ -602,6 +625,8 @@ struct TextureCache::Impl {
 
   uint64_t frame = 0;
   uint64_t completed_frame = 0;
+  bool memory_pressure = false;
+  uint64_t pressure_evictions = 0;
   float max_anisotropy = 1.0f;
 
   std::vector<uint8_t> scratch;
@@ -1003,28 +1028,66 @@ void TextureCache::BeginFrame(uint64_t frame, uint64_t completed_frame) {
       ++r;
     }
   }
-  // Evict textures unused for about 20 seconds; the old content of changing
-  // textures (a video, a render-to-texture the CPU fills) is what this frees.
-  constexpr uint64_t kEvictFrames = 600;
-  if (frame % 60 == 0) {
+  // Completed streaming jobs no longer requested must not pin the staging budget forever.
+  if (REXCVAR_GET(nx_auto_memory) && frame % 15 == 0) {
+    uint32_t abandoned = 0;
+    for (auto t = im.textures.begin(); t != im.textures.end();) {
+      auto job = t->second->stream;
+      if (!job || !job->done.load(std::memory_order_acquire) ||
+          t->second->last_used_frame + 30 >= frame) { ++t; continue; }
+      im.Reap([&im, job]() {
+        im.DestroyStreamJob(*job);
+        const auto& dfn = im.device->functions();
+        if (job->image) dfn.vkDestroyImage(im.device->device(), job->image, nullptr);
+        if (job->memory) dfn.vkFreeMemory(im.device->device(), job->memory, nullptr);
+      });
+      t = im.textures.erase(t);
+      ++abandoned;
+    }
+    if (abandoned) {
+      im.memo.clear(); ++im.answers_epoch; ++im.views_epoch;
+      REXLOG_INFO("[auto-memory] released unused completed stream jobs: {}", abandoned);
+    }
+    if (frame % 120 == 0) {
+      REXLOG_INFO("[auto-memory] staging={} MiB deferred={} pressure={}",
+                   pending_staging_bytes.load() >> 20, deferred_stream_jobs.exchange(0), im.memory_pressure);
+    }
+  }
+  // Adapt the reference port's frame-age eviction; never destroy GPU-in-flight resources.
+  const bool adaptive = REXCVAR_GET(nx_auto_memory);
+  if (adaptive && frame % 30 == 0) {
+    const auto heap = mallinfo();
+    const bool before = im.memory_pressure;
+    if (uint64_t(heap.uordblks) > uint64_t(__nx_heap_size) * 85 / 100) im.memory_pressure = true;
+    else if (uint64_t(heap.uordblks) < uint64_t(__nx_heap_size) * 75 / 100) im.memory_pressure = false;
+    if (before != im.memory_pressure) {
+      REXLOG_INFO("[auto-memory] pressure={} malloc={} MiB heap={} MiB staging={} MiB",
+                   im.memory_pressure, uint64_t(heap.uordblks) >> 20,
+                   __nx_heap_size >> 20, pending_staging_bytes.load() >> 20);
+    }
+  } else if (!adaptive) im.memory_pressure = false;
+  const uint64_t evict_age = im.memory_pressure ? 60 : 600;
+  const uint64_t scan_interval = im.memory_pressure ? 15 : 60;
+  if (frame % scan_interval == 0) {
+    uint64_t removed = 0;
     for (auto t = im.textures.begin(); t != im.textures.end();) {
       Texture& texture = *t->second;
-      if (texture.stream) {
-        ++t;
-        continue;
-      }
-      if (texture.last_used_frame + kEvictFrames < frame) {
-        std::vector<VkImageView> views;
-        for (auto& [k, v] : texture.views) views.push_back(v);
-        im.Retire(texture.image, texture.memory, std::move(views), texture.last_used_frame);
-        t = im.textures.erase(t);
-      } else {
-        ++t;
-      }
+      if (texture.stream || texture.last_used_frame + evict_age >= frame ||
+          texture.last_used_frame > completed_frame) { ++t; continue; }
+      std::vector<VkImageView> views;
+      for (auto& [k, v] : texture.views) views.push_back(v);
+      im.Retire(texture.image, texture.memory, std::move(views), texture.last_used_frame);
+      t = im.textures.erase(t);
+      ++removed;
     }
-    if (im.checked.size() > 16384) {
-      im.checked.clear();
+    if (removed) {
+      // Invalidate cached Texture* answers before the CPU objects can be reused.
+      im.memo.clear(); ++im.answers_epoch; ++im.views_epoch;
+      if (im.memory_pressure) im.pressure_evictions += removed;
+      REXLOG_INFO("[auto-memory] retired={} pressure={} completed_frame={} staging_deferred={}",
+                   removed, im.memory_pressure, completed_frame, deferred_stream_jobs.exchange(0));
     }
+    if (im.checked.size() > 16384) im.checked.clear();
   }
   stats_.live_textures = im.textures.size();
 }
@@ -1116,6 +1179,13 @@ bool TextureCache::WantsDepthWords(uint32_t address) const {
 }
 
 void TextureCache::SetComputeCopy(ComputeCopy copy) { impl_->compute_copy = std::move(copy); }
+
+VkFormat TextureCache::ResolveHostFormat(xenos::ColorFormat format, uint32_t& swizzle) {
+  // Resolve destinations use the texture encoding, not the render target encoding.
+  const auto host = GetHostFormat(static_cast<xenos::TextureFormat>(format));
+  swizzle = host.swizzle;
+  return host.unorm;
+}
 
 bool TextureCache::StorageCapable(VkFormat format) {
   Impl& im = *impl_;
@@ -1402,8 +1472,11 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
                                      VK_PIPELINE_STAGE_TRANSFER_BIT |
                                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                      0, 0, nullptr, 0, nullptr, 1, &barrier);
-            REXLOG_INFO("[native] Resolve at {:08X} ({}x{}) sampled as {}x{}: exact-size copy",
-                        dest.address, dest.width, dest.height, fetch_width, fetch_height);
+            static uint64_t sized_copy_messages = 0;
+            if (++sized_copy_messages <= 8 || sized_copy_messages % 256 == 0) {
+              REXLOG_INFO("[native] Resolve at {:08X} ({}x{}) sampled as {}x{}: exact-size copy (event {})",
+                          dest.address, dest.width, dest.height, fetch_width, fetch_height, sized_copy_messages);
+            }
             sized = created.get();
             dest.sized.push_back(std::move(created));
           }
@@ -1540,6 +1613,7 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
   auto existing = im.textures.find(key_hash);
   if (existing != im.textures.end() && existing->second->stream) {
     Texture& pending = *existing->second;
+    pending.last_used_frame = im.frame; // Requested jobs are not abandoned by the budget sweep.
     StreamJob& job = *pending.stream;
     if (!job.done.load(std::memory_order_acquire)) {
       // Still streaming in: drawn without it for now.
@@ -1667,6 +1741,15 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
     }
     if (!reuse_image && !force_upload_now && total >= kStreamBytes) {
       auto job = std::make_shared<StreamJob>();
+      if (REXCVAR_GET(nx_auto_memory)) {
+        const uint64_t cap = uint64_t(im.memory_pressure ? 32 : 64) << 20;
+        if (!ReserveStagingBytes(total, cap)) {
+          deferred_stream_jobs.fetch_add(1, std::memory_order_relaxed);
+          ++stats_.pending;
+          return null_view; // Revisited next frame; no failed texture cached.
+        }
+        job->reserved_staging_bytes = total;
+      }
       UntileJob& u = job->untile;
       std::copy(levels, levels + level_count, u.levels);
       u.level_count = level_count;

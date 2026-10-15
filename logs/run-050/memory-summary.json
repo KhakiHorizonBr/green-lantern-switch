@@ -1,0 +1,50 @@
+{
+  "duration_samples_s": "145",
+  "malloc_peak_mib": 1374.53,
+  "guest_backing_peak_mib": 432.0,
+  "areas": [
+    {
+      "area": "vk_other",
+      "last_mib": 0.0,
+      "peak_mib": 0.0,
+      "failures": 0
+    },
+    {
+      "area": "buffers_other",
+      "last_mib": 16.0,
+      "peak_mib": 16.0,
+      "failures": 0
+    },
+    {
+      "area": "upload_staging",
+      "last_mib": 0.25,
+      "peak_mib": 57.24,
+      "failures": 0
+    },
+    {
+      "area": "render_targets",
+      "last_mib": 96.69,
+      "peak_mib": 96.69,
+      "failures": 0
+    },
+    {
+      "area": "sampled_images",
+      "last_mib": 129.19,
+      "peak_mib": 129.19,
+      "failures": 0
+    },
+    {
+      "area": "storage_images",
+      "last_mib": 144.62,
+      "peak_mib": 171.81,
+      "failures": 0
+    },
+    {
+      "area": "native_upload_ring",
+      "last_mib": 112.0,
+      "peak_mib": 112.0,
+      "failures": 0
+    }
+  ],
+  "tracking_overflow": 0
+}

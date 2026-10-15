@@ -16,6 +16,10 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#if REX_PLATFORM_SWITCH
+#include <malloc.h>
+#include <cstdio>
+#endif
 #include <utility>
 #include <vector>
 
@@ -1897,6 +1901,11 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
             assert_true(guest_output_paint_fs_[size_t(swapchain_effect)] != VK_NULL_HANDLE);
             swapchain_effect_pipeline.swapchain_pipeline = CreateGuestOutputPaintPipeline(
                 swapchain_effect, paint_context_.swapchain_render_pass);
+            if (swapchain_effect_pipeline.swapchain_pipeline != VK_NULL_HANDLE) {
+              // Cache the render-pass format together with the pipeline. Leaving UNDEFINED
+              // here made the next frame destroy and compile the same pipeline again.
+              swapchain_effect_pipeline.swapchain_format = paint_context_.swapchain_render_pass_format;
+            }
             if (swapchain_effect_pipeline.swapchain_pipeline == VK_NULL_HANDLE) {
               guest_output_flow.effect_count = 0;
             }
@@ -2708,6 +2717,13 @@ VkPipeline VulkanPresenter::CreateGuestOutputPaintPipeline(GuestOutputPaintEffec
   const VulkanDevice::Functions& dfn = vulkan_device_->functions();
   const VkDevice device = vulkan_device_->device();
 
+#if REX_PLATFORM_SWITCH
+  // Serialize against the game's pipeline compiler; measure the heap before entering NVK.
+  std::lock_guard<std::mutex> compile_lock(util::GraphicsPipelineCompileMutex());
+  const auto compile_heap = mallinfo();
+  std::fprintf(stderr, "[gl-pipeline] presenter effect=%zu malloc_used=%zu malloc_free=%zu\n",
+               size_t(effect), size_t(compile_heap.uordblks), size_t(compile_heap.fordblks));
+#endif
   VkPipeline pipeline;
   if (dfn.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
                                     &pipeline) != VK_SUCCESS) {

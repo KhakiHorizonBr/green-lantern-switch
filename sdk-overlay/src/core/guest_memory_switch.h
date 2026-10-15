@@ -75,7 +75,10 @@ uint8_t* RexGmInit(size_t size);
 /* Reserves the guest backing arena before NVK/app startup. Size must be 2 MiB aligned. */
 bool RexGmBackingArenaInit(size_t size);
 
-/* * Releases everything. */
+/* Native renderer only: map logical READ pages as RW; incompatible with write watching. */
+void RexGmSetReadOnlyMapped(bool enabled);
+
+/* Releases everything. */
 void RexGmShutdown(void);
 
 /* Base of the window, or NULL if not initialized. */
@@ -202,6 +205,10 @@ uint32_t RexGmLastResult(void);
 /* Stage that produced RexGmLastResult; 0 = none, 1 = backing, 2 = shadow VA,
  * 3 = svcMapProcessCodeMemory, 4 = svcSetProcessMemoryPermission. */
 uint32_t RexGmLastStage(void);
+
+/* Compatibilidade opt-in: permite ler diretamente páginas RO da imagem guest.
+ * Horizon não permite mapear estes aliases como RO; o alias torna-se RW.
+ * Não aplicar a heaps físicos, write watches da GPU, MMIO ou página zero. */
 
 #define REX_GM_ERR_NOMEM    0xFFFF0001u  /* memalign of the backing store failed */
 #define REX_GM_ERR_NOCODEVA 0xFFFF0002u  /* no free space left in the code region */

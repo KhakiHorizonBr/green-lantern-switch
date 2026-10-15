@@ -1,3 +1,5 @@
+> Histórico da revisão 035. Para o bloqueio atual, consulte [PORT_STATUS.md](PORT_STATUS.md).
+
 # Evidências do console e versão atual para teste — 14/10/2026
 
 ## Bloqueio atual

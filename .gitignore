@@ -24,3 +24,8 @@
 *.7z
 .env
 .env.*
+
+# Capturas de imagens/recursos do jogo permanecem locais
+*.rdc
+**/logs/capture/
+*.bin

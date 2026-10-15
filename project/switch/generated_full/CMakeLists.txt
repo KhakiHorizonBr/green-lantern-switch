@@ -48,7 +48,10 @@ target_include_directories(green_lantern_recomp PRIVATE
     "${GREEN_LANTERN_PROJECT_ROOT}/generated/hinted")
 target_link_libraries(green_lantern_recomp PRIVATE rexruntime rexcore rexfilesystem)
 target_compile_definitions(green_lantern_recomp PRIVATE _GNU_SOURCE)
-target_compile_options(green_lantern_recomp PRIVATE -g0 -w -include cstdarg)
+# O código PPC acessa memória guest e registradores por tipos diferentes,
+# inclusive vetores SIMD. Use a mesma regra de aliasing do runtime do SDK.
+target_compile_options(green_lantern_recomp PRIVATE -g0 -w -fno-strict-aliasing
+    -ffp-contract=off -include cstdarg)
 target_precompile_headers(green_lantern_recomp PRIVATE
     "${GREEN_LANTERN_PROJECT_ROOT}/generated/hinted/green_lantern_pch.h")
 
@@ -148,3 +151,11 @@ rexglue_switch_add_nro(green_lantern_switch_game
     NAME "Green Lantern Rise of the Manhunters"
     AUTHOR "Green Lantern Recomp"
     VERSION "0.1.0")
+
+# Isolated startup budget; no PPC recompilation required when varying heap size.
+set(GREEN_LANTERN_SWITCH_HEAP_MIB 1280 CACHE STRING "libnx malloc heap in MiB")
+if (GREEN_LANTERN_SWITCH_HEAP_MIB LESS 1024 OR GREEN_LANTERN_SWITCH_HEAP_MIB GREATER 2304)
+  message(FATAL_ERROR "Heap must be between1024 and2304MiB")
+endif()
+target_compile_definitions(rexglue_switch_startup PRIVATE
+    REX_SWITCH_HEAP_MIB=${GREEN_LANTERN_SWITCH_HEAP_MIB})

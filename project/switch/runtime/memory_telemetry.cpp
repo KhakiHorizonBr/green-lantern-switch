@@ -8,12 +8,46 @@
 #include <cstring>
 #include <sys/stat.h>
 
+// Consulta o mapeamento host sem acessar o endereço guest investigado.
+extern "C" void GreenLanternTraceVector(uint64_t base, uint32_t phase,
+                                        const uint64_t* v) {
+  static std::atomic<uint32_t> initial_samples{0};
+  static std::atomic<uint32_t> invalid_samples{0};
+  auto readable = [base](uint32_t address, uint32_t length) {
+    MemoryInfo info{};
+    uint32_t page_info = 0;
+    const uint64_t host = base + address;
+    const Result rc = svcQueryMemory(&info, &page_info, host);
+    return R_SUCCEEDED(rc) && (info.perm & Perm_R) && host >= info.addr &&
+           length <= info.size && host - info.addr <= info.size - length;
+  };
+  bool valid = true;
+  if (phase == 2) {
+    valid = readable(uint32_t(v[5]) & ~15u, 256) &&
+            readable(uint32_t(v[6]) & ~15u, 464);
+  }
+  const bool early = phase != 2 && initial_samples.fetch_add(1) < 8;
+  if (!early && (valid || invalid_samples.fetch_add(1) >= 8)) return;
+  uint32_t table = 0;
+  if (readable(0x82B4FE48, 4)) {
+    std::memcpy(&table, reinterpret_cast<const void*>(base + 0x82B4FE48), 4);
+    table = __builtin_bswap32(table);
+  }
+  std::fprintf(stderr, "[gl-vector] phase=%u valid=%u table=%08X sp=%08X "
+      "r3=%08X r4=%08X r5=%08X r6=%08X r10=%08X r11=%08X r28=%08X lr=%08X\n",
+      phase, unsigned(valid), table, uint32_t(v[0]), uint32_t(v[1]),
+      uint32_t(v[2]), uint32_t(v[3]), uint32_t(v[4]), uint32_t(v[5]),
+      uint32_t(v[6]), uint32_t(v[7]), uint32_t(v[8]));
+  std::fflush(stderr);
+}
+
 extern "C" {
 size_t RexGmCommittedBytes(void);
 size_t RexGmPoolBytes(void);
 size_t RexGmMappedBytes(void);
 size_t RexGmChunkCount(void);
 bool RexSwitchGetVulkanMemoryBudget(uint64_t* usage, uint64_t* budget);
+size_t RexSwitchGetMemoryAreas(uint64_t* values, size_t capacity);
 }
 
 namespace green_lantern::horizon {
@@ -147,9 +181,26 @@ void SamplerMain(void*) {
     std::fflush(streamdata_log);
   }
 
+  FILE* areas_log = std::fopen("sdmc:/switch/green_lantern/logs/green_lantern_memory_areas.csv", "w");
+  if (areas_log) std::fprintf(areas_log, "elapsed_s,area,live_bytes,peak_bytes,allocations,failures,last_failed_bytes,max_request_bytes,tracking_overflow\n");
   unsigned elapsed_seconds = 0;
   for (;;) {
     WriteSample(log, elapsed_seconds);
+    if (areas_log) {
+      uint64_t values[43] = {};
+      RexSwitchGetMemoryAreas(values, 43);
+      const char* names[7] = {"vk_other", "buffers_other", "upload_staging", "render_targets",
+                              "sampled_images", "storage_images", "native_upload_ring"};
+      for (unsigned i = 0; i < 7; ++i) {
+        std::fprintf(areas_log, "%u,%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n", elapsed_seconds, names[i],
+          (unsigned long long)values[i*6], (unsigned long long)values[i*6+1],
+          (unsigned long long)values[i*6+2], (unsigned long long)values[i*6+3],
+          (unsigned long long)values[i*6+4], (unsigned long long)values[i*6+5],
+          (unsigned long long)values[42]);
+      }
+      std::fflush(areas_log);
+    }
+
     WriteStreamDataSample(streamdata_log, elapsed_seconds);
     svcSleepThread(kSampleIntervalNs);
     ++elapsed_seconds;
@@ -201,6 +252,11 @@ extern "C" void GreenLanternRecordStreamDataAlloc(uint32_t requested_bytes,
     ++g_streamdata_overflow_callers;
   }
   UnlockStreamDataStats();
+  if (result_pointer == 0 && requested_bytes != 0) {
+    std::fprintf(stderr, "[gl-streamdata] allocation failed: bytes=%u caller=%08X\n",
+                 requested_bytes, caller_lr);
+    std::fflush(stderr);
+  }
 }
 
 void StartMemoryTelemetry() {

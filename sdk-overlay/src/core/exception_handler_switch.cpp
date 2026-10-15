@@ -69,6 +69,7 @@
  */
 
 #include <rex/platform.h>
+#include <malloc.h>
 
 #if REX_PLATFORM_SWITCH
 
@@ -87,6 +88,7 @@
 #include "guest_memory_switch.h"
 #include "resume_ctx.h"
 #include "rex_decode.h"
+#include "switch_exception_probe.h"
 
 extern "C" void RexSwitchPerfCount(unsigned id);
 
@@ -123,6 +125,8 @@ extern "C" {
 alignas(16) uint8_t g_rex_exc_pilas[REX_EXC_RANURAS][REX_EXC_PILA];
 alignas(16) uint8_t g_rex_exc_volcados[REX_EXC_RANURAS][REX_EXC_VOLCADO];
 alignas(16) uint32_t g_rex_exc_ocupadas[REX_EXC_RANURAS];
+/* q0-q31, then FPCR and FPSR, saved around the entry's debugger query. */
+alignas(16) uint8_t g_rex_exc_entry_simd[528];
 }
 
 static_assert(sizeof(ThreadExceptionDump) <= REX_EXC_VOLCADO,
@@ -137,7 +141,8 @@ static_assert(REX_EXC_RANURAS == 32, "the assembly compares against 32 and masks
  * linked binary), with one extra branch at the start: if the frame's pc is RexResumeTrap, the
  * exception is the resume from resume_ctx.h, not a fault. Then x0-x8, lr, sp, pc and pstate are
  * copied into the frame from the dump x8 points to, and it returns with svcReturnFromException
- * without touching x9-x29 or NEON, which already hold their values.
+ * without touching x9-x29. NEON and floating-point control/status are restored
+ * from the copy immediately before the final return.
  *
  * The rest is libnx's: bail out if a debugger is attached (unless __nx_exception_ignoredebug), copy
  * the frame and the live registers to __nx_exceptiondump, and return from the kernel to
@@ -154,6 +159,42 @@ __asm__(".text\n"
         "    add  x3, x3, :lo12:RexResumeTrap\n"
         "    cmp  x2, x3\n"
         "    b.eq .Lrex_exc_resume\n"
+        /*
+         * SIMD and FP state first. The svcGetInfo call below clobbered q31 on the
+         * console before the dump below captured it: a counter around it fired 34
+         * times in one session, and a worker then resumed with a pointer that
+         * had passed through q31 read back as zero, and crashed while loading.
+         * Nothing may run between the fault and the dump that can change them.
+         *
+         * They go to a static buffer, not the stack. The stack here has room for
+         * the few words libnx pushes and little more: a first version that saved
+         * these 528 bytes below sp overwrote the kernel's exception frame, and the
+         * return then jumped into data (Atmosphere 2168-0002, pc next to the user
+         * exception area). One buffer is enough because the kernel lets a single
+         * thread at a time into this entry.
+         */
+        "    adrp x2, g_rex_exc_entry_simd\n"
+        "    add  x2, x2, :lo12:g_rex_exc_entry_simd\n"
+        "    stp  q0, q1, [x2, #0]\n"
+        "    stp  q2, q3, [x2, #32]\n"
+        "    stp  q4, q5, [x2, #64]\n"
+        "    stp  q6, q7, [x2, #96]\n"
+        "    stp  q8, q9, [x2, #128]\n"
+        "    stp  q10, q11, [x2, #160]\n"
+        "    stp  q12, q13, [x2, #192]\n"
+        "    stp  q14, q15, [x2, #224]\n"
+        "    stp  q16, q17, [x2, #256]\n"
+        "    stp  q18, q19, [x2, #288]\n"
+        "    stp  q20, q21, [x2, #320]\n"
+        "    stp  q22, q23, [x2, #352]\n"
+        "    stp  q24, q25, [x2, #384]\n"
+        "    stp  q26, q27, [x2, #416]\n"
+        "    stp  q28, q29, [x2, #448]\n"
+        "    stp  q30, q31, [x2, #480]\n"
+        "    mrs  x3, fpcr\n"
+        "    str  x3, [x2, #512]\n"
+        "    mrs  x3, fpsr\n"
+        "    str  x3, [x2, #520]\n"
         /* debugger? svcGetInfo(InfoType_DebuggerAttached) preserving x9-x21 */
         "    stp  x9,  x10, [sp, #-16]!\n"
         "    stp  x11, x12, [sp, #-16]!\n"
@@ -179,6 +220,28 @@ __asm__(".text\n"
         "    ldp  x13, x14, [sp], #16\n"
         "    ldp  x11, x12, [sp], #16\n"
         "    ldp  x9,  x10, [sp], #16\n"
+        "    adrp x4, g_rex_exc_entry_simd\n"
+        "    add  x4, x4, :lo12:g_rex_exc_entry_simd\n"
+        "    ldp  q0, q1, [x4, #0]\n"
+        "    ldp  q2, q3, [x4, #32]\n"
+        "    ldp  q4, q5, [x4, #64]\n"
+        "    ldp  q6, q7, [x4, #96]\n"
+        "    ldp  q8, q9, [x4, #128]\n"
+        "    ldp  q10, q11, [x4, #160]\n"
+        "    ldp  q12, q13, [x4, #192]\n"
+        "    ldp  q14, q15, [x4, #224]\n"
+        "    ldp  q16, q17, [x4, #256]\n"
+        "    ldp  q18, q19, [x4, #288]\n"
+        "    ldp  q20, q21, [x4, #320]\n"
+        "    ldp  q22, q23, [x4, #352]\n"
+        "    ldp  q24, q25, [x4, #384]\n"
+        "    ldp  q26, q27, [x4, #416]\n"
+        "    ldp  q28, q29, [x4, #448]\n"
+        "    ldp  q30, q31, [x4, #480]\n"
+        "    ldr  x2, [x4, #512]\n"
+        "    msr  fpcr, x2\n"
+        "    ldr  x2, [x4, #520]\n"
+        "    msr  fpsr, x2\n"
         "    cbnz w6, .Lrex_exc_abort\n"
         "    adrp x6, __nx_exception_ignoredebug\n"
         "    ldr  w5, [x6, :lo12:__nx_exception_ignoredebug]\n"
@@ -227,8 +290,13 @@ __asm__(".text\n"
         "    mov  x5, x2\n"
         "    str  w0,  [x2], #4\n"
         "    str  w7,  [x2], #4\n"
-        "    str  wzr, [x2], #4\n"
-        "    str  wzr, [x2], #4\n"
+        // Use the remaining padding words for the interrupted FP state.
+        // Reading these in the C++ handler is too late: its calculations and
+        // calls can already have changed FPSR or the guest rounding mode.
+        "    mrs  x3, fpcr\n"
+        "    str  w3, [x2], #4\n"
+        "    mrs  x3, fpsr\n"
+        "    str  w3, [x2], #4\n"
         "    ldp  x3, x4, [x1]\n"
         "    str  x5, [x1], #16\n"
         "    stp  x3, x4, [x2], #16\n"
@@ -327,6 +395,28 @@ __asm__(".text\n"
         "    str  x3, [x1, #88]\n"
         "    ldr  w3, [x2, #800]\n"
         "    str  w3, [x1, #96]\n"
+        // No ordinary function call may run between these loads and the SVC.
+        "    add  x3, x2, #288\n"
+        "    ldp q0, q1, [x3, #0]\n"
+        "    ldp q2, q3, [x3, #32]\n"
+        "    ldp q4, q5, [x3, #64]\n"
+        "    ldp q6, q7, [x3, #96]\n"
+        "    ldp q8, q9, [x3, #128]\n"
+        "    ldp q10, q11, [x3, #160]\n"
+        "    ldp q12, q13, [x3, #192]\n"
+        "    ldp q14, q15, [x3, #224]\n"
+        "    ldp q16, q17, [x3, #256]\n"
+        "    ldp q18, q19, [x3, #288]\n"
+        "    ldp q20, q21, [x3, #320]\n"
+        "    ldp q22, q23, [x3, #352]\n"
+        "    ldp q24, q25, [x3, #384]\n"
+        "    ldp q26, q27, [x3, #416]\n"
+        "    ldp q28, q29, [x3, #448]\n"
+        "    ldp q30, q31, [x3, #480]\n"
+        "    ldr  w3, [x2, #8]\n"
+        "    msr  fpcr, x3\n"
+        "    ldr  w3, [x2, #12]\n"
+        "    msr  fpsr, x3\n"
         "    mov  w0, wzr\n"
         "    b    .Lrex_exc_end\n"
         ".Lrex_exc_abort:\n"
@@ -363,6 +453,17 @@ extern "C" void _start(void);
 
 namespace {
 
+// One record per thread, with no TLS allocation and no file writes in the hot
+// path. A process-wide first-two limit only captured a healthy loading thread
+// and omitted the worker that actually crashed. Atomics also permit reporting
+// a record safely if another thread is interrupted during an update.
+struct ImageReadTrace {
+  std::atomic<uint64_t> tid{0}, pc{0}, context{0}, r8{0}, r9{0};
+  std::atomic<uint64_t> before_lo{0}, before_hi{0}, after_lo{0}, after_hi{0};
+  std::atomic<unsigned> count{0};
+};
+ImageReadTrace image_reads[64];
+
 struct CrashBuf {
   char data[16384];
   size_t len = 0;
@@ -389,6 +490,35 @@ bool QueryReadable(uint64_t addr, size_t bytes, MemoryInfo* out) {
   }
   return out->type != MemType_Unmapped && (out->perm & Perm_R) &&
          addr + bytes <= out->addr + out->size;
+}
+
+void RecordImageRead(const ThreadExceptionDump* ctx, bool after) {
+  u64 tid = 0;
+  if (R_FAILED(svcGetThreadId(&tid, CUR_THREAD_HANDLE)) || !tid) return;
+  for (auto& record : image_reads) {
+    uint64_t owner = 0;
+    if (!record.tid.compare_exchange_strong(owner, tid) && owner != tid) continue;
+    uint64_t vector[2];
+    std::memcpy(vector, &ctx->fpu_gprs[31], sizeof(vector));
+    if (after) {
+      record.after_lo = vector[0];
+      record.after_hi = vector[1];
+    } else {
+      record.pc = ctx->pc.x;
+      record.context = ctx->cpu_gprs[19].x;
+      record.before_lo = vector[0];
+      record.before_hi = vector[1];
+      MemoryInfo mi;
+      if (ctx->cpu_gprs[20].x == reinterpret_cast<uint64_t>(RexGmBase()) &&
+          QueryReadable(ctx->cpu_gprs[19].x, 80, &mi)) {
+        const auto* regs = reinterpret_cast<const uint64_t*>(ctx->cpu_gprs[19].x);
+        record.r8 = regs[8];
+        record.r9 = regs[9];
+      }
+      ++record.count;
+    }
+    return;
+  }
 }
 
 /*
@@ -447,6 +577,7 @@ void WriteCrashFile(const char* data, size_t len) {
 
 }  // namespace
 
+extern "C" int RexSwitchCrashHooksReady(void);
 extern "C" void RexSwitchCrashLog(const char* reason, const ThreadExceptionDump* ctx,
                                   uint64_t stack, uint64_t pc) {
   // A second fault while the first is being written (on this thread or another)
@@ -515,6 +646,17 @@ extern "C" void RexSwitchCrashLog(const char* reason, const ThreadExceptionDump*
   // Frame chain: the ELF keeps x29 as the frame pointer (the Atmosphere report of
   // the first abort walked it completely). More reliable than the scan below,
   // which remains as a fallback for when the chain breaks.
+  for (const auto& record : image_reads) {
+    if (record.tid.load() != tid || !record.count.load()) continue;
+    Append(b, "last image read on this thread: count=%u pc=image+0x%" PRIx64
+              " context=0x%016" PRIx64 " r8=0x%016" PRIx64 " r9=0x%016" PRIx64 "\n",
+           record.count.load(), record.pc.load() - base, record.context.load(),
+           record.r8.load(), record.r9.load());
+    Append(b, "q31 before=%016" PRIx64 ":%016" PRIx64
+              " after=%016" PRIx64 ":%016" PRIx64 " (high:low)\n",
+           record.before_hi.load(), record.before_lo.load(),
+           record.after_hi.load(), record.after_lo.load());
+  }
   Append(b, "cadena de marcos:\n");
   uint64_t frame = ctx ? ctx->fp.x : stack;
   for (int i = 0; i < 40 && (frame & 7) == 0 && QueryReadable(frame, 16, &mi); ++i) {
@@ -580,18 +722,13 @@ bool EmulateViaShadow(ThreadExceptionDump* ctx) {
   if (!ini || !fin || static_cast<uint8_t*>(fin) != static_cast<uint8_t*>(ini) + total - 1) {
     return false;
   }
-  // The reproducible Project8 null-pointer crash has a q31 value live over
-  // this image read. Log the saved state on both sides of emulation to tell
-  // entry/resume corruption apart from a bad guest argument. Bound the writes
-  // because this read also occurs during normal rendering.
-  static std::atomic<unsigned> diagnostic_reads{0};
+  // Keep the latest sample for each thread without synchronous SD writes.
   const auto guest_base = reinterpret_cast<uint64_t>(RexGmBase());
   const bool trace = guest_base && insn == 0xB956BC24u &&
-                     acc.address == guest_base + 0x8201D6BCull &&
-                     diagnostic_reads.fetch_add(1, std::memory_order_relaxed) < 2;
-  if (trace) RexSwitchCrashLog("diagnostic image read BEFORE emulation", ctx, ctx->sp.x, ctx->pc.x);
+                     acc.address == guest_base + 0x8201D6BCull;
+  if (trace) RecordImageRead(ctx, false);
   RexEmulateAccess(ctx, &acc, ini);
-  if (trace) RexSwitchCrashLog("diagnostic image read AFTER emulation", ctx, ctx->sp.x, ctx->pc.x);
+  if (trace) RecordImageRead(ctx, true);
   ctx->pc.x += 4;
   return true;
 }
@@ -606,12 +743,9 @@ void FillContext(HostThreadContext& tc, const ThreadExceptionDump* ctx) {
   tc.pc = ctx->pc.x;
   tc.pstate = ctx->pstate;
 
-  // The Horizon dump has no FPSR or FPCR. They are thread registers and the
-  // handler runs on the same thread, so they are read live.
-  uint64_t fpsr = 0, fpcr = 0;
-  __asm__ volatile("mrs %0, fpsr\n mrs %1, fpcr" : "=r"(fpsr), "=r"(fpcr));
-  tc.fpsr = static_cast<uint32_t>(fpsr);
-  tc.fpcr = static_cast<uint32_t>(fpcr);
+  // The exception entry stores FPCR/FPSR in the unused dump padding.
+  std::memcpy(&tc.fpcr, reinterpret_cast<const uint8_t*>(ctx) + 8, sizeof(uint32_t));
+  std::memcpy(&tc.fpsr, reinterpret_cast<const uint8_t*>(ctx) + 12, sizeof(uint32_t));
 
   for (int i = 0; i < 32; ++i) {
     std::memcpy(&tc.v[i], &ctx->fpu_gprs[i], sizeof(vec128_t));
@@ -691,8 +825,254 @@ bool IsHotRead(uint64_t far) {
   return true;
 }
 
+/*
+ * Resuming without a system call
+ *
+ * The usual resume ends in svcReturnFromException, and a system call follows
+ * the AArch64 calling convention: registers the convention treats as
+ * caller-saved, most of the vector registers among them, need not survive it.
+ * When the thread is preempted inside the call, they come back changed. The
+ * same happened to svcGetInfo at the entry (measured: q31 changed 34 times in one
+ * session). With three busy cores and 100,000 resumes a second that is rare per
+ * resume but frequent overall, and a guest pointer that the compiler happened to
+ * carry in q31 came back as zero: the loading-screen crash in sub_823BA7D8.
+ *
+ * So each thread resumes through a stub of its own, in executable memory close
+ * enough to the image for a direct branch. The stub loads every register from
+ * literals stored inside itself, which needs no base register, and ends with a
+ * B to the faulting instruction. Only data changes per resume, plus that one
+ * branch word. The trap path remains the fallback.
+ */
+// One page per stub, so a stub's permissions can be changed without touching
+// another thread's (the fallback mode below does exactly that).
+constexpr size_t kStubSize = 0x1000;
+constexpr size_t kStubCount = 256;
+constexpr size_t kStubRegion = kStubSize * kStubCount;  // 1 MB
+constexpr uint32_t kLitQ = 0x400;     // q0-q31, 512 bytes
+constexpr uint32_t kLitX = 0x600;     // x0-x30, 248 bytes
+constexpr uint32_t kLitSp = 0x6F8;
+constexpr uint32_t kLitFpcr = 0x700;
+constexpr uint32_t kLitFpsr = 0x708;
+constexpr uint32_t kLitNzcv = 0x710;
+constexpr uint32_t kBranchIndex = 71;  // instruction index of the final B
+
+uint8_t* g_stub_rw = nullptr;  // writable view, when one could be mapped
+uint64_t g_stub_rx = 0;        // executable alias near the image
+// 0 = no stubs (trap resume), 1 = separate writable view, 2 = no view: each
+// resume makes its own stub page writable, writes it, and makes it executable
+// again. Two system calls, but before the stub loads any register.
+int g_stub_mode = 0;
+std::atomic<uint32_t> g_stub_next{0};
+thread_local int32_t t_stub = -1;
+
+uint32_t LdrLiteral(uint32_t base_op, uint32_t insn_off, uint32_t lit_off, uint32_t rt) {
+  const int32_t imm19 = static_cast<int32_t>(lit_off - insn_off) / 4;
+  return base_op | ((static_cast<uint32_t>(imm19) & 0x7FFFF) << 5) | rt;
+}
+
+void WriteStubCode(uint32_t* code) {
+  uint32_t n = 0;
+  auto off = [&] { return n * 4; };
+  for (uint32_t q = 0; q < 32; ++q) {  // LDR Qt, literal
+    code[n] = LdrLiteral(0x9C000000u, off(), kLitQ + q * 16, q);
+    ++n;
+  }
+  code[n] = LdrLiteral(0x58000000u, off(), kLitFpcr, 0); ++n;  // ldr x0, fpcr
+  code[n++] = 0xD51B4400u;                                     // msr fpcr, x0
+  code[n] = LdrLiteral(0x58000000u, off(), kLitFpsr, 0); ++n;  // ldr x0, fpsr
+  code[n++] = 0xD51B4420u;                                     // msr fpsr, x0
+  code[n] = LdrLiteral(0x58000000u, off(), kLitNzcv, 0); ++n;  // ldr x0, nzcv
+  code[n++] = 0xD51B4200u;                                     // msr nzcv, x0
+  code[n] = LdrLiteral(0x58000000u, off(), kLitSp, 0); ++n;    // ldr x0, sp
+  code[n++] = 0x9100001Fu;                                     // mov sp, x0
+  for (uint32_t x = 0; x < 31; ++x) {
+    code[n] = LdrLiteral(0x58000000u, off(), kLitX + x * 8, x);
+    ++n;
+  }
+  code[n++] = 0xD503201Fu;  // placeholder for the B, patched per resume
+  static_assert(kBranchIndex == 32 + 8 + 31, "stub layout");
+}
+
+/* Maps the stub region: a code alias within branch range of the image, plus,
+ * when possible, a writable view of the same memory. Done once, before the
+ * first exception. Every step's result goes to rex_stderr.log: the first
+ * console run of this code found a code alias but no usable stubs. */
+bool CreateResumeStubs() {
+  const uint64_t base = reinterpret_cast<uint64_t>(&_start);
+  const Handle self = envGetOwnProcessHandle();
+  void* backing = memalign(0x1000, kStubRegion);
+  if (!backing) {
+    std::fprintf(stderr, "[resume-stub] no memory for stubs\n");
+    return false;
+  }
+  std::memset(backing, 0, kStubRegion);
+  for (size_t i = 0; i < kStubCount; ++i) {
+    WriteStubCode(reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(backing) + i * kStubSize));
+  }
+  armDCacheFlush(backing, kStubRegion);
+  const uint64_t window = reinterpret_cast<uint64_t>(RexGmBase());
+  const uint64_t window_end = window + RexGmSize();
+  u32 page_info = 0;
+  Result map_rc = 0;
+  uint64_t rx = 0;
+  virtmemLock();
+  // Upward from past the loaded image, in 2 MB steps, staying inside the
+  // +-128 MB reach of a B from anywhere in the image.
+  for (uint64_t probe = (base + 0x4000000 + 0x1FFFFF) & ~uint64_t(0x1FFFFF);
+       probe + kStubRegion < base + 0x7000000; probe += 0x200000) {
+    if (window && probe + kStubRegion > window && probe < window_end) {
+      continue;
+    }
+    MemoryInfo q{};
+    if (R_FAILED(svcQueryMemory(&q, &page_info, probe)) || q.type != MemType_Unmapped ||
+        q.addr + q.size < probe + kStubRegion) {
+      continue;
+    }
+    map_rc = svcMapProcessCodeMemory(self, probe, reinterpret_cast<u64>(backing), kStubRegion);
+    if (R_SUCCEEDED(map_rc)) {
+      rx = probe;
+      break;
+    }
+  }
+  Result perm_rc = rx ? svcSetProcessMemoryPermission(self, rx, kStubRegion, Perm_Rx) : 0;
+  Result view_rc = 0;
+  void* rw = nullptr;
+  if (rx && R_SUCCEEDED(perm_rc)) {
+    rw = virtmemFindAslr(kStubRegion, 0x1000);
+    view_rc = rw ? svcMapProcessMemory(rw, self, reinterpret_cast<u64>(backing), kStubRegion)
+                 : MAKERESULT(Module_Libnx, LibnxError_OutOfMemory);
+    if (R_FAILED(view_rc)) {
+      rw = nullptr;
+    }
+  }
+  virtmemUnlock();
+  std::fprintf(stderr,
+               "[resume-stub] image 0x%" PRIx64 " alias 0x%" PRIx64 " map 0x%X perm 0x%X view 0x%X\n",
+               base, rx, unsigned(map_rc), unsigned(perm_rc), unsigned(view_rc));
+  if (!rx || R_FAILED(perm_rc)) {
+    std::fprintf(stderr, "[resume-stub] unavailable: trap resume only\n");
+    return false;
+  }
+  armICacheInvalidate(reinterpret_cast<void*>(rx), kStubRegion);
+  g_stub_rx = rx;
+  g_stub_rw = static_cast<uint8_t*>(rw);
+  g_stub_mode = rw ? 1 : 2;
+  std::fprintf(stderr, "[resume-stub] mode %d: %zu stubs\n", g_stub_mode, kStubCount);
+  return true;
+}
+
+[[noreturn]] void RexResumeViaStub(ThreadExceptionDump* ctx) {
+  if (g_stub_mode == 0) {
+    RexResumeFromException(ctx);
+  }
+  if (t_stub < 0) {
+    const uint32_t i = g_stub_next.fetch_add(1, std::memory_order_relaxed);
+    if (i >= kStubCount) {
+      RexResumeFromException(ctx);
+    }
+    t_stub = static_cast<int32_t>(i);
+  }
+  const uint64_t rx = g_stub_rx + uint64_t(t_stub) * kStubSize;
+  if (g_stub_mode == 2 &&
+      R_FAILED(svcSetProcessMemoryPermission(envGetOwnProcessHandle(), rx, kStubSize, Perm_Rw))) {
+    RexResumeFromException(ctx);
+  }
+  uint8_t* rw = g_stub_mode == 1 ? g_stub_rw + size_t(t_stub) * kStubSize
+                                 : reinterpret_cast<uint8_t*>(rx);
+  const uint64_t branch_at = rx + kBranchIndex * 4;
+  const int64_t delta = static_cast<int64_t>(ctx->pc.x) - static_cast<int64_t>(branch_at);
+  if (delta < -(int64_t(1) << 27) || delta >= (int64_t(1) << 27)) {
+    RexResumeFromException(ctx);
+  }
+  std::memcpy(rw + kLitQ, &ctx->fpu_gprs[0], 512);
+  uint64_t* x = reinterpret_cast<uint64_t*>(rw + kLitX);
+  for (int i = 0; i < 29; ++i) {
+    x[i] = ctx->cpu_gprs[i].x;
+  }
+  x[29] = ctx->fp.x;
+  x[30] = ctx->lr.x;
+  const uint8_t* dump = reinterpret_cast<const uint8_t*>(ctx);
+  uint32_t fpcr = 0, fpsr = 0, slot = 0;
+  std::memcpy(&slot, dump + 4, 4);
+  std::memcpy(&fpcr, dump + 8, 4);   // saved at the entry (see the dump fill)
+  std::memcpy(&fpsr, dump + 12, 4);
+  *reinterpret_cast<uint64_t*>(rw + kLitSp) = ctx->sp.x;
+  *reinterpret_cast<uint64_t*>(rw + kLitFpcr) = fpcr;
+  *reinterpret_cast<uint64_t*>(rw + kLitFpsr) = fpsr;
+  *reinterpret_cast<uint64_t*>(rw + kLitNzcv) = uint64_t(ctx->pstate) & 0xF0000000u;
+  uint32_t* branch_rw = reinterpret_cast<uint32_t*>(rw + kBranchIndex * 4);
+  *branch_rw = 0x14000000u | (static_cast<uint32_t>(delta >> 2) & 0x03FFFFFFu);
+  if (g_stub_mode == 2) {
+    // The literals were written through the executable address itself: push
+    // them out before it becomes read-only again. No register state is live yet.
+    armDCacheClean(rw, kStubSize);
+    if (R_FAILED(svcSetProcessMemoryPermission(envGetOwnProcessHandle(), rx, kStubSize,
+                                               Perm_Rx))) {
+      RexResumeFromException(ctx);
+    }
+  }
+  // The literals are data: the same physical lines through the data cache. The
+  // branch is an instruction: push it out and drop the stale copy.
+  __asm__ volatile(
+      "dc cvau, %0\n"
+      "dsb ish\n"
+      "ic ivau, %1\n"
+      "dsb ish\n"
+      "isb\n"
+      :: "r"(branch_rw), "r"(branch_at) : "memory");
+  uint32_t* slot_word = &g_rex_exc_ocupadas[slot & (REX_EXC_RANURAS - 1)];
+  // Leave the exception slot's stack before releasing the slot: another thread
+  // may take it the moment it is free. Just below the thread's own sp is unused.
+  const uint64_t new_sp = (ctx->sp.x - 0x400) & ~uint64_t(0xF);
+  __asm__ volatile(
+      "mov sp, %0\n"
+      "dmb ish\n"
+      "stlr wzr, [%1]\n"
+      "br %2\n"
+      :: "r"(new_sp), "r"(slot_word), "r"(rx) : "memory");
+  __builtin_unreachable();
+}
+
+/*
+ * A fault before the crash hooks are up (in libnx's startup or the first
+ * static constructors) cannot be written to the SD card: newlib and the
+ * filesystem are not ready, and trying faulted again and lost the address.
+ * Atmosphere's crash report records the registers at a svcBreak instead:
+ * "Break Address" is the faulting PC, "Break Size" its return address, X3 the
+ * fault address and X4 the syndrome, and the stack trace follows the faulting
+ * code's frame pointer.
+ */
+[[noreturn]] void BreakWithEarlyFault(const ThreadExceptionDump* ctx) {
+  register uint64_t x0 __asm__("x0") = 0;  // BreakReason_Panic
+  register uint64_t x1 __asm__("x1") = ctx->pc.x;
+  register uint64_t x2 __asm__("x2") = ctx->lr.x;
+  register uint64_t x3 __asm__("x3") = ctx->far.x;
+  register uint64_t x4 __asm__("x4") = ctx->esr;
+  register uint64_t x5 __asm__("x5") = ctx->sp.x;
+  register uint64_t x6 __asm__("x6") = ctx->fp.x;
+  // The frame pointer is loaded inside the asm: it cannot be an asm operand
+  // while the compiler uses it. Nothing runs after the break.
+  __asm__ volatile("mov x29, x6\n svc 0x26" ::"r"(x0), "r"(x1), "r"(x2), "r"(x3), "r"(x4),
+                   "r"(x5), "r"(x6)
+                   : "memory");
+  for (;;) {
+  }
+}
+
 [[noreturn]] void HandleSwitchException(ThreadExceptionDump* ctx) {
+  if (!RexSwitchCrashHooksReady()) {
+    BreakWithEarlyFault(ctx);
+  }
   const uint64_t pc = ctx->pc.x;
+  if (pc == reinterpret_cast<uint64_t>(RexSwitchExceptionProbeTrap)) {
+    // Force a scheduling opportunity and deliberately disturb FP state in
+    // the handler. The interrupted values must come from the saved dump.
+    svcSleepThread(1);
+    __asm__ volatile("movi v0.2d, #0\n movi v31.2d, #0\n msr fpcr, xzr\n msr fpsr, xzr"
+                     ::: "v0", "v31", "memory");
+    ctx->pc.x += 4;
+    RexResumeViaStub(ctx);
+  }
   const uint64_t far = ctx->far.x;
   const uint32_t esr = ctx->esr;
   const uint32_t ec = esr >> kEsrEcShift;
@@ -735,20 +1115,20 @@ bool IsHotRead(uint64_t far) {
       if (g_rex_switch_unwatch_hot_read && IsHotRead(far)) {
         if (g_rex_switch_unwatch_hot_read(far)) {
           RexSwitchPerfCount(33);  // now mapped: the retried read runs natively
-          RexResumeFromException(ctx);
+          RexResumeViaStub(ctx);
         }
         RexSwitchPerfCount(34);  // could not unwatch (list full, or not a plain watch)
       }
       if (EmulateViaShadow(ctx)) {
         RexSwitchPerfCount(1);
-        RexResumeFromException(ctx);
+        RexResumeViaStub(ctx);
       }
     }
 
     /* (2) Committed, but not yet mapped in this view. */
     if (RexGmFaultIn(far)) {
       RexSwitchPerfCount(18);
-      RexResumeFromException(ctx);
+      RexResumeViaStub(ctx);
     }
 
     /*
@@ -767,7 +1147,7 @@ bool IsHotRead(uint64_t far) {
       if (RexGmWindowToOffset(far, &offset) && offset >= kFisicaIni && offset < kFisicaFin) {
         if (RexGmCommit(offset & ~(kTrozo - 1), kTrozo, REX_GM_WRITE) && RexGmFaultIn(far)) {
           RexSwitchPerfCount(17);
-          RexResumeFromException(ctx);
+          RexResumeViaStub(ctx);
         }
       }
     }
@@ -828,20 +1208,20 @@ bool IsHotRead(uint64_t far) {
         if (!reintentable) {
           if (EmulateViaShadow(ctx)) {
             RexSwitchPerfCount(3);
-            RexResumeFromException(ctx);
+            RexResumeViaStub(ctx);
           }
           break;  // ni reintentable ni emulable: sigue a SEH y a fatal
         }
       }
       RexSwitchPerfCount(2);
-      RexResumeFromException(ctx);
+      RexResumeViaStub(ctx);
     }
   }
 
   // --- 3. SEH ----------------------------------------------------------------
   if (RexSwitchSehHandleFault(ctx)) {
     RexSwitchPerfCount(4);
-    RexResumeFromException(ctx);
+    RexResumeViaStub(ctx);
   }
 
   // --- 4. fatal --------------------------------------------------------------
@@ -857,6 +1237,18 @@ bool IsHotRead(uint64_t far) {
 }  // namespace
 
 void ExceptionHandler::Install(Handler fn, void* data) {
+  static std::atomic<bool> tested{false};
+  if (!tested.exchange(true)) {
+    // The probe exercises whichever resume path is active. If the stubs break it,
+    // fall back to the trap resume instead of refusing to start, and say so.
+    if (CreateResumeStubs() && !RexSwitchCheckExceptionRegisters()) {
+      std::fprintf(stderr, "[resume-stub] probe failed with stubs: trap resume only\n");
+      g_stub_mode = 0;
+    }
+    if (g_stub_mode == 0 && !RexSwitchCheckExceptionRegisters()) {
+      diagAbortWithResult(MAKERESULT(Module_Libnx, 102));
+    }
+  }
   // There is nothing to install in the system: __libnx_exception_handler exists
   // once linked. This only records the handler.
   for (size_t i = 0; i < kMaxHandlerCount; ++i) {

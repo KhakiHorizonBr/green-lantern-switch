@@ -134,6 +134,7 @@ struct State {
      * the window, whether it is committed or not.
      */
     std::map<size_t, RexGmAccess> protection;
+    std::set<size_t> readonly_logical;
     /*
      * Which (view index, chunk offset) pairs are mapped. A chunk is not mapped into
      * all five views when it is committed: it enters each view the first time it is
@@ -186,6 +187,26 @@ const View* ViewFor(State& s, uint64_t addr) {
 RexGmAccess AccessOf(State& s, size_t page_off) {
     auto it = s.protection.find(page_off);
     return it == s.protection.end() ? REX_GM_WRITE : it->second;
+}
+
+/*
+ * Read-only guest pages kept mapped
+ *
+ * Horizon cannot make these pages read-only, so a read-only guest page was
+ * unmapped and every read of it became an emulated fault. Project 8's video
+ * decoder reads read-only tables: about 200,000 emulated reads a second, most of
+ * a core, with GPU write watching already off. With this on, such pages stay
+ * mapped read/write and only the bookkeeping says read-only. A guest write to
+ * one then succeeds instead of faulting; on the console it would have been a
+ * game bug. It must stay off while pages are write-watched, because watching
+ * relies on read-only pages faulting on write.
+ */
+bool g_ro_mapped = false;
+
+RexGmAccess ReportedAccessOf(const State& s, size_t page_off) {
+    auto it = s.protection.find(page_off);
+    if (it != s.protection.end()) return it->second;
+    return s.readonly_logical.count(page_off) ? REX_GM_READ : REX_GM_WRITE;
 }
 
 /* Is there committed backing behind this window address? */
@@ -571,6 +592,8 @@ bool AllocatePoolRange(State& s, size_t length, Pool** out_pool, size_t* out_off
 
 extern "C" {
 
+
+
 bool RexGmBackingArenaInit(size_t size) {
     State& s = S();
     std::lock_guard<std::mutex> lock(s.mutex);
@@ -631,6 +654,7 @@ void RexGmShutdown(void) {
     s.pools.clear();
     s.views.clear();
     s.protection.clear();
+    s.readonly_logical.clear();
     s.committed = 0;
     s.mapped = 0;
 
@@ -876,9 +900,14 @@ bool RexGmProtect(uint8_t* address, size_t length, RexGmAccess access, RexGmAcce
     const size_t begin = AlignDown(static_cast<size_t>(addr - wbase), kPageSize);
     const size_t end   = AlignUp(static_cast<size_t>(addr - wbase) + length, kPageSize);
 
-    if (out_old) *out_old = AccessOf(s, begin);
+    if (out_old) *out_old = ReportedAccessOf(s, begin);
 
-    const bool debe_estar = (access == REX_GM_WRITE);
+    const bool ro_mapped = g_ro_mapped && access == REX_GM_READ;
+    for (size_t p = begin; p < end; p += kPageSize) {
+        if (ro_mapped) s.readonly_logical.insert(p);
+        else s.readonly_logical.erase(p);
+    }
+    const bool debe_estar = (access == REX_GM_WRITE) || ro_mapped;
 
     /*
      * Fast path, and the common one: asking for full access on a range that has no
@@ -970,7 +999,7 @@ bool RexGmQueryProtect(uint8_t* address, size_t* length, RexGmAccess* out_access
         return true;
     }
 
-    const RexGmAccess a = AccessOf(s, begin);
+    const RexGmAccess a = ReportedAccessOf(s, begin);
     if (out_access) *out_access = a;
 
     /*
@@ -982,7 +1011,7 @@ bool RexGmQueryProtect(uint8_t* address, size_t* length, RexGmAccess* out_access
 
     size_t p = begin;
     const size_t tope = begin + maximo;
-    while (p < tope && AccessOf(s, p) == a && IsCommittedWindowAddress(s, wbase + p))
+    while (p < tope && ReportedAccessOf(s, p) == a && IsCommittedWindowAddress(s, wbase + p))
         p += kPageSize;
     if (length) *length = p - begin;
     return true;
@@ -1007,3 +1036,11 @@ void* RexGmShadowFor(uint64_t window_address) {
 }  // extern "C"
 
 #endif /* __SWITCH__ */
+
+#if defined(__SWITCH__)
+extern "C" void RexGmSetReadOnlyMapped(bool enabled) {
+    State& s = S();
+    std::lock_guard<std::mutex> lock(s.mutex);
+    g_ro_mapped = enabled;
+}
+#endif

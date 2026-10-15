@@ -21,6 +21,7 @@
 #include <rex/platform.h>
 #include <rex/string.h>
 #include <rex/ui/vulkan/device.h>
+#include <rex/ui/vulkan/util.h>
 
 REXCVAR_DEFINE_BOOL(vulkan_require_fragment_stores_and_atomics, true, "UI/Vulkan",
                     "Deprecated and ignored for parity; fragmentStoresAndAtomics is always "
@@ -816,6 +817,10 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
                  properties.deviceName);
     return nullptr;
   }
+
+#if REX_PLATFORM_SWITCH
+  util::InstallMemoryAreaTracking(dfn.vkAllocateMemory, dfn.vkFreeMemory);
+#endif
 
   // Get the queues.
 

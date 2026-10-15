@@ -95,12 +95,37 @@ int main(int argc, char* argv[]) {
                  __nx_heap_size);
   }
 
+  REXLOG_INFO("Switch heap: configured={} MiB, malloc range={} MiB, loader override={} MiB",
+               __nx_heap_size >> 20, size_t(fake_heap_end - fake_heap_start) >> 20,
+               envHasHeapOverride() ? envGetHeapOverrideSize() >> 20 : 0);
+
 #if defined(GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB)
   // Keep guest backing out of the malloc heap before graphics/runtime init can
   // fragment it. The game target opts into this at compile time; other ReXGlue
   // Switch apps retain their existing allocator behavior.
-  constexpr size_t kBackingArenaSize =
-      size_t(GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB) * 1024 * 1024;
+  size_t backing_arena_mib = GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB;
+  // Permite ajustar a reserva sem redistribuir o NRO. O SD já está montado
+  // pelo startup libnx; esta leitura precede NVK e os workers do aplicativo.
+  constexpr const char* kTuningPath = "sdmc:/switch/green_lantern/tuning.ini";
+  if (FILE* tuning = std::fopen(kTuningPath, "r")) {
+    char line[128];
+    while (std::fgets(line, sizeof(line), tuning)) {
+      unsigned requested = 0;
+      char trailing = 0;
+      if (std::sscanf(line, " backing_arena_mib = %u %c", &requested, &trailing) == 1) {
+        if (requested >= 256 && requested <= 512 && requested % 2 == 0) {
+          backing_arena_mib = requested;
+        } else {
+          REXLOG_WARN("Switch tuning: invalid backing_arena_mib={}; expected even 256..512",
+                       requested);
+        }
+      }
+    }
+    std::fclose(tuning);
+  }
+  const size_t kBackingArenaSize = backing_arena_mib * 1024 * 1024;
+  REXLOG_INFO("Switch tuning: backing_arena_mib={} (default={}), path={}",
+               backing_arena_mib, GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB, kTuningPath);
   if (!RexGmBackingArenaInit(kBackingArenaSize)) {
     REXLOG_ERROR("Switch: could not reserve the guest backing arena; stopping cleanly");
     ExitProcess(EXIT_FAILURE);

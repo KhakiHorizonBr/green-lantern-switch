@@ -1,0 +1,176 @@
+WARNING: NVK is not a conformant Vulkan implementation, testing use only.
+[resume-stub] image 0x4d284df000 alias 0x4d2c600000 map 0x0 perm 0x0 view 0xD401
+[resume-stub] mode 2: 256 stubs
+[exception-probe] PASS: 32 vectors, FPCR and FPSR across 16 scheduled exceptions
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=0000000000000000 malloc_used=955395776 malloc_free=1220928
+[gl-pipeline] presenter effect=0 malloc_used=973351856 malloc_free=1070160
+[saltynx] no conecta con los puertos de SaltyNX. Ultimo error 0xF201 (61953)
+[saltynx] nuestro TID: 01001C8016B4E000 (SaltyNX admite <= 01FFFFFFFFFFFFFF y sin 0x1F00)
+[saltynx] puerto InjectServ: error 0xF201 (61953)
+[saltynx] puerto SaltySD: error 0xF201 (61953)
+[saltynx] control: 'sm:' SI da sesion nueva, asi que el limite es del puerto de SaltyNX
+[saltynx] sesiones usadas / tope: 1 / 5
+[saltynx] eventos usados / tope: 0 / 0
+[saltynx] hilos usados / tope: 30 / 96
+[saltynx] memorias transferibles usadas / tope: 1 / 32
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=A4A965C189287B99 malloc_used=988348720 malloc_free=1892048
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=0000000000000000 malloc_used=1015718080 malloc_free=2281280
+[gl-pipeline] native vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B malloc_used=1027791504 malloc_free=2422128
+[gl-pipeline] native vs=101E86A7F525A236 ps=0000000000000000 malloc_used=1033061952 malloc_free=2402752
+[gl-pipeline] native vs=101E86A7F525A236 ps=0000000000000000 malloc_used=1036802544 malloc_free=2467344
+[gl-pipeline] native vs=1F2DA39236C77154 ps=8BBEED1A498163D9 malloc_used=1053731504 malloc_free=2934096
+[gl-pipeline] native vs=1F2DA39236C77154 ps=8BBEED1A498163D9 malloc_used=1053808784 malloc_free=2991984
+[gl-pipeline] native vs=F69C0C5F422D381D ps=71B2A4BFD069D142 malloc_used=1053900352 malloc_free=2900416
+[apm] de partida: config 0x00020003, GPU 307.2 MHz, memoria 1331.2 MHz
+[apm] PUESTA la configuracion 0x92220008 (tabla: GPU 460, EMC 1331): GPU 460.8 MHz (era 307.2) y la memoria se queda en 1331.2 MHz, comprobada durante 1.5 s seguidos; queda vigilada
+[gl-vector] phase=0 valid=1 table=82B4F590 sp=7063B540 r3=00000001 r4=826B0000 r5=826ADBA8 r6=826ADBA0 r10=82B50000 r11=82B4F590 r28=00000001 lr=826F15BC
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=00000001 r5=00000001 r6=F63266C0 r10=70635910 r11=70635980 r28=00000001 lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6322F80 r4=0000000F r5=00000001 r6=F6326700 r10=70635910 r11=70635980 r28=0000000F lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=0000000F r5=00000001 r6=F6326740 r10=70635910 r11=70635980 r28=0000000F lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6322F80 r4=0000000D r5=00000001 r6=F6326780 r10=70635910 r11=70635980 r28=0000000D lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=0000000D r5=00000001 r6=F63267C0 r10=70635910 r11=70635980 r28=0000000D lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6322F80 r4=0000000B r5=00000001 r6=F6326800 r10=70635910 r11=70635980 r28=0000000B lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=0000000B r5=00000001 r6=F6326840 r10=70635910 r11=70635980 r28=0000000B lr=82718138
+[gl-pipeline] native vs=1750A1D3D13A98A8 ps=13A6DDC87B0F321C malloc_used=1067583312 malloc_free=2959536
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=A4A965C189287B99 malloc_used=1067537904 malloc_free=3004944
+[gl-pipeline] native vs=3D5A82B5B890B037 ps=78E208CE59A74EE1 malloc_used=1072085456 malloc_free=2676272
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=A4A965C189287B99 malloc_used=1072963248 malloc_free=7536976
+[gl-pipeline] native vs=3D5A82B5B890B037 ps=AE9AB0B9A64870A3 malloc_used=1075034992 malloc_free=7697552
+[gl-pipeline] native vs=1750A1D3D13A98A8 ps=13A6DDC87B0F321C malloc_used=1075175888 malloc_free=7556656
+[gl-pipeline] native vs=2EF3DF763F7A2BA6 ps=0000000000000000 malloc_used=1077312256 malloc_free=5420288
+[gl-pipeline] native vs=2E0C4203FD94411E ps=0000000000000000 malloc_used=1085227152 malloc_free=4140912
+[gl-pipeline] native vs=101E86A7F525A236 ps=09B540165140DBF6 malloc_used=1088055696 malloc_free=4073072
+[gl-pipeline] native vs=2E0C4203FD94411E ps=0000000000000000 malloc_used=1088059120 malloc_free=4069648
+[gl-pipeline] native vs=101E86A7F525A236 ps=09B540165140DBF6 malloc_used=1089378016 malloc_free=4131104
+[gl-pipeline] native vs=FC7DCD711D5725A5 ps=3A268A0AF2C8E391 malloc_used=1092266992 malloc_free=4400144
+[gl-pipeline] native vs=F5941B30A0E57C26 ps=B354B57C2EA3E5C7 malloc_used=1092616368 malloc_free=4050768
+[gl-pipeline] native vs=C9B66F07429A3E93 ps=AF5024E80369970F malloc_used=1094082848 malloc_free=4165344
+[gl-pipeline] native vs=F5941B30A0E57C26 ps=B354B57C2EA3E5C7 malloc_used=1094359888 malloc_free=4154544
+[gl-pipeline] native vs=2E0C4203FD94411E ps=0000000000000000 malloc_used=1104457216 malloc_free=4846080
+[gl-pipeline] native vs=2E0C4203FD94411E ps=0000000000000000 malloc_used=1104461104 malloc_free=4842192
+[gl-pipeline] native vs=65EB243D714B2F1C ps=B354B57C2EA3E5C7 malloc_used=1116474336 malloc_free=5252128
+[gl-pipeline] native vs=B899D356E95DDA53 ps=8BBEED1A498163D9 malloc_used=1117080784 malloc_free=5436208
+[gl-pipeline] native vs=2DCA0671B364D5EB ps=8BBEED1A498163D9 malloc_used=1118647264 malloc_free=5585952
+[gl-pipeline] native vs=F3F53C579B2B12CD ps=8BBEED1A498163D9 malloc_used=1120695328 malloc_free=6134752
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=F8A6C6FA322BA5E6 malloc_used=1133793328 malloc_free=6729680
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=054CB56CFB7FA519 malloc_used=1136444512 malloc_free=6839200
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=54C7484F0F73F4DB malloc_used=1137343712 malloc_free=6607648
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=73C3E368D09E30ED malloc_used=1139284032 malloc_free=7108544
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=0B4E8E9C6EDB1187 malloc_used=1141394592 malloc_free=8360800
+[gl-pipeline] native vs=3D5A82B5B890B037 ps=8015A214CD6740E7 malloc_used=1141468592 malloc_free=8421968
+[gl-pipeline] native vs=70220C443B8AC85D ps=0000000000000000 malloc_used=1142343232 malloc_free=8706496
+[gl-pipeline] native vs=34687A02A422F4E7 ps=0000000000000000 malloc_used=1142335504 malloc_free=8714224
+[gl-pipeline] native vs=90363E4604EBA918 ps=0000000000000000 malloc_used=1142401744 malloc_free=8647984
+[gl-pipeline] native vs=AF28D2765AAA26D5 ps=661AA86C99CEBF6C malloc_used=1144016336 malloc_free=7287344
+[gl-pipeline] native vs=FAE17476D5992F64 ps=9A68539EE8578330 malloc_used=1164506560 malloc_free=7879232
+[gl-pipeline] native vs=32776387F305117B ps=661AA86C99CEBF6C malloc_used=1164238400 malloc_free=8692160
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=A4A965C189287B99 malloc_used=1168186320 malloc_free=8746032
+[gl-pipeline] native vs=A0B299DBD1F5B740 ps=7DF3BE1B63AF688B malloc_used=1168425472 malloc_free=8506880
+[gl-pipeline] native vs=E2C30E411E331417 ps=4552077EBAC4587E malloc_used=1168556304 malloc_free=8982256
+[gl-pipeline] native vs=FC7DCD711D5725A5 ps=1BDBC0BB6D34126D malloc_used=1172468112 malloc_free=9072240
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=ED691A46211B5EC3 malloc_used=1172499760 malloc_free=9040592
+[gl-pipeline] native vs=101E86A7F525A236 ps=09B540165140DBF6 malloc_used=1173817728 malloc_free=9102976
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=A4A965C189287B99 malloc_used=1217041856 malloc_free=10336832
+[gl-pipeline] native vs=1E6883FCCDE1F688 ps=A4A965C189287B99 malloc_used=1217022560 malloc_free=10356128
+[gl-pipeline] native vs=A79D941EF7A33FCF ps=F420AFFB6C2106FC malloc_used=1217070736 malloc_free=10307952
+[gl-pipeline] native vs=6C4CC79267203F84 ps=F420AFFB6C2106FC malloc_used=1217342496 malloc_free=10036192
+[gl-pipeline] native vs=4C1C6FF8BE7D46F6 ps=F420AFFB6C2106FC malloc_used=1217408880 malloc_free=9969808
+[saltynx] no conecta con los puertos de SaltyNX. Ultimo error 0xF201 (61953)
+[saltynx] nuestro TID: 01001C8016B4E000 (SaltyNX admite <= 01FFFFFFFFFFFFFF y sin 0x1F00)
+[saltynx] puerto InjectServ: error 0xF201 (61953)
+[saltynx] puerto SaltySD: error 0xF201 (61953)
+[saltynx] control: 'sm:' SI da sesion nueva, asi que el limite es del puerto de SaltyNX
+[saltynx] sesiones usadas / tope: 1 / 5
+[saltynx] eventos usados / tope: 0 / 0
+[saltynx] hilos usados / tope: 37 / 96
+[saltynx] memorias transferibles usadas / tope: 1 / 32
+[gl-pipeline] native vs=D2AA187C5BB3F356 ps=8BBEED1A498163D9 malloc_used=1223352656 malloc_free=10198704
+[gl-pipeline] native vs=1750A1D3D13A98A8 ps=13A6DDC87B0F321C malloc_used=1224552704 malloc_free=10731264
+[gl-pipeline] native vs=3D5A82B5B890B037 ps=AE9AB0B9A64870A3 malloc_used=1224554384 malloc_free=10729584
+[gl-pipeline] native vs=1F2DA39236C77154 ps=8BBEED1A498163D9 malloc_used=1224504992 malloc_free=10778976
+[gl-pipeline] native vs=08282F9E8E0E5E04 ps=B7A4B086855946DA malloc_used=1226541088 malloc_free=11581408
+[gl-pipeline] native vs=F5941B30A0E57C26 ps=B354B57C2EA3E5C7 malloc_used=1227393024 malloc_free=10729472
+[gl-pipeline] native vs=11887B0810E6A80F ps=E1187A2497EBF95F malloc_used=1227586944 malloc_free=10535552
+[gl-pipeline] native vs=11887B0810E6A80F ps=D324CC7E6DDFD594 malloc_used=1228252784 malloc_free=9955728
+[gl-pipeline] native vs=DAE919B9EEE7EC56 ps=B354B57C2EA3E5C7 malloc_used=1227659936 malloc_free=10548576
+[gl-pipeline] native vs=6BDE1453F966A102 ps=F420AFFB6C2106FC malloc_used=1228713280 malloc_free=11100864
+[gl-pipeline] native vs=DCE394B13F29BBFF ps=42C9E8C29B5C6118 malloc_used=1228803280 malloc_free=11010864
+[gl-pipeline] native vs=6BDE1453F966A102 ps=F420AFFB6C2106FC malloc_used=1228825312 malloc_free=10988832
+[gl-pipeline] native vs=08282F9E8E0E5E04 ps=B7A4B086855946DA malloc_used=1228844160 malloc_free=10969984
+[gl-pipeline] native vs=4263D80C44DE071C ps=0000000000000000 malloc_used=1230353472 malloc_free=11041728
+[gl-pipeline] native vs=11887B0810E6A80F ps=E1187A2497EBF95F malloc_used=1232618464 malloc_free=10693664
+[gl-pipeline] native vs=11887B0810E6A80F ps=E1187A2497EBF95F malloc_used=1232779328 malloc_free=10803136
+[gl-pipeline] native vs=5B402116E452CFBB ps=E1187A2497EBF95F malloc_used=1232708400 malloc_free=11009232
+[gl-pipeline] native vs=69196D7EB444E8B0 ps=F6F88D02ED501079 malloc_used=1235255856 malloc_free=11120080
+[gl-pipeline] native vs=BD8DE18BA980BA44 ps=F6F88D02ED501079 malloc_used=1236054080 malloc_free=11653056
+[gl-pipeline] native vs=11165020020CD2DD ps=D3B4BA04107B42FF malloc_used=1247417104 malloc_free=12918000
+[gl-pipeline] native vs=EFBC6D54093EE611 ps=D3B4BA04107B42FF malloc_used=1251879840 malloc_free=13956192
+[gl-pipeline] native vs=378E18FA1F0B369A ps=BBAEA94F2ACB7A7D malloc_used=1257912560 malloc_free=13993744
+[gl-pipeline] native vs=A05F115668BCCCEB ps=BBAEA94F2ACB7A7D malloc_used=1258635328 malloc_free=14536640
+[gl-pipeline] native vs=B13DC33A6ED5B261 ps=5D1FD6C76C487808 malloc_used=1264512880 malloc_free=14868624
+[gl-pipeline] native vs=F5941B30A0E57C26 ps=4955A241E4E75893 malloc_used=1270738288 malloc_free=14824080
+[gl-pipeline] native vs=84EB2300878B61F1 ps=B2FC715FD69439CF malloc_used=1278861168 malloc_free=15085712
+[gl-pipeline] native vs=11887B0810E6A80F ps=D324CC7E6DDFD594 malloc_used=1282387232 malloc_free=15483616
+[gl-pipeline] native vs=11887B0810E6A80F ps=D324CC7E6DDFD594 malloc_used=1283777696 malloc_free=15817568
+[gl-pipeline] native vs=5B402116E452CFBB ps=D324CC7E6DDFD594 malloc_used=1285564192 malloc_free=16148704
+[gl-pipeline] native vs=69196D7EB444E8B0 ps=AE2C523DBD5B25FF malloc_used=1293050272 malloc_free=16424544
+[gl-pipeline] native vs=BD8DE18BA980BA44 ps=AE2C523DBD5B25FF malloc_used=1293055552 malloc_free=16419264
+[gl-pipeline] native vs=EFBC6D54093EE611 ps=0AD0FD65D5E9C893 malloc_used=1294380624 malloc_free=16708016
+[gl-pipeline] native vs=11165020020CD2DD ps=0AD0FD65D5E9C893 malloc_used=1295777120 malloc_free=17035936
+[gl-pipeline] native vs=9E48EFA31E1A9A2C ps=0AD0FD65D5E9C893 malloc_used=1297872592 malloc_free=17987888
+[gl-pipeline] native vs=378E18FA1F0B369A ps=945A9C18D3A0A315 malloc_used=1307222528 malloc_free=18513408
+[gl-pipeline] native vs=A05F115668BCCCEB ps=945A9C18D3A0A315 malloc_used=1307359872 malloc_free=18576768
+[gl-pipeline] native vs=B13DC33A6ED5B261 ps=168DD235A2F1B34D malloc_used=1307541392 malloc_free=18530416
+[gl-pipeline] native vs=3F6073AFAE39AC94 ps=F6F88D02ED501079 malloc_used=1307089056 malloc_free=18982752
+[gl-pipeline] native vs=47E50E383457465C ps=3B7BF3A1B74028D4 malloc_used=1308344736 malloc_free=19054176
+[gl-pipeline] native vs=091418DCBF3399E4 ps=D324CC7E6DDFD594 malloc_used=1309501456 malloc_free=19224560
+[gl-pipeline] native vs=3F6073AFAE39AC94 ps=AE2C523DBD5B25FF malloc_used=1309775824 malloc_free=19351600
+[gl-pipeline] native vs=47E50E383457465C ps=DCD32BFA0FF78CBA malloc_used=1315028800 malloc_free=19198144
+[gl-pipeline] native vs=123C3A0A6621A428 ps=168DD235A2F1B34D malloc_used=1317550800 malloc_free=19698992
+[gl-pipeline] native vs=AF28D2765AAA26D5 ps=2C01172ECB51AE31 malloc_used=1318360736 malloc_free=19122528
+[gl-pipeline] native vs=FAE17476D5992F64 ps=B07F6B12512566D4 malloc_used=1324338368 malloc_free=19555136
+[gl-pipeline] native vs=32776387F305117B ps=2C01172ECB51AE31 malloc_used=1327236480 malloc_free=19552896
+[gl-pipeline] native vs=DAE919B9EEE7EC56 ps=B354B57C2EA3E5C7 malloc_used=1327514160 malloc_free=19676624
+[gl-pipeline] native vs=2503739AC49BF7A7 ps=99CF815E9AF264C7 malloc_used=1328901968 malloc_free=20422832
+[gl-pipeline] native vs=74EDE379EC22EEC9 ps=99CF815E9AF264C7 malloc_used=1328829168 malloc_free=20897040
+[gl-pipeline] native vs=E8706CA4B9841A75 ps=E1187A2497EBF95F malloc_used=1328985696 malloc_free=20875680
+[gl-pipeline] native vs=E8706CA4B9841A75 ps=D324CC7E6DDFD594 malloc_used=1328994016 malloc_free=20867360
+[gl-pipeline] native vs=DAE919B9EEE7EC56 ps=4955A241E4E75893 malloc_used=1329611424 malloc_free=21257568
+[gl-pipeline] native vs=91E9AC79A5E38D04 ps=AF5024E80369970F malloc_used=1329902944 malloc_free=21572256
+[gl-pipeline] native vs=74EDE379EC22EEC9 ps=C48BDB5A9AF07560 malloc_used=1330255568 malloc_free=21690672
+[gl-pipeline] native vs=4263D80C44DE071C ps=F03A5777B6675BBE malloc_used=1331229424 malloc_free=21716240
+[gl-pipeline] native vs=AF28D2765AAA26D5 ps=A08C0BEC8C685FCA malloc_used=1335459856 malloc_free=20725744
+[gl-pipeline] native vs=FAE17476D5992F64 ps=D324CC7E6DDFD594 malloc_used=1336857232 malloc_free=21122416
+[gl-pipeline] native vs=32776387F305117B ps=A08C0BEC8C685FCA malloc_used=1337130048 malloc_free=21251008
+[gl-pipeline] native vs=F9C75FBF162EDE86 ps=4955A241E4E75893 malloc_used=1336676560 malloc_free=21905200
+[gl-pipeline] native vs=BA0291608A5AD2DB ps=99CF815E9AF264C7 malloc_used=1337033120 malloc_free=22089312
+[gl-pipeline] native vs=7BCCE3BA3809134F ps=DCD32BFA0FF78CBA malloc_used=1337458736 malloc_free=21934032
+[gl-pipeline] native vs=F5941B30A0E57C26 ps=B354B57C2EA3E5C7 malloc_used=1337616512 malloc_free=22181760
+[gl-pipeline] native vs=D7C67DF804D0486C ps=E1187A2497EBF95F malloc_used=1337711488 malloc_free=22086784
+[gl-pipeline] native vs=717BBE4D4C8746EA ps=B354B57C2EA3E5C7 malloc_used=1337687840 malloc_free=22110432
+[gl-pipeline] native vs=D09A9C88C45CF7EF ps=ED843190AB2281DF malloc_used=1337696112 malloc_free=22102160
+[gl-pipeline] native vs=A0B299DBD1F5B740 ps=4A183FBD23E68C98 malloc_used=1338161968 malloc_free=21636304
+[gl-pipeline] native vs=266368471DD26C98 ps=EB5DD69BD773CFC0 malloc_used=1364766608 malloc_free=22339696
+[gl-pipeline] native vs=4263D80C44DE071C ps=F03A5777B6675BBE malloc_used=1364774640 malloc_free=22331664
+[gl-pipeline] native vs=AF28D2765AAA26D5 ps=C0544A20D53BAADF malloc_used=1366323120 malloc_free=21794896
+[gl-pipeline] native vs=FAE17476D5992F64 ps=AE04ECF0553FC29D malloc_used=1366467760 malloc_free=21912400
+[gl-pipeline] native vs=32776387F305117B ps=C0544A20D53BAADF malloc_used=1366452672 malloc_free=21927488
+[gl-pipeline] native vs=CE3110CC96A1ACDA ps=D324CC7E6DDFD594 malloc_used=1365667184 malloc_free=22712976
+[gl-pipeline] native vs=85319008405089B5 ps=4955A241E4E75893 malloc_used=1368438512 malloc_free=22587664
+[gl-pipeline] native vs=CD9F15112BE4E6A7 ps=F420AFFB6C2106FC malloc_used=1368599104 malloc_free=22427072
+[gl-pipeline] native vs=A2225CC1761583A3 ps=F420AFFB6C2106FC malloc_used=1368599440 malloc_free=22426736
+[gl-pipeline] native vs=C96F57E5FB162D56 ps=0000000000000000 malloc_used=1368761760 malloc_free=22264416
+[gl-pipeline] native vs=AAD478399CE42F4C ps=A08C0BEC8C685FCA malloc_used=1369316192 malloc_free=21709984
+[gl-pipeline] native vs=4E307DC0DBD8F8D2 ps=CFDF3D187A823E0A malloc_used=1381535360 malloc_free=22094208
+[gl-pipeline] native vs=A0B299DBD1F5B740 ps=E5CA281D4FDD2244 malloc_used=1393309696 malloc_free=22259712
+[gl-pipeline] native vs=6779911BAF7DC3C7 ps=0000000000000000 malloc_used=1394661248 malloc_free=22423680
+[gl-pipeline] native vs=B13DC33A6ED5B261 ps=329813125A505A2E malloc_used=1396184064 malloc_free=21662720
+[gl-pipeline] native vs=B13DC33A6ED5B261 ps=EF816C15798B652D malloc_used=1397030880 malloc_free=21491744
+[gl-pipeline] native vs=A2FDFDE6BEAE14B3 ps=A08C0BEC8C685FCA malloc_used=1396285312 malloc_free=22237312
+[gl-pipeline] native vs=AAD478399CE42F4C ps=C0544A20D53BAADF malloc_used=1396830544 malloc_free=22355632
+[gl-pipeline] native vs=11887B0810E6A80F ps=639B0D2FA5BE0E04 malloc_used=1437740016 malloc_free=22012944
+[gl-pipeline] native vs=11887B0810E6A80F ps=19609576E95E3209 malloc_used=1438468704 malloc_free=21546400
+[gl-pipeline] native vs=A2FDFDE6BEAE14B3 ps=C0544A20D53BAADF malloc_used=1438475984 malloc_free=21539120
+[gl-pipeline] native vs=F131ECC7011477E8 ps=F745674382D678CB malloc_used=1438074928 malloc_free=21940176
+[gl-pipeline] native vs=DCE394B13F29BBFF ps=42C9E8C29B5C6118 malloc_used=1411570096 malloc_free=48445008
+[gl-pipeline] native vs=03CD6906D473459D ps=B354B57C2EA3E5C7 malloc_used=1411785216 malloc_free=48229888

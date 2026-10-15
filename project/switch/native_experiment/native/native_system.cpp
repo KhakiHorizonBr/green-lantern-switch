@@ -1303,6 +1303,9 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
     counter_.fetch_add(1, std::memory_order_relaxed);
 #if defined(__SWITCH__)
     RexSwitchPerfCount(0);
+    // Completa o caminho de switch_unwatch_hot_reads para o renderer nativo:
+    // preserva leituras diretas e invalida caches se a CPU alterou a página.
+    memory_->SwitchCheckUnwatchedPages();
 #endif
     if (renderer_ready_) {
       renderer_.Swap(presenter_.get(), swap_frontbuffer_, swap_width_, swap_height_);

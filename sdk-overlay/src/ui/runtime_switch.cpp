@@ -98,14 +98,17 @@ u32 __nx_applet_type = AppletType_Application;
  * measure what it seemed to. It stays at 1,024 because that is enough, not
  * because it fixed anything.
  *
- * The initial 1,024 MB cap was too small for this title: on hardware mallinfo
- * reported 921 MB used and only 43 MB free as the guest asked for another slab.
- * A 1,536 MB budget let the guest get farther, but hardware then reported
- * VK_ERROR_OUT_OF_HOST_MEMORY while allocating render targets and upload
- * buffers. Use a 1,280 MB compromise: 256 MB above the previous cap for guest
- * backing, while returning 256 MB of headroom to NVK/Horizon allocations.
+ * Green Lantern previously used a 1,280 MiB compromise while running Xenos.
+ * The native NVK renderer allocates its BO backing via this same malloc heap.
+ * Its native budget must be evaluated separately from the old Xenos result.
+ * REX_SWITCH_HEAP_MIB is set only on this project's startup object target;
+ * the SDK default remains 1,280 MiB. Guest aliases and resource limits still
+ * need measurement on hardware before a larger heap is called validated.
  */
-size_t __nx_heap_size = 1280ull * 1024 * 1024;  /* see below */
+#ifndef REX_SWITCH_HEAP_MIB
+#define REX_SWITCH_HEAP_MIB 1280
+#endif
+size_t __nx_heap_size = size_t(REX_SWITCH_HEAP_MIB) * 1024 * 1024;
 
 /*
  * The exception handler stack is no longer declared here.

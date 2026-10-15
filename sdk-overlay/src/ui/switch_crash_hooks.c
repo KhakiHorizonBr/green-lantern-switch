@@ -67,6 +67,12 @@ static void RexSwitchInitLogDir(void) {
 
 void RexSwitchCrashLog(const char* reason, const ThreadExceptionDump* ctx, u64 stack, u64 pc);
 
+static volatile int g_rex_crash_hooks_ready = 0;
+
+int RexSwitchCrashHooksReady(void) {
+    return g_rex_crash_hooks_ready;
+}
+
 void abort(void) {
     RexSwitchCrashLog("abort()", NULL, (u64)__builtin_frame_address(0),
                       (u64)__builtin_return_address(0));
@@ -93,4 +99,5 @@ static void RexSwitchCrashHooksInit(void) {
         setvbuf(stderr, NULL, _IONBF, 0);
     }
     atexit(RexSwitchExitHook);
+    g_rex_crash_hooks_ready = 1;
 }

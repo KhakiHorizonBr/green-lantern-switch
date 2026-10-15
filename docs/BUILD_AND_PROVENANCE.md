@@ -44,14 +44,15 @@ testes anteriores.
 
 ```text
 GREEN_LANTERN_NATIVE_RENDERER=ON
-GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB=320
+GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB=384
+GREEN_LANTERN_SWITCH_HEAP_MIB=2000
 GREEN_LANTERN_SWITCH_STREAMDATA_TEST_CAP_MIB=32
 REXGLUE_PLATFORM_SWITCH=ON
 REXGLUE_USE_VULKAN=ON
 ```
 
-A heap fornecida pelo carregador é reduzida para 1280 MiB quando o modo de aplicação completa
-entrega um valor maior. A memória de suporte do jogo e as pilhas das threads gráficas nativas são
+A configuração atual usa heap de 2000 MiB; o padrão do SDK permanece 1280 MiB.
+O INI de exemplo seleciona arena de 448 MiB (sobrepõe o padrão de compilação de 384 MiB). A memória de suporte do jogo e as pilhas das threads gráficas nativas são
 reservadas antes da inicialização do NVK e do runtime.
 
 ## Arquivos mantidos fora do repositório
@@ -59,3 +60,11 @@ reservadas antes da inicialização do NVK e do runtime.
 Executáveis e recursos do jogo de Xbox 360/PC, funções geradas pela tradução de PPC para C++,
 caches de shaders extraídos de jogos, saves, bibliotecas compiladas do SDK e do driver, pastas
 de compilação e NROs.
+
+
+## Atualização 052
+
+O overlay e a integração incluem as correções posteriores ao 035. Veja CHANGELOG.md.
+O shader de cópia genérico pode ser refeito com tools/rebuild-color-copy-shader.ps1 e glslangValidator.
+Os headers SPIR-V incluídos vêm dos shaders genéricos do renderer, não de microcódigo do jogo.
+A captura por botões compilou, mas ainda não foi validada em hardware.

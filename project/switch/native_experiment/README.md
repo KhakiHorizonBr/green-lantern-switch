@@ -1,10 +1,6 @@
 # Experimento de renderizador nativo do Green Lantern
 
-Em 14/10/2026, o log 035 do console chega à inicialização do renderizador, mas as duas threads
-auxiliares da GPU nativa falham na criação. A versão candidata atual reserva antecipadamente dois
-blocos de 1088 KiB para suas pilhas, verifica os resultados da inicialização e registra os erros
-originais do libnx. Ela compila com sucesso e aguarda validação no console. Este experimento do
-Switch ainda não exibiu nenhum quadro do jogo.
+Em 15/10/2026, o renderer já chega ao menu e ao início jogável. Persistem erros de iluminação e composição e desempenho variável. O candidato posterior ao teste 052 acrescenta captura de passes por L+R+−; compilou e ainda aguarda validação no console.
 
 Esta é uma adaptação experimental, exclusiva para Switch, do renderizador Vulkan nativo dos fontes
 de The Simpsons Game NX fornecidos pelo usuário. Os créditos e avisos GPL-3.0-or-later do projeto
@@ -23,6 +19,5 @@ bits de modificação do tradutor não existem nesta versão do SDK do Green Lan
 opcionais de progresso da fila e de apresentação do projeto de origem também foram omitidos;
 são usados o ponteiro de leitura do jogo e as estatísticas locais de apresentação.
 
-O NRO é compilado com a arena atual de 320 MiB para a memória de suporte do jogo. A renderização
-ainda não foi validada no Switch. Na pasta de trabalho local, use o NRO separado em `artifacts` e
-preserve `green_lantern_switch_game.arena-320.nro` para retornar à versão anterior se necessário.
+A configuração local atual usa heap de 2000 MiB, arena de 448 MiB por INI e ring de 160 MiB. Os artefatos anteriores e seus ELFs permanecem locais para rollback. Consulte docs/PORT_STATUS.md no repositório público para evidências e limites atuais.
+

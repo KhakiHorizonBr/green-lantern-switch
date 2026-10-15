@@ -107,6 +107,7 @@ class TextureCache {
   // that address as anything but a depth format get it. Resolve addresses are
   // page aligned, so the tag never names a real one.
   static constexpr uint32_t kDepthWordsTag = 1;
+  static VkFormat ResolveHostFormat(rex::graphics::xenos::ColorFormat format, uint32_t& swizzle);
 
   TextureCache();
   ~TextureCache();

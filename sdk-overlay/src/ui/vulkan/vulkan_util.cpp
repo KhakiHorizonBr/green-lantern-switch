@@ -22,6 +22,84 @@ namespace ui {
 namespace vulkan {
 namespace util {
 
+std::mutex& GraphicsPipelineCompileMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+
+namespace {
+constexpr unsigned kMemoryAreas = 7;
+constexpr size_t kMemorySlots = 8192;
+struct MemoryRecord { VkDeviceMemory memory = VK_NULL_HANDLE; uint64_t bytes = 0; unsigned area = 0; unsigned state = 0; };
+struct MemoryArea { uint64_t live = 0, peak = 0, allocations = 0, failures = 0, last_failed = 0, max_request = 0; };
+MemoryRecord memory_records[kMemorySlots];
+MemoryArea memory_areas[kMemoryAreas];
+uint64_t tracking_overflow = 0;
+std::mutex memory_mutex;
+thread_local unsigned memory_area = 0;
+PFN_vkAllocateMemory actual_allocate = nullptr;
+PFN_vkFreeMemory actual_free = nullptr;
+size_t MemoryHash(VkDeviceMemory memory) {
+  return (uint64_t(memory) >> 4) % kMemorySlots;
+}
+VKAPI_ATTR VkResult VKAPI_CALL TrackedAllocate(VkDevice device, const VkMemoryAllocateInfo* info,
+    const VkAllocationCallbacks* allocator, VkDeviceMemory* memory) {
+  const VkResult result = actual_allocate(device, info, allocator, memory);
+  const unsigned area = memory_area < kMemoryAreas ? memory_area : 0;
+  std::lock_guard<std::mutex> lock(memory_mutex);
+  auto& stats = memory_areas[area];
+  stats.max_request = std::max(stats.max_request, uint64_t(info->allocationSize));
+  if (result != VK_SUCCESS) {
+    ++stats.failures; stats.last_failed = info->allocationSize; return result;
+  }
+  size_t slot = MemoryHash(*memory);
+  for (size_t n = 0; n < kMemorySlots; ++n, slot = (slot + 1) % kMemorySlots) {
+    auto& record = memory_records[slot];
+    if (record.state == 1) continue;
+    record = {*memory, info->allocationSize, area, 1};
+    stats.live += info->allocationSize; stats.peak = std::max(stats.peak, stats.live);
+    ++stats.allocations; return result;
+  }
+  ++tracking_overflow;
+  return result;
+}
+VKAPI_ATTR void VKAPI_CALL TrackedFree(VkDevice device, VkDeviceMemory memory,
+    const VkAllocationCallbacks* allocator) {
+  if (memory != VK_NULL_HANDLE) {
+    std::lock_guard<std::mutex> lock(memory_mutex);
+    size_t slot = MemoryHash(memory);
+    for (size_t n = 0; n < kMemorySlots; ++n, slot = (slot + 1) % kMemorySlots) {
+      auto& record = memory_records[slot];
+      if (record.state == 0) break;
+      if (record.state != 1 || record.memory != memory) continue;
+      memory_areas[record.area].live -= record.bytes;
+      record.state = 2; break;
+    }
+  }
+  actual_free(device, memory, allocator);
+}
+} // namespace
+MemoryAreaScope::MemoryAreaScope(unsigned area) : previous_(memory_area) { memory_area = area; }
+MemoryAreaScope::~MemoryAreaScope() { memory_area = previous_; }
+void InstallMemoryAreaTracking(PFN_vkAllocateMemory& allocate, PFN_vkFreeMemory& free_memory) {
+  if (allocate == TrackedAllocate) return;
+  actual_allocate = allocate; actual_free = free_memory;
+  allocate = TrackedAllocate; free_memory = TrackedFree;
+}
+extern "C" size_t RexSwitchGetMemoryAreas(uint64_t* values, size_t capacity) {
+  constexpr size_t required = kMemoryAreas * 6 + 1;
+  if (!values || capacity < required) return required;
+  std::lock_guard<std::mutex> lock(memory_mutex);
+  for (unsigned i = 0; i < kMemoryAreas; ++i) {
+    const auto& s = memory_areas[i];
+    values[i*6+0]=s.live; values[i*6+1]=s.peak; values[i*6+2]=s.allocations;
+    values[i*6+3]=s.failures; values[i*6+4]=s.last_failed; values[i*6+5]=s.max_request;
+  }
+  values[kMemoryAreas*6] = tracking_overflow;
+  return required;
+}
+
 void FlushMappedMemoryRange(const VulkanDevice* const vulkan_device, const VkDeviceMemory memory,
                             const uint32_t memory_type, const VkDeviceSize offset,
                             const VkDeviceSize memory_size, const VkDeviceSize size) {
@@ -51,6 +129,9 @@ bool CreateDedicatedAllocationBuffer(const VulkanDevice* const vulkan_device,
                                      const MemoryPurpose memory_purpose, VkBuffer& buffer_out,
                                      VkDeviceMemory& memory_out, uint32_t* const memory_type_out,
                                      VkDeviceSize* const memory_size_out) {
+  MemoryAreaScope area(memory_area == 6 ? 6 :
+      ((usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT) &&
+       !(usage & (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)) ? 2 : 1));
   const VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
 
@@ -126,6 +207,10 @@ bool CreateDedicatedAllocationImage(const VulkanDevice* const vulkan_device,
                                     const MemoryPurpose memory_purpose, VkImage& image_out,
                                     VkDeviceMemory& memory_out, uint32_t* const memory_type_out,
                                     VkDeviceSize* const memory_size_out) {
+  MemoryAreaScope area((create_info.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) ? 3 :
+      ((create_info.usage & VK_IMAGE_USAGE_STORAGE_BIT) ? 5 : 4));
+
   const VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
 

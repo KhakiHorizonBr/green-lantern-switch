@@ -14,6 +14,8 @@
 #include "native_renderer.h"
 
 #include <algorithm>
+#include <malloc.h>
+#include <cstdio>
 #include <cmath>
 #include <regex>
 #include <sstream>
@@ -66,6 +68,13 @@ extern "C" {
 #include "native_hash.h"
 #include "native_textures.h"
 
+namespace {
+std::atomic<bool> graphics_capture_requested{false};
+}
+extern "C" void GreenLanternRequestGraphicsCapture(void) {
+  graphics_capture_requested.store(true, std::memory_order_relaxed);
+}
+
 // Project 8's SDK specializes texture sign swizzles into the pipelines (a
 // translator change this SDK does not have). Off, the translated shaders read
 // the signs from the system constants, which this renderer fills either way.
@@ -85,7 +94,7 @@ REXCVAR_DEFINE_UINT32(nx_trace_dump_every, 0, "Switch",
                       "draw of the traced frames (needs nx_record_thread = false)");
 REXCVAR_DEFINE_STRING(nx_trace_dump_prefix, "", "Switch",
                       "With nx_trace_frame, also save every resolve of the traced frames as "
-                      "<prefix>_f<frame>_r<n>_<address>.ppm (empty = no images)");
+                      "raw .bin images with .json layout metadata (empty = no images)");
 REXCVAR_DEFINE_STRING(nx_dump_shaders_path, "", "Switch",
                       "Development: write each shader's microcode disassembly to this folder");
 REXCVAR_DEFINE_BOOL(nx_native_shaders, true, "Switch",
@@ -106,6 +115,9 @@ REXCVAR_DEFINE_BOOL(nx_record_thread, true, "Switch",
 REXCVAR_DEFINE_BOOL(nx_msaa, false, "Switch",
                     "Render with the multisampling the game asks for; off draws every target "
                     "with one sample, which costs the GPU much less memory bandwidth");
+REXCVAR_DEFINE_UINT32(nx_stream_mib, 96, "Switch",
+                     "Native upload ring size in MiB (64..192, restart required)")
+    .range(64, 192);
 REXCVAR_DEFINE_BOOL(nx_async_pipelines, true, "Switch",
                     "Native renderer: compile new pipelines on a worker thread and skip the "
                     "draws that need them until they are ready, instead of stalling the frame");
@@ -134,7 +146,7 @@ using rex::ui::vulkan::VulkanDevice;
 // at once (30-49 ms waits for a free slot in frames that then dropped).
 constexpr uint32_t kSubmissionSlots = 4;
 // Vertex, index, constant and texture upload data of the submissions in flight.
-constexpr VkDeviceSize kStreamSize = 160u << 20;
+// The per-renderer capacity is selected before initialization via nx_stream_mib.
 // Room at the end of the stream for the fixed ranges of constant bindings.
 constexpr VkDeviceSize kStreamGuard = 16u << 10;
 // Past the end of the stream, never allocated from but inside the range the
@@ -326,6 +338,7 @@ struct VertexRangeKeyHasher {
 }  // namespace
 
 struct Renderer::Impl {
+  const VkDeviceSize stream_capacity = VkDeviceSize(REXCVAR_GET(nx_stream_mib)) << 20;
   Renderer* owner = nullptr;
   rex::ui::vulkan::VulkanProvider* provider = nullptr;
   const VulkanDevice* device = nullptr;
@@ -424,7 +437,8 @@ struct Renderer::Impl {
   VkPipelineLayout copy_color_layout = VK_NULL_HANDLE;
   VkPipeline copy_color_pipeline = VK_NULL_HANDLE;
   bool ComputeColorCopy(VkCommandBuffer c, VkImageView source, VkImageView dest, int32_t sx,
-                        int32_t sy, int32_t dx, int32_t dy, uint32_t width, uint32_t height);
+                        int32_t sy, int32_t dx, int32_t dy, uint32_t width, uint32_t height,
+                        float color_scale = 1.0f);
   bool CreateDepthConversion();
 
   // GPU time by render pass and resolve (nx_gpu_profile): on one
@@ -763,8 +777,12 @@ struct Renderer::Impl {
 
   bool Tracing() const {
     const uint64_t first = REXCVAR_GET(nx_trace_frame);
-    return first && frame >= first && frame < first + REXCVAR_GET(nx_trace_frames);
+    return frame == manual_capture_frame ||
+           (first && frame >= first && frame < first + REXCVAR_GET(nx_trace_frames));
   }
+  uint64_t manual_capture_frame = UINT64_MAX;
+  uint32_t manual_capture_count = 0;
+  uint64_t trace_bytes = 0;
   uint32_t trace_draw = 0;
   // Resolve images of a traced frame, read back at its swap (nx_trace_dump_prefix).
   struct TraceDump {
@@ -772,24 +790,46 @@ struct Renderer::Impl {
     VkDeviceMemory memory = VK_NULL_HANDLE;
     uint32_t width = 0, height = 0;
     VkFormat format = VK_FORMAT_UNDEFINED;
+    size_t bytes = 0;
     std::string name;
   };
   std::vector<TraceDump> trace_dumps;
   uint32_t trace_resolve = 0;
   void TraceDumpImage(VkCommandBuffer c, VkImage image, uint32_t width, uint32_t height,
                       VkFormat format, uint32_t address) {
-    const std::string prefix = REXCVAR_GET(nx_trace_dump_prefix);
+    const std::string prefix = frame == manual_capture_frame
+        ? "sdmc:/switch/green_lantern/logs/capture/pass"
+        : REXCVAR_GET(nx_trace_dump_prefix);
     if (prefix.empty() || !width || !height) return;
-    uint32_t texel_bytes = 4;
-    if (format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R16G16B16A16_SNORM ||
-        format == VK_FORMAT_R32G32_SFLOAT) {
-      texel_bytes = 8;
+    uint32_t texel_bytes = 0;
+    switch (format) {
+      case VK_FORMAT_R8G8B8A8_UNORM: case VK_FORMAT_R8G8B8A8_SRGB:
+      case VK_FORMAT_B8G8R8A8_UNORM: case VK_FORMAT_B8G8R8A8_SRGB:
+      case VK_FORMAT_A2B10G10R10_UNORM_PACK32: case VK_FORMAT_R32_SFLOAT:
+      case VK_FORMAT_R16G16_SNORM: case VK_FORMAT_R16G16_SFLOAT:
+        texel_bytes = 4; break;
+      case VK_FORMAT_R16_UNORM: case VK_FORMAT_R16_SFLOAT:
+        texel_bytes = 2; break;
+      case VK_FORMAT_R16G16B16A16_SFLOAT: case VK_FORMAT_R16G16B16A16_SNORM:
+      case VK_FORMAT_R32G32_SFLOAT:
+        texel_bytes = 8; break;
+      default:
+        REXLOG_WARN("[trace] unsupported readback format {}", uint32_t(format));
+        return;
+    }
+    const uint64_t bytes = uint64_t(width) * height * texel_bytes;
+    // One frame only; diagnostics must not exhaust the heap being diagnosed.
+    if (trace_dumps.size() >= 64 || trace_bytes + bytes > (64u << 20)) {
+      REXLOG_WARN("[trace] capture truncated at 64 images / 64 MiB");
+      return;
     }
     TraceDump dump;
     dump.width = width;
     dump.height = height;
     dump.format = format;
-    dump.name = fmt::format("{}_f{}_r{:02}_{:08X}.ppm", prefix, frame, trace_resolve, address);
+    dump.bytes = size_t(bytes);
+    dump.name = fmt::format("{}_f{}_r{:02}_{:08X}_n{}", prefix, frame, trace_resolve,
+                            address, trace_dumps.size());
     if (!rex::ui::vulkan::util::CreateDedicatedAllocationBuffer(
             device, VkDeviceSize(width) * height * texel_bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             rex::ui::vulkan::util::MemoryPurpose::kReadback, dump.buffer, dump.memory)) {
@@ -807,6 +847,7 @@ struct Renderer::Impl {
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.imageExtent = {width, height, 1};
     dfn().vkCmdCopyImageToBuffer(c, image, VK_IMAGE_LAYOUT_GENERAL, dump.buffer, 1, &region);
+    trace_bytes += bytes;
     trace_dumps.push_back(std::move(dump));
   }
   void TraceWriteDumps() {
@@ -815,47 +856,38 @@ struct Renderer::Impl {
     for (TraceDump& dump : trace_dumps) {
       void* mapped = nullptr;
       if (dfn().vkMapMemory(vk, dump.memory, 0, VK_WHOLE_SIZE, 0, &mapped) == VK_SUCCESS) {
-        if (FILE* file = std::fopen(dump.name.c_str(), "wb")) {
-          // Large images every 4th pixel: whole frames of a long trace stay small.
-          const uint32_t step = dump.width > 640 ? 4 : 1;
-          const uint32_t out_width = dump.width / step, out_height = dump.height / step;
-          std::fprintf(file, "P6\n%u %u\n255\n", out_width, out_height);
-          std::vector<uint8_t> row(size_t(out_width) * 3);
-          for (uint32_t oy = 0; oy < out_height; ++oy) {
-            const uint32_t y = oy * step;
-            for (uint32_t ox = 0; ox < out_width; ++ox) {
-              const uint32_t x = ox * step;
-              const size_t i = size_t(y) * dump.width + x;
-              uint8_t* o = &row[ox * 3];
-              if (dump.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32) {
-                const uint32_t v = static_cast<const uint32_t*>(mapped)[i];
-                o[0] = uint8_t((v & 0x3FF) >> 2);
-                o[1] = uint8_t(((v >> 10) & 0x3FF) >> 2);
-                o[2] = uint8_t(((v >> 20) & 0x3FF) >> 2);
-              } else if (dump.format == VK_FORMAT_R32_SFLOAT) {
-                const float f = static_cast<const float*>(mapped)[i];
-                // Depth is near 1 for most of a scene: spread the top of the range.
-                const float g = std::clamp((f - 0.9f) * 10.0f, 0.0f, 1.0f);
-                o[0] = o[1] = o[2] = uint8_t(g * 255.0f);
-              } else {
-                const uint8_t* b = static_cast<const uint8_t*>(mapped) + i * 4;
-                o[0] = b[0];
-                o[1] = b[1];
-                o[2] = b[2];
-              }
-            }
-            std::fwrite(row.data(), 1, row.size(), file);
+        VkMappedMemoryRange range = {VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+        range.memory = dump.memory;
+        range.size = VK_WHOLE_SIZE;
+        const VkResult invalidated = dfn().vkInvalidateMappedMemoryRanges(vk, 1, &range);
+        bool saved = false;
+        if (invalidated == VK_SUCCESS) {
+          if (FILE* file = std::fopen((dump.name + ".bin").c_str(), "wb")) {
+            saved = std::fwrite(mapped, 1, dump.bytes, file) == dump.bytes;
+            saved = std::fclose(file) == 0 && saved;
           }
-          std::fclose(file);
         }
+        if (saved) {
+          if (FILE* meta = std::fopen((dump.name + ".json").c_str(), "w")) {
+            const auto json = fmt::format(
+                "{{\"width\":{},\"height\":{},\"vk_format\":{},\"bytes\":{},"
+                "\"row_bytes\":{},\"layout\":\"tightly-packed little-endian\"}}\n",
+                dump.width, dump.height, uint32_t(dump.format), dump.bytes,
+                dump.bytes / dump.height);
+            saved = std::fwrite(json.data(), 1, json.size(), meta) == json.size();
+            saved = std::fclose(meta) == 0 && saved;
+          } else saved = false;
+        }
+        if (!saved) REXLOG_ERROR("[trace] failed to save {} (invalidate={})", dump.name, int(invalidated));
+        else REXLOG_INFO("[trace] saved {} ({}x{} vk{})", dump.name, dump.width, dump.height,
+                          uint32_t(dump.format));
         dfn().vkUnmapMemory(vk, dump.memory);
       }
-      REXLOG_INFO("[trace] dumped {} ({}x{} vk{})", dump.name, dump.width, dump.height,
-                  uint32_t(dump.format));
       dfn().vkDestroyBuffer(vk, dump.buffer, nullptr);
       dfn().vkFreeMemory(vk, dump.memory, nullptr);
     }
     trace_dumps.clear();
+    trace_bytes = 0;
   }
   static std::string TraceTarget(const RenderTarget* rt) {
     if (!rt) return "-";
@@ -1583,16 +1615,16 @@ struct Renderer::Impl {
   // Stream memory for this submission; stalls on older submissions if the
   // ring would run over data they still read.
   // The start of the stream's next lap. Not rex::align: that rounds with a
-  // mask, right only for powers of two, and the stream is 160 MB. Wrapping
+  // mask, right only for powers of two; configured capacities may not be. Wrapping
   // with it put allocations at arbitrary places, far enough ahead that the
   // stream looked full and the renderer waited for the GPU to finish all its
   // work (30-45 ms, every wrap), or across the end of the buffer.
-  static uint64_t NextStreamLap(uint64_t position) {
-    return (position / kStreamSize + 1) * kStreamSize;
+  uint64_t NextStreamLap(uint64_t position) const {
+    return (position / stream_capacity + 1) * stream_capacity;
   }
 
   uint8_t* Allocate(VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize& offset_out) {
-    if (size > kStreamSize / 4) {
+    if (size > stream_capacity / 4) {
       return nullptr;
     }
     BeginRecording();
@@ -1600,30 +1632,30 @@ struct Renderer::Impl {
     // fixed range starting at any allocation stays inside the buffer.
     uint64_t start = rex::align(stream_head, uint64_t(alignment));
     stats().stream_bytes += size;
-    if ((start % kStreamSize) + size > kStreamSize - kStreamGuard) {
+    if ((start % stream_capacity) + size > stream_capacity - kStreamGuard) {
       start = NextStreamLap(start);
     }
     uint64_t end = start + size;
     // The current submission itself must not wrap onto what it still reads.
     const uint64_t fence_before = frame_fence_wait_ns;
-    if (end - current().stream_oldest > kStreamSize) {
+    if (end - current().stream_oldest > stream_capacity) {
       Submit();
       WaitSubmission(submissions[submission_number % kSubmissionSlots]);
       BeginRecording();
       start = rex::align(stream_head, uint64_t(alignment));
-      if ((start % kStreamSize) + size > kStreamSize - kStreamGuard) {
+      if ((start % stream_capacity) + size > stream_capacity - kStreamGuard) {
         start = NextStreamLap(start);
       }
       end = start + size;
     }
     for (Submission& s : submissions) {
-      if (&s != &current() && s.pending && end - s.stream_oldest > kStreamSize) {
+      if (&s != &current() && s.pending && end - s.stream_oldest > stream_capacity) {
         WaitSubmission(s);
       }
     }
     frame_stream_wait_ns += frame_fence_wait_ns - fence_before;
     stream_head = end;
-    offset_out = VkDeviceSize(start % kStreamSize);
+    offset_out = VkDeviceSize(start % stream_capacity);
     return stream_mapping + offset_out;
   }
 
@@ -1855,15 +1887,17 @@ bool Renderer::Impl::Initialize() {
   }
 
   // The stream.
+  {
+  rex::ui::vulkan::util::MemoryAreaScope stream_area(6);
   VkDeviceSize stream_allocation = 0;
   uint32_t stream_memory_type = 0;
   if (!rex::ui::vulkan::util::CreateDedicatedAllocationBuffer(
-          device, kStreamSize + kStreamSlack,
+          device, stream_capacity + kStreamSlack,
           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
               VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
           rex::ui::vulkan::util::MemoryPurpose::kUpload, stream_buffer, stream_memory,
           &stream_memory_type, &stream_allocation)) {
-    REXLOG_ERROR("[native] Could not create the {} MB stream buffer", kStreamSize >> 20);
+    REXLOG_ERROR("[native] Could not create the {} MB stream buffer", stream_capacity >> 20);
     return false;
   }
   if (!(device->memory_types().host_coherent & (1u << stream_memory_type))) {
@@ -1875,6 +1909,7 @@ bool Renderer::Impl::Initialize() {
   }
   stream_mapping = static_cast<uint8_t*>(mapping);
 
+  }
   VkDescriptorPoolSize static_sizes[] = {
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},
       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, SpirvShaderTranslator::kConstantBufferCount},
@@ -1908,11 +1943,11 @@ bool Renderer::Impl::Initialize() {
     // Binding i serves the addresses from i * slice, so it starts there in
     // the stream (clamped for the slices past the end of the stream, which
     // are never addressed).
-    VkDeviceSize offset = std::min(VkDeviceSize(i) * slice, kStreamSize - 256);
+    VkDeviceSize offset = std::min(VkDeviceSize(i) * slice, stream_capacity - 256);
     offset &= ~(properties.minStorageBufferOffsetAlignment - 1);
     shared_infos[i].buffer = stream_buffer;
     shared_infos[i].offset = offset;
-    shared_infos[i].range = kStreamSize + kStreamSlack - offset;
+    shared_infos[i].range = stream_capacity + kStreamSlack - offset;
   }
   VkDescriptorBufferInfo constant_infos[SpirvShaderTranslator::kConstantBufferCount];
   VkDeviceSize constant_ranges[] = {sizeof(SpirvShaderTranslator::SystemConstants),
@@ -2055,7 +2090,7 @@ bool Renderer::Impl::Initialize() {
     gamma_ramp[i] = value | (value << 10) | (value << 20);
   }
   REXLOG_INFO("[native] Renderer ready: {} MB stream, {} shared memory binding(s)",
-              kStreamSize >> 20, shared_binding_count);
+              stream_capacity >> 20, shared_binding_count);
   return true;
 }
 
@@ -2143,7 +2178,7 @@ bool Renderer::Impl::CreateDepthConversion() {
   device->vulkan_instance()->functions().vkGetPhysicalDeviceFeatures(device->physical_device(),
                                                                      &features);
   if (depth_copy_set_layout && features.shaderStorageImageWriteWithoutFormat) {
-    VkPushConstantRange color_push = {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(int32_t) * 6};
+    VkPushConstantRange color_push = {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(int32_t) * 6 + sizeof(float)};
     pipeline_layout.pSetLayouts = &depth_copy_set_layout;
     pipeline_layout.pPushConstantRanges = &color_push;
     if (dfn().vkCreatePipelineLayout(vk, &pipeline_layout, nullptr, &copy_color_layout) ==
@@ -2160,7 +2195,7 @@ bool Renderer::Impl::CreateDepthConversion() {
 
 bool Renderer::Impl::ComputeColorCopy(VkCommandBuffer c, VkImageView source, VkImageView dest,
                                       int32_t sx, int32_t sy, int32_t dx, int32_t dy,
-                                      uint32_t width, uint32_t height) {
+                                      uint32_t width, uint32_t height, float color_scale) {
   if (!copy_color_pipeline || !width || !height) return false;
   VkDescriptorSet set = AllocateSet(depth_copy_set_layout);
   if (!set) return false;
@@ -2189,12 +2224,14 @@ bool Renderer::Impl::ComputeColorCopy(VkCommandBuffer c, VkImageView source, VkI
           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT |
           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
-  int32_t params[6] = {sx, sy, dx, dy, int32_t(width), int32_t(height)};
+  struct ColorCopyParams { int32_t coords[6]; float scale; };
+  static_assert(sizeof(ColorCopyParams) == 28);
+  const ColorCopyParams params = {{sx, sy, dx, dy, int32_t(width), int32_t(height)}, color_scale};
   dfn().vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, copy_color_pipeline);
   dfn().vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, copy_color_layout, 0, 1, &set,
                                 0, nullptr);
   dfn().vkCmdPushConstants(c, copy_color_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(params),
-                           params);
+                           &params);
   dfn().vkCmdDispatch(c, (width + 7) / 8, (height + 7) / 8, 1);
   VkMemoryBarrier after = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
                            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
@@ -2871,6 +2908,15 @@ VkPipeline Renderer::Impl::CreatePipeline(const PipelineJob& job) {
   info.pColorBlendState = &blend;
   info.pDynamicState = &dynamic;
   info.layout = layout;
+  std::lock_guard<std::mutex> compile_lock(
+      rex::ui::vulkan::util::GraphicsPipelineCompileMutex());
+  const auto compile_heap = mallinfo();
+  if (compile_heap.fordblks < (64u << 20)) {
+    std::fprintf(stderr, "[gl-pipeline] native vs=%016llX ps=%016llX malloc_used=%zu malloc_free=%zu\n",
+                 static_cast<unsigned long long>(key.vs_hash),
+                 static_cast<unsigned long long>(key.ps_hash),
+                 size_t(compile_heap.uordblks), size_t(compile_heap.fordblks));
+  }
   VkPipeline pipeline = VK_NULL_HANDLE;
   if (dfn().vkCreateGraphicsPipelines(vk, driver_cache, 1, &info, nullptr, &pipeline) !=
       VK_SUCCESS) {
@@ -3748,8 +3794,8 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
                    known.hash ^ (uint64_t(index_endian) << 60) ^
                        (reset_enabled ? (uint64_t(reset_index) << 8) | 1 : 0)};
       uint64_t found = FindRange(index_key);
-      if (found != UINT64_MAX && stream_head - found < kStreamSize / 2) {
-        index_offset = VkDeviceSize(found % kStreamSize);
+      if (found != UINT64_MAX && stream_head - found < stream_capacity / 2) {
+        index_offset = VkDeviceSize(found % stream_capacity);
         current().stream_oldest = std::min(current().stream_oldest, found);
         reused = true;
       }
@@ -3998,9 +4044,9 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
             uint64_t sub_found = FindRange(sub_key);
             VkDeviceSize sub_offset;
             bool placed = false;
-            if (sub_found != UINT64_MAX && stream_head - sub_found < kStreamSize / 2 &&
-                (sub_found % kStreamSize) >= sub_begin) {
-              sub_offset = VkDeviceSize(sub_found % kStreamSize);
+            if (sub_found != UINT64_MAX && stream_head - sub_found < stream_capacity / 2 &&
+                (sub_found % stream_capacity) >= sub_begin) {
+              sub_offset = VkDeviceSize(sub_found % stream_capacity);
               current().stream_oldest = std::min(current().stream_oldest, sub_found);
               placed = true;
             } else if (uint8_t* out = Allocate(sub_bytes, 16, sub_offset)) {
@@ -4027,8 +4073,8 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
       const uint32_t whole_reason_final = whole_reason ? whole_reason : 4;
       uint64_t found = FindRange(range_key);
       VkDeviceSize range_offset;
-      if (found != UINT64_MAX && stream_head - found < kStreamSize / 2) {
-        range_offset = VkDeviceSize(found % kStreamSize);
+      if (found != UINT64_MAX && stream_head - found < stream_capacity / 2) {
+        range_offset = VkDeviceSize(found % stream_capacity);
         current().stream_oldest = std::min(current().stream_oldest, found);
       } else {
         uint8_t* out = Allocate(bytes, 16, range_offset);
@@ -4597,12 +4643,52 @@ void Renderer::Impl::Resolve() {
     VkFormat dest_format = is_depth ? VK_FORMAT_R32_SFLOAT : source->format;
     uint32_t host_swizzle = is_depth ? uint32_t(xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR)
                                      : uint32_t(xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA);
+    float resolve_scale = 1.0f;
+    if (!is_depth && msaa == 0) {
+      uint32_t format_swizzle = uint32_t(xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA);
+      const VkFormat requested = TextureCache::ResolveHostFormat(dest_info.copy_dest_format, format_swizzle);
+      if (requested != VK_FORMAT_UNDEFINED && textures.StorageCapable(requested) && copy_color_pipeline) {
+        dest_format = requested;
+        host_swizzle = format_swizzle;
+        int32_t exponent = dest_info.copy_dest_exp_bias;
+        // Match draw_util::GetResolveInfo: native fixed16 targets use SNORM [-1,1]
+        // instead of the guest's [-32,32]; restore that range before encoding a texture.
+        if (source->format == VK_FORMAT_R16G16_SNORM || source->format == VK_FORMAT_R16G16B16A16_SNORM) {
+          exponent = std::min(exponent + 5, 31);
+        }
+        resolve_scale = std::ldexp(1.0f, exponent);
+        static uint64_t seen[32] = {};
+        static uint32_t seen_count = 0;
+        const uint64_t signature = 1 + (uint64_t(uint32_t(source->format)) << 24) +
+            (uint64_t(uint32_t(dest_format)) << 8) + uint32_t(exponent + 32);
+        bool known = false;
+        for (uint32_t n = 0; n < seen_count; ++n) known |= seen[n] == signature;
+        if (!known && seen_count < 32) {
+          seen[seen_count++] = signature;
+          REXLOG_INFO("[gl-resolve] src_vk={} dst_vk={} guest_fmt={} exponent={} scale={}",
+                       uint32_t(source->format), uint32_t(dest_format),
+                       uint32_t(dest_info.copy_dest_format), exponent, resolve_scale);
+        }
+      } else {
+        static uint32_t unsupported_resolve_formats = 0;
+        if (unsupported_resolve_formats++ < 8) {
+          REXLOG_WARN("[gl-resolve] conversion unavailable: guest_fmt={} src_vk={} bias={}",
+                       uint32_t(dest_info.copy_dest_format), uint32_t(source->format),
+                       int32_t(dest_info.copy_dest_exp_bias));
+        }
+      }
+    }
     if (!is_depth && dest_info.copy_dest_swap) {
       host_swizzle = XE_GPU_MAKE_TEXTURE_SWIZZLE(B, G, R, A);
     }
     ResolveDestination* dest = textures.GetResolveDestination(
         dest_base & 0x1FFFFFFF, dest_width, dest_height, dest_format, host_swizzle, c);
     if (dest) {
+      if (Tracing() && !is_depth && !msaa) {
+        // The high bit distinguishes the source before conversion from its destination.
+        TraceDumpImage(c, source->image, source->width, source->height, source->format,
+                       (dest_base & 0x1FFFFFFF) | 0x80000000u);
+      }
       if (is_depth) {
         // Depth cannot be copied into a color image directly. It goes through
         // a scratch buffer, where a compute pass makes both forms a game can
@@ -4741,9 +4827,9 @@ void Renderer::Impl::Resolve() {
         vkCmdResolveImage(c, source->image, VK_IMAGE_LAYOUT_GENERAL, dest->image,
                                 VK_IMAGE_LAYOUT_GENERAL, 1, &resolve);
       } else if (source->samples == VK_SAMPLE_COUNT_1_BIT && textures.StorageCapable(dest->format) &&
-                 ComputeColorCopy(c, source->view, dest->view, x0, y0, x0, y0, width, height)) {
+                 ComputeColorCopy(c, source->view, dest->view, x0, y0, x0, y0, width, height, resolve_scale)) {
         // Done by compute (see copy_color.cs.glsl).
-      } else {
+      } else if (source->format == dest->format && resolve_scale == 1.0f) {
         VkImageCopy region = {};
         region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         region.dstSubresource = region.srcSubresource;
@@ -5068,6 +5154,17 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
   frame_upload_wait_ns = frame_fence_wait_ns = frame_drain_wait_ns = frame_texture_ns = 0;
   frame_draw_count = 0;
   ++frame;
+  if (graphics_capture_requested.exchange(false, std::memory_order_relaxed)) {
+    if (manual_capture_count < 4) {
+      std::error_code error;
+      std::filesystem::create_directories("sdmc:/switch/green_lantern/logs/capture", error);
+      if (!error) {
+        manual_capture_frame = frame;
+        ++manual_capture_count;
+        REXLOG_INFO("[trace] manual capture armed for frame {} ({}/4); resolves + draw metadata", frame, manual_capture_count);
+      } else REXLOG_ERROR("[trace] capture directory: {}", error.message());
+    } else REXLOG_WARN("[trace] four manual captures already used; restart to capture more");
+  }
   profile_frame = profile_pool && frame % 16 == 0;
   PollCompleted();
   ProfileReport();

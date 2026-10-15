@@ -1,7 +1,7 @@
 #version 450
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Copies a rectangle of a color image into another of the same format, for
+// Copies a rectangle of a color image into another with optional format conversion and intensity scaling, for
 // resolves. vkCmdCopyImage on NVK draws through its meta path, which creates
 // image views and buffers for every copy and destroys them when the command
 // buffer is reset: with about 30 resolves a frame that was 5% of the command
@@ -19,11 +19,12 @@ layout(push_constant) uniform Params {
   ivec2 source_origin;
   ivec2 dest_origin;
   uvec2 size;
+  float color_scale;
 };
 void main() {
   uvec2 p = gl_GlobalInvocationID.xy;
   if (p.x >= size.x || p.y >= size.y) {
     return;
   }
-  imageStore(dest, dest_origin + ivec2(p), texelFetch(source, source_origin + ivec2(p), 0));
+  imageStore(dest, dest_origin + ivec2(p), texelFetch(source, source_origin + ivec2(p), 0) * color_scale);
 }
