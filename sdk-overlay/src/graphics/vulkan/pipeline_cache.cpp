@@ -62,6 +62,7 @@ REXCVAR_DEFINE_BOOL(vulkan_tessellation_wireframe, false, "GPU/Vulkan",
 
 #include <rex/platform.h>
 #if REX_PLATFORM_SWITCH
+#include <rex/graphics/switch_gpu_timing.h>
 // Counters and A/B skips of the Switch profiler (switch_perf.cpp).
 extern "C" void RexSwitchPerfCount(unsigned id);
 extern "C" void RexSwitchPerfAdd(unsigned id, uint64_t value);
@@ -1060,6 +1061,9 @@ bool VulkanPipelineCache::ConfigurePipeline(
     reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
     VulkanRenderTargetCache::RenderPassKey render_pass_key, VkPipeline& pipeline_out,
     const PipelineLayoutProvider*& pipeline_layout_out, void** pipeline_handle_out) {
+#if REX_PLATFORM_SWITCH
+  switch_timing::Scope timing(switch_timing::kConfigurePipelineUs);
+#endif
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
@@ -1111,6 +1115,9 @@ bool VulkanPipelineCache::ConfigurePipeline(
     const PipelineLayoutProvider* last_pipeline_layout =
         last_pipeline_->second.pipeline_layout.load(std::memory_order_acquire);
     if (last_pipeline != VK_NULL_HANDLE && last_pipeline_layout != nullptr) {
+#if REX_PLATFORM_SWITCH
+      RexSwitchPerfCount(switch_timing::kLastPipelineHit);
+#endif
       pipeline_out = last_pipeline;
       pipeline_layout_out = last_pipeline_layout;
       if (pipeline_handle_out) {
@@ -1136,6 +1143,9 @@ bool VulkanPipelineCache::ConfigurePipeline(
 
   auto it = pipelines_.find(description);
   if (it != pipelines_.end()) {
+#if REX_PLATFORM_SWITCH
+    RexSwitchPerfCount(switch_timing::kPipelineMapHit);
+#endif
     PROFILE_PIPELINE_CACHE_HIT();
     VkPipeline found_pipeline = it->second.pipeline.load(std::memory_order_acquire);
     if (found_pipeline == VK_NULL_HANDLE) {
@@ -1164,6 +1174,9 @@ bool VulkanPipelineCache::ConfigurePipeline(
   // D3D12 backend, so on Vulkan - the backend this project ships - it read a
   // constant zero, while perf_summary.py described it as exactly this signal.
   PROFILE_PIPELINE_CACHE_MISS();
+#if REX_PLATFORM_SWITCH
+  RexSwitchPerfCount(switch_timing::kPipelineMiss);
+#endif
 
   auto& pipeline = *pipelines_.emplace(description, Pipeline()).first;
   PipelineCreationArguments creation_arguments_real;
@@ -1251,6 +1264,10 @@ void VulkanPipelineCache::GetPipelineAndLayoutByHandle(
 
 bool VulkanPipelineCache::TranslateAnalyzedShader(SpirvShaderTranslator& translator,
                                                   VulkanShader::VulkanTranslation& translation) {
+#if REX_PLATFORM_SWITCH
+  RexSwitchPerfCount(switch_timing::kShaderTranslationCount);
+  switch_timing::Scope timing(switch_timing::kShaderTranslationUs);
+#endif
   VulkanShader& shader = static_cast<VulkanShader&>(translation.shader());
 
   // Perform translation.
@@ -3509,9 +3526,21 @@ bool VulkanPipelineCache::EnsurePipelineCreated(const PipelineCreationArguments&
   VkPipeline pipeline;
 #if REX_PLATFORM_SWITCH
   RexSwitchPerfCount(16);
+  const uint64_t driver_start_us = switch_timing::NowUs();
 #endif
   VkResult create_result = dfn.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
                                                          &pipeline_create_info, nullptr, &pipeline);
+#if REX_PLATFORM_SWITCH
+  const uint64_t driver_us = switch_timing::NowUs() - driver_start_us;
+  RexSwitchPerfAdd(switch_timing::kPipelineDriverUs, driver_us);
+  if (create_result != VK_SUCCESS) RexSwitchPerfCount(switch_timing::kPipelineDriverFailure);
+  // One line per actual creation, not per draw. Hash includes render state:
+  // repeated VS/PS alone do not imply a cache bug.
+  REXGPU_INFO("[gl-vk-timing] pipeline key={:016X} vs={:016X} ps={:016X} driver_ms={:.3f} result={} placeholder={}",
+      description.GetHash(), creation_arguments.vertex_shader->shader().ucode_data_hash(),
+      creation_arguments.pixel_shader ? creation_arguments.pixel_shader->shader().ucode_data_hash() : 0,
+      double(driver_us) / 1000.0, int(create_result), creating_placeholder);
+#endif
   if (create_result != VK_SUCCESS) {
     uint64_t ps_hash = creation_arguments.pixel_shader
                            ? creation_arguments.pixel_shader->shader().ucode_data_hash()

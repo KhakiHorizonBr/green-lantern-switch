@@ -30,7 +30,7 @@ NX_NORETURN void __libnx_exit(int rc);
 extern size_t __nx_heap_size;
 extern char* fake_heap_start;
 extern char* fake_heap_end;
-#if defined(GREEN_LANTERN_NATIVE_RENDERER)
+#if defined(GREEN_LANTERN_NATIVE_RENDERER) || defined(GREEN_LANTERN_XENOS_FSI)
 bool RexSwitchInitNativeThreadStackReserve(void);
 #endif
 #if defined(GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB)
@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-#if defined(GREEN_LANTERN_NATIVE_RENDERER)
+#if defined(GREEN_LANTERN_NATIVE_RENDERER) || defined(GREEN_LANTERN_XENOS_FSI)
   if (!RexSwitchInitNativeThreadStackReserve()) {
     ExitProcess(EXIT_FAILURE);
   }

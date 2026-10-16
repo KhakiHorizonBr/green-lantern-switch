@@ -45,6 +45,11 @@ struct UploadTarget {
   VkBuffer buffer = VK_NULL_HANDLE;
   // Records into the command buffer that runs before the submission's draws.
   VkCommandBuffer setup_commands = VK_NULL_HANDLE;
+  // Ends the current render pass and returns the in-order draw command buffer.
+  // Resolve images produced by earlier draws cannot be read in setup_commands.
+  std::function<VkCommandBuffer()> resolve_commands;
+  std::function<void(VkCommandBuffer, VkImage, uint32_t, uint32_t, VkFormat, uint32_t)>
+      inspect_resolve;
   // The submission being recorded (increasing).
   uint64_t submission = 0;
 };
@@ -62,9 +67,12 @@ struct ResolveDestination {
   // Guest components (XYZW, as a texture fetch sees the resolved memory) in
   // terms of the host components (xenos swizzle encoding, 3 bits each).
   uint32_t host_swizzle = 0;
-  // Views as textures (2D arrays), by host swizzle; bit 31 set for plain 2D.
+  // Views as textures (2D arrays), by host swizzle; bit 30 for signed R16,
+  // bit 31 set for plain 2D.
   std::unordered_map<uint32_t, VkImageView> texture_views;
   uint64_t last_written_frame = 0;
+  uint32_t written_x = 0, written_y = 0, written_width = 0, written_height = 0;
+  uint32_t guest_copy_pitch = 0;
   // Copies of the top-left corner at the sizes the game samples this address
   // as, where that differs from the image. Texture coordinates span the whole
   // image, so sampling the image itself scaled the content: the blur the game
@@ -80,6 +88,9 @@ struct ResolveDestination {
     // Plain 2D view for the compute copy into it (null: copied by transfer).
     VkImageView storage_view = VK_NULL_HANDLE;
     bool filled = false;
+    uint32_t guest_pitch = 0;
+    uint32_t guest_texel_bytes = 0;
+    uint64_t assembled_version = UINT64_MAX;
   };
   std::vector<std::unique_ptr<Sized>> sized;
 };
@@ -91,6 +102,9 @@ struct TextureCacheStats {
   uint64_t upload_bytes = 0;
   uint64_t hash_bytes = 0;
   uint64_t unsupported = 0;
+  // GetView calls rejected by descriptor type, before texture decoding.
+  // Binding memoization means these are not counts of draws or missing pixels.
+  uint64_t rejected_fetch_type[4] = {};
   uint64_t resolved_hits = 0;
   uint64_t live_textures = 0;
   // Lookups answered with the empty texture: still streaming in, or a format
@@ -190,6 +204,8 @@ class TextureCache {
   uint64_t answers_epoch() const;
 
  private:
+  bool AssembleResolveView(ResolveDestination& dest, ResolveDestination::Sized& sized,
+                           UploadTarget& upload);
   VkImageView GetViewUncached(const rex::graphics::xenos::xe_gpu_texture_fetch_t& fetch,
                               rex::graphics::xenos::FetchOpDimension dimension, bool is_signed,
                               UploadTarget& upload, VkImageView null_view);

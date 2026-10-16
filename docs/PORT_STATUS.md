@@ -1,48 +1,43 @@
-# Estado atual — 15/10/2026, execução 052
+# Estado atual — 16/10/2026, execução 059
 
 ## Resumo
 
-O jogo mostra imagem e entra no início jogável no Switch. Persistem personagens escuros,
-iluminação/composição incorretas e desempenho baixo em certas cenas. A versão de PC usa
-Xenos/D3D12; o Switch usa o renderer nativo adaptado de Simpsons. Não são backends idênticos.
+Dois renderers estão preservados: o nativo adaptado dos Simpsons é mais rápido,
+mas tem defeitos gráficos; Xenos/Vulkan FSI produziu gameplay visualmente correto
+na sessão 058, com FPS muito baixo. Não é um port concluído.
 
 ## Fatos confirmados
 
-- 052 executou a conversão de formato e expoente dos resolves: `[gl-resolve]` registra seu uso.
-- Pico amostrado do malloc: 1372,9 MiB; pools do guest: 424 MiB.
-- Zero falhas nas categorias Vulkan monitoradas; zero overflow do rastreador.
-- Heap configurada em 2000 MiB, arena 448 MiB. Malloc inclui backing e alocações do driver:
-  não somar essas categorias novamente. `malloc_free` é agregado, não maior bloco contíguo.
-- Perfil do 052 registra intervalos de 28,3 FPS, depois 8,2 e 8,9 FPS; não atribuir uma taxa
-  única à sessão. Capturas de diagnóstico também acrescentam espera e não medem FPS normal.
-- Crash anexado ao 052 contém registros anteriores (incluindo base 165823D000 do 049).
-  Stderr/perfil atuais têm base 4D284DF000. Não interpretar arquivo acumulado como novo crash.
-- Nas fotos e quadros amostrados do vídeo, interface e cenário aparecem, mas o personagem
-  do menu tem grandes áreas escuras. A câmera/exposição impedem medir cores numericamente.
+- PC: D3D12 correto, Vulkan host preto, Vulkan FSI correto.
+- Switch: FSI selecionado e suportado; usuário chegou ao gameplay sem defeitos
+  visuais observados e sem crash na sessão 058. Isso não prova estabilidade global.
+- CPU-only mapped reads removeu as leituras emuladas medidas, preservando watches físicas.
+- Log059: 137 pipelines distintos, todos criados com sucesso; média1,28s no driver.
+- Último intervalo aquecido:1,4FPS com0compilações e8,97s em espera por submissões.
+- Heap2000MiB mantida. Nenhuma indicação de que aumentar capacidade resolveria esse trecho.
+- Não há correção confirmada da origem do crash057 em sub_8233E7D8.
 
-## Próximo passo preparado
+## Próximo passo concreto
 
-Captura limitada de um quadro por L+R+−, até quatro pedidos por sessão.
-Cada quadro salva até 64 imagens / 64 MiB de readback, em formato bruto + JSON de layout.
-Inclui origem de resolves de cor sem MSAA antes da conversão, destinos e log de draws/resolve.
-Não é replay completo do fluxo Xenos, não captura todos os buffers, nem todos os depth targets.
-Backend e orçamento normais foram mantidos; não é candidato que prometa corrigir os gráficos.
-Build/link concluídos, símbolo do atalho presente no ELF; validação no hardware pendente.
+Candidato compilado pede960×540 e registra o frontbuffer real, áreas/larguras dos
+passes e malloc usado/livre. Execução pendente. Não anunciar resolução menor ou
+melhora de FPS antes de conferir os resultados. Ver [FSI_540P.md](FSI_540P.md).
 
-## Hipóteses a distinguir com as capturas
+## Regras para não repetir caminhos sem evidência
 
-1. Origem correta e destino incorreto: revisar conversão, escala, swizzle e limites do resolve.
-2. Origem já incorreta: revisar shaders, vértices, textura amostrada, profundidade e blend do passe.
-3. Conteúdo correto isolado mas errado quando reutilizado: revisar alias EDRAM, pitch/dimensões
-   e invalidação do cache de destinos. A relação 1280x360/640x360 foi observada, não provada causa.
-4. Ausência de recurso ou erro de alocação durante captura: não usar a imagem incompleta
-   para concluir sobre a renderização normal.
+- Não ligar readonly_mapped global no Xenos: perde vigilância das escritas físicas.
+- Não contar GPU Commands como utilização física da GPU; é uma thread de CPU.
+- Não somar timings inclusivos nem interpretar spanGPU como tempo puro ocupado.
+- Não atribuir o FPS aquecido a compilação quando misses/driver_ms são zero.
+- Não tratar crashes acumulados antigos como falha da sessão atual.
+- Não aumentar heap/arena sem pressão ou falha de alocação demonstrada.
+- SHM/permissões, mapeamentos e arena de backing já têm histórico de limitações;
+  consultar as notas anteriores antes de repetir sondas de plataforma.
 
-## Limites e caminhos que não devem ser repetidos sem evidência nova
+## Evidências e histórico
 
-- Aumentar a heap não corrige automaticamente shaders ou composição de passes.
-- O problema antigo de 1,5 GiB com Xenos não estabelece um limite para o renderer nativo.
-- Crescimento de render target já preserva o conteúdo; não aplicar correção que presuma descarte.
-- Não reativar vigilância por faults no modo readonly_mapped do renderer nativo.
-- Chamadas experimentais de SHM/mapas e aumento cego de pools não são o próximo passo.
-- O diagnóstico novo ainda não foi comparado com uma captura PC: a causa visual exata segue aberta.
+- [Resultados054–059](RESULTADOS_054_059.md)
+- [Referências externas e aplicabilidade](REFERENCIAS_EXTERNAS.md)
+- [Comparação gráfica](GRAPHICS_COMPARISON.md)
+- [Estado histórico até052](PORT_LOG_052.md)
+- [Logs e métricas059](../logs/run-059/)

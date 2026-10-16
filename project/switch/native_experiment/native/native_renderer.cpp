@@ -796,7 +796,7 @@ struct Renderer::Impl {
   std::vector<TraceDump> trace_dumps;
   uint32_t trace_resolve = 0;
   void TraceDumpImage(VkCommandBuffer c, VkImage image, uint32_t width, uint32_t height,
-                      VkFormat format, uint32_t address) {
+                      VkFormat format, uint32_t address, bool priority = false) {
     const std::string prefix = frame == manual_capture_frame
         ? "sdmc:/switch/green_lantern/logs/capture/pass"
         : REXCVAR_GET(nx_trace_dump_prefix);
@@ -819,8 +819,11 @@ struct Renderer::Impl {
     }
     const uint64_t bytes = uint64_t(width) * height * texel_bytes;
     // One frame only; diagnostics must not exhaust the heap being diagnosed.
-    if (trace_dumps.size() >= 64 || trace_bytes + bytes > (64u << 20)) {
-      REXLOG_WARN("[trace] capture truncated at 64 images / 64 MiB");
+    // Reserve 20 MiB for assembled atlases, which are sampled after the early
+    // G-buffer resolves otherwise consume the entire readback allowance.
+    const uint64_t budget = uint64_t(priority ? 64 : 44) << 20;
+    if (trace_dumps.size() >= 64 || trace_bytes + bytes > budget) {
+      REXLOG_WARN("[trace] capture truncated at {} MiB (priority={})", budget >> 20, priority);
       return;
     }
     TraceDump dump;
@@ -2022,6 +2025,14 @@ bool Renderer::Impl::Initialize() {
     return false;
   }
   upload.buffer = stream_buffer;
+  upload.resolve_commands = [this]() {
+    EndPass();
+    return cmd();
+  };
+  upload.inspect_resolve = [this](VkCommandBuffer c, VkImage image, uint32_t width,
+                                 uint32_t height, VkFormat format, uint32_t address) {
+    if (Tracing()) TraceDumpImage(c, image, width, height, format, address | 0x40000000u, true);
+  };
   upload.allocate = [this](size_t size, size_t alignment, VkDeviceSize& offset) {
     uint8_t* result = Allocate(size, alignment, offset);
     // An allocation may have started a new submission.
@@ -4839,6 +4850,11 @@ void Renderer::Impl::Resolve() {
         dfn().vkCmdCopyImage(c, source->image, VK_IMAGE_LAYOUT_GENERAL, dest->image,
                              VK_IMAGE_LAYOUT_GENERAL, 1, &region);
       }
+      dest->written_x = uint32_t(x0);
+      dest->written_y = uint32_t(y0);
+      dest->written_width = width;
+      dest->written_height = height;
+      dest->guest_copy_pitch = r.Get<reg::RB_COPY_DEST_PITCH>().copy_dest_pitch;
       textures.CopyToSized(*dest, c);
       if (Tracing()) {
         TraceDumpImage(c, dest->image, dest->width, dest->height, dest->format,

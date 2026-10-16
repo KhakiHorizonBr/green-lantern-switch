@@ -43,6 +43,10 @@ extern "C" {
 extern "C" size_t __nx_heap_size;
 REXCVAR_DEFINE_BOOL(nx_auto_memory, true, "Switch",
                     "Adapt stale texture eviction and bound queued texture staging under pressure");
+REXCVAR_DEFINE_BOOL(nx_resolve_atlas, true, "Switch",
+                    "Assemble row-aligned resolve fragments at the texture fetch dimensions");
+REXCVAR_DEFINE_BOOL(nx_signed_resolve_views, true, "Switch",
+                    "Sample R16 resolve bits through a signed view when requested by the shader");
 
 namespace green_lantern::native {
 
@@ -550,6 +554,7 @@ struct TextureCache::Texture {
 struct TextureCache::Impl {
   const VulkanDevice* device = nullptr;
   rex::memory::Memory* memory = nullptr;
+  std::unordered_set<uint64_t> rejected_fetch_layouts;
 
   // Layout key hash -> texture. When the content changes, the image is
   // uploaded again in place: allocating a new image each time was a kernel
@@ -584,6 +589,7 @@ struct TextureCache::Impl {
   std::unordered_set<uint32_t> depth_words_wanted;
 
   std::unordered_map<uint32_t, std::unique_ptr<ResolveDestination>> resolve_destinations;
+  uint64_t resolve_version = 0;
 
   // This frame's answers by the raw fetch constant, so a texture bound by many
   // draws is looked up once: the layout computation and the hashing are then
@@ -1090,6 +1096,11 @@ void TextureCache::BeginFrame(uint64_t frame, uint64_t completed_frame) {
     if (im.checked.size() > 16384) im.checked.clear();
   }
   stats_.live_textures = im.textures.size();
+  if (frame % 120 == 0) {
+    REXLOG_INFO("[gl-fetch] rejected GetView calls cumulative: invalid_texture={} invalid_vertex={} vertex={} unsupported_format={} pending={}",
+                stats_.rejected_fetch_type[0], stats_.rejected_fetch_type[1],
+                stats_.rejected_fetch_type[3], stats_.unsupported, stats_.pending);
+  }
 }
 
 VkImageView TextureCache::GetResolveDestinationView2D(uint32_t address, uint32_t guest_swizzle,
@@ -1200,6 +1211,14 @@ bool TextureCache::StorageCapable(VkFormat format) {
 }
 
 void TextureCache::CopyToSized(ResolveDestination& dest, VkCommandBuffer commands) {
+  // A write to a fragment may change a view whose base is a different address.
+  // Existing descriptor/view caches must revisit that view before the next draw.
+  if (REXCVAR_GET(nx_resolve_atlas)) {
+    ++impl_->resolve_version;
+    impl_->memo.clear();
+    ++impl_->answers_epoch;
+    ++impl_->views_epoch;
+  }
   if (dest.sized.empty()) {
     return;
   }
@@ -1210,6 +1229,7 @@ void TextureCache::CopyToSized(ResolveDestination& dest, VkCommandBuffer command
                            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &between, 0, nullptr, 0,
                            nullptr);
   for (auto& sized : dest.sized) {
+    if (sized->guest_texel_bytes) continue;  // assembled in-order when sampled
     if (sized->storage_view && dest.view && impl_->compute_copy &&
         impl_->compute_copy(commands, dest.view, sized->storage_view, 0, 0, 0, 0,
                             std::min(sized->width, dest.width),
@@ -1225,6 +1245,90 @@ void TextureCache::CopyToSized(ResolveDestination& dest, VkCommandBuffer command
                        VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     sized->filled = true;
   }
+}
+
+bool TextureCache::AssembleResolveView(ResolveDestination& dest,
+                                      ResolveDestination::Sized& sized,
+                                      UploadTarget& upload) {
+  Impl& im = *impl_;
+  if (!sized.guest_texel_bytes || !upload.resolve_commands) return false;
+  if (sized.assembled_version == im.resolve_version) return sized.filled;
+  const uint64_t row_bytes = uint64_t(sized.guest_pitch) * sized.guest_texel_bytes;
+  if (!row_bytes) return false;
+  struct Part { ResolveDestination* image; uint32_t y; };
+  std::vector<Part> parts;
+  for (auto& [address, candidate] : im.resolve_destinations) {
+    if (address < dest.address || candidate->format != dest.format ||
+        !candidate->written_width || !candidate->written_height ||
+        (candidate->guest_copy_pitch && candidate->guest_copy_pitch != sized.guest_pitch)) continue;
+    const uint64_t offset = uint64_t(address) - dest.address;
+    // Whole macro-tile rows have linear offsets even though pixels inside a
+    // macro tile are swizzled. Do not treat arbitrary byte offsets as rows.
+    if (offset % row_bytes) continue;
+    const uint64_t y = offset / row_bytes;
+    if (y >= sized.height || y % 32) continue;
+    if (uint64_t(uint32_t(texture_util::GetTiledOffset2D(
+            0, int32_t(y), sized.guest_pitch, sized.guest_texel_bytes == 2 ? 1 : 2))) != offset)
+      continue;
+    parts.push_back({candidate.get(), uint32_t(y)});
+  }
+  if (parts.empty()) return false;
+  std::sort(parts.begin(), parts.end(), [](const Part& a, const Part& b) {
+    if (a.image->last_written_frame != b.image->last_written_frame)
+      return a.image->last_written_frame < b.image->last_written_frame;
+    return a.image->address < b.image->address;
+  });
+  VkCommandBuffer commands = upload.resolve_commands();
+  const auto& dfn = im.device->functions();
+  VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+      VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT};
+  dfn.vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
+  const VkClearColorValue clear = {};
+  const auto range = rex::ui::vulkan::util::InitializeSubresourceRange();
+  dfn.vkCmdClearColorImage(commands, sized.image, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
+  VkMemoryBarrier order = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT};
+  dfn.vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &order, 0, nullptr, 0, nullptr);
+  uint32_t copied = 0;
+  for (const Part& part : parts) {
+    const auto& source = *part.image;
+    const uint32_t x = source.written_x, y = source.written_y;
+    if (x >= source.width || x >= sized.width || y >= source.height ||
+        uint64_t(part.y) + y >= sized.height) continue;
+    VkImageCopy region = {};
+    region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.dstSubresource = region.srcSubresource;
+    region.srcOffset = {int32_t(x), int32_t(y), 0};
+    region.dstOffset = {int32_t(x), int32_t(part.y + y), 0};
+    region.extent = {
+        std::min({source.written_width, source.width - x, sized.width - x}),
+        std::min({source.written_height, source.height - y, sized.height - part.y - y}), 1};
+    dfn.vkCmdCopyImage(commands, source.image, VK_IMAGE_LAYOUT_GENERAL, sized.image,
+                       VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    dfn.vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &order, 0, nullptr, 0, nullptr);
+    ++copied;
+  }
+  VkMemoryBarrier after = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT};
+  dfn.vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &after, 0, nullptr, 0, nullptr);
+  sized.filled = copied != 0;
+  sized.assembled_version = im.resolve_version;
+  if (upload.inspect_resolve && sized.filled) {
+    upload.inspect_resolve(commands, sized.image, sized.width, sized.height, dest.format,
+                           dest.address);
+  }
+  static uint64_t reports = 0;
+  if (++reports <= 16 || reports % 600 == 0) {
+    REXLOG_INFO("[gl-atlas] base={:08X} fetch={}x{} pitch={} vk={} fragments={} frame={} event={}",
+                 dest.address, sized.width, sized.height, sized.guest_pitch,
+                 uint32_t(dest.format), copied, im.frame, reports);
+  }
+  return sized.filled;
 }
 
 const ResolveDestination* TextureCache::FindResolveDestination(uint32_t address) const {
@@ -1279,6 +1383,7 @@ ResolveDestination* TextureCache::GetResolveDestination(uint32_t address, uint32
   info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   info.imageType = VK_IMAGE_TYPE_2D;
   info.format = format;
+  if (format == VK_FORMAT_R16_UNORM) info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
   info.extent = {width, height, 1};
   info.mipLevels = 1;
   info.arrayLayers = 1;
@@ -1339,6 +1444,17 @@ VkImageView TextureCache::GetView(const xenos::xe_gpu_texture_fetch_t& fetch,
                                      ? im.null_views[2]
                                      : im.null_views[0]);
   if (fetch.type != xenos::FetchConstantType::kTexture) {
+    const uint32_t type = uint32_t(fetch.type);
+    ++stats_.rejected_fetch_type[type & 3];
+    // Bound descriptor logging to 16 unique layouts per cache lifetime. Do not
+    // reinterpret vertex descriptors or allow invalid textures without evidence.
+    const uint64_t descriptor_hash = XXH3_64bits(&fetch, sizeof(fetch));
+    if (im.rejected_fetch_layouts.size() < 16 &&
+        im.rejected_fetch_layouts.insert(descriptor_hash).second) {
+      REXLOG_WARN("[gl-fetch] empty texture: type={} frame={} words={:08X} {:08X} {:08X} {:08X} {:08X} {:08X}",
+                  type, im.frame, fetch.dword_0, fetch.dword_1, fetch.dword_2,
+                  fetch.dword_3, fetch.dword_4, fetch.dword_5);
+    }
     return null_view;
   }
   // Entries are overwritten, not cleared each frame: freeing and allocating
@@ -1414,8 +1530,35 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
     if (it != im.resolve_destinations.end()) {
       ResolveDestination& dest = *it->second;
       uint32_t swizzle = GuestToHostSwizzle(fetch.swizzle, dest.host_swizzle);
+      // Resolve storage encodes the guest bits. The shader's signed binding
+      // must reinterpret those same bits as SNORM, not sample a UNORM view.
+      // Restrict this to the R16 pair, which has an identical bit layout.
+      const bool signed_r16 = REXCVAR_GET(nx_signed_resolve_views) && is_signed &&
+                              rex::graphics::GetBaseFormat(fetch.format) == xenos::TextureFormat::k_16 &&
+                              dest.format == VK_FORMAT_R16_UNORM;
+      const VkFormat sample_format = signed_r16 ? VK_FORMAT_R16_SNORM : dest.format;
+      const uint32_t view_key = swizzle | (signed_r16 ? (1u << 30) : 0);
+      VkImageViewUsageCreateInfo sampled_usage = {};
+      sampled_usage.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
+      sampled_usage.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+      auto report_signed_view = [&](VkResult status) {
+        if (!signed_r16) return;
+        static uint32_t logged_signed_resolves = 0;
+        if (logged_signed_resolves++ < 8) {
+          REXLOG_INFO("[gl-resolve-view] base={:08X} storage_vk={} sampled_vk={} signed=true result={}",
+                      dest.address, uint32_t(dest.format), uint32_t(sample_format), int32_t(status));
+        }
+      };
       const uint32_t fetch_width = width_minus_1 + 1, fetch_height = height_minus_1 + 1;
-      if ((fetch_width != dest.width || fetch_height != dest.height) && fetch_width <= 8192 &&
+      const uint32_t guest_pitch = uint32_t(fetch.pitch) << 5;
+      const uint32_t guest_texel_bytes = fetch.format == xenos::TextureFormat::k_16 &&
+          dest.format == VK_FORMAT_R16_UNORM ? 2 :
+          (fetch.format == xenos::TextureFormat::k_8_8_8_8 &&
+           dest.format == VK_FORMAT_R8G8B8A8_UNORM ? 4 : 0);
+      const bool assemble = REXCVAR_GET(nx_resolve_atlas) && fetch.tiled && guest_texel_bytes &&
+          guest_pitch >= fetch_width && dest.written_height &&
+          fetch_width >= dest.written_width && fetch_height > dest.written_height;
+      if ((assemble || fetch_width != dest.width || fetch_height != dest.height) && fetch_width <= 8192 &&
           fetch_height <= 8192 && depth_minus_1 == 0) {
         ResolveDestination::Sized* sized = nullptr;
         for (auto& candidate : dest.sized) {
@@ -1431,12 +1574,14 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
           info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
           info.imageType = VK_IMAGE_TYPE_2D;
           info.format = dest.format;
+          if (dest.format == VK_FORMAT_R16_UNORM) info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
           info.extent = {fetch_width, fetch_height, 1};
           info.mipLevels = 1;
           info.arrayLayers = 1;
           info.samples = VK_SAMPLE_COUNT_1_BIT;
           info.tiling = VK_IMAGE_TILING_OPTIMAL;
-          info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+          info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
           const bool storage = im.compute_copy && StorageCapable(dest.format);
           if (storage) info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
           info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1481,9 +1626,14 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
             dest.sized.push_back(std::move(created));
           }
         }
-        // Until the first resolve after it was made, the whole image (once).
+        if (sized && assemble) {
+          sized->guest_pitch = guest_pitch;
+          sized->guest_texel_bytes = guest_texel_bytes;
+          AssembleResolveView(dest, *sized, upload);
+        }
+        // Ordinary corner copies retain their existing path.
         if (sized && sized->filled) {
-          auto sv = sized->views.find(swizzle);
+          auto sv = sized->views.find(view_key);
           if (sv != sized->views.end()) {
             ++stats_.resolved_hits;
             return sv->second;
@@ -1492,20 +1642,23 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
           view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
           view.image = sized->image;
           view.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-          view.format = dest.format;
+          view.format = sample_format;
+          if (signed_r16) view.pNext = &sampled_usage;
           view.components = {ComponentSwizzle(swizzle, 0), ComponentSwizzle(swizzle, 1),
                              ComponentSwizzle(swizzle, 2), ComponentSwizzle(swizzle, 3)};
           view.subresourceRange = rex::ui::vulkan::util::InitializeSubresourceRange();
           VkImageView result = VK_NULL_HANDLE;
-          if (dfn.vkCreateImageView(d, &view, nullptr, &result) != VK_SUCCESS) {
+          const VkResult view_status = dfn.vkCreateImageView(d, &view, nullptr, &result);
+          report_signed_view(view_status);
+          if (view_status != VK_SUCCESS) {
             return null_view;
           }
-          sized->views.emplace(swizzle, result);
+          sized->views.emplace(view_key, result);
           ++stats_.resolved_hits;
           return result;
         }
       }
-      auto v = dest.texture_views.find(swizzle);
+      auto v = dest.texture_views.find(view_key);
       if (v != dest.texture_views.end()) {
         ++stats_.resolved_hits;
         return v->second;
@@ -1514,15 +1667,18 @@ VkImageView TextureCache::GetViewUncached(const xenos::xe_gpu_texture_fetch_t& f
       view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
       view.image = dest.image;
       view.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-      view.format = dest.format;
+      view.format = sample_format;
+      if (signed_r16) view.pNext = &sampled_usage;
       view.components = {ComponentSwizzle(swizzle, 0), ComponentSwizzle(swizzle, 1),
                          ComponentSwizzle(swizzle, 2), ComponentSwizzle(swizzle, 3)};
       view.subresourceRange = rex::ui::vulkan::util::InitializeSubresourceRange();
       VkImageView result = VK_NULL_HANDLE;
-      if (dfn.vkCreateImageView(d, &view, nullptr, &result) != VK_SUCCESS) {
+      const VkResult view_status = dfn.vkCreateImageView(d, &view, nullptr, &result);
+      report_signed_view(view_status);
+      if (view_status != VK_SUCCESS) {
         return null_view;
       }
-      dest.texture_views.emplace(swizzle, result);
+      dest.texture_views.emplace(view_key, result);
       ++stats_.resolved_hits;
       return result;
     }

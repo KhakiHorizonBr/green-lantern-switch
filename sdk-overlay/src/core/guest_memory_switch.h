@@ -78,6 +78,9 @@ bool RexGmBackingArenaInit(size_t size);
 /* Native renderer only: map logical READ pages as RW; incompatible with write watching. */
 void RexGmSetReadOnlyMapped(bool enabled);
 
+/* Keep CPU-only read-only virtual backing mapped; physical GPU watches remain strict. */
+void RexGmSetCpuReadOnlyMapped(bool enabled);
+
 /* Releases everything. */
 void RexGmShutdown(void);
 

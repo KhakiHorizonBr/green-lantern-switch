@@ -1,3 +1,11 @@
+## Atualização em 16/10/2026
+
+A comparação PC foi executada: D3D12 e FSI corretos, Vulkan host preto.
+Estados CPU e um tile GPU foram comparados; causa do preto host ainda não isolada.
+O Switch FSI chegou ao gameplay correto visualmente. Consulte [resultados054–059](RESULTADOS_054_059.md).
+As instruções e hipóteses abaixo registram a investigação anterior; itens pendentes
+naquele texto não substituem os resultados atualizados.
+
 # Comparação gráfica com o PC
 
 ## Objetivo
@@ -55,3 +63,4 @@ Ainda não há captura PC coletada nesta etapa nem diferença numérica entre os
 - Recursos reutilizados com dimensões diferentes: verificar alias/cache e coordenadas.
 
 Capturas contêm imagens/recursos do jogo: manter locais, sem adicioná-las ao repositório público.
+

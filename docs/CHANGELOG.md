@@ -1,3 +1,13 @@
+## Atualização de 16/10/2026 — 054 a 059 e candidato 540p
+
+- Atlas de resolves, views R16 assinadas e capturas de estados/readbacks para comparar PC.
+- Isolamento dos diretórios de saída dos builds PC no SDK para evitar colisões entre backends.
+- Variante separada Xenos/Vulkan FSI com seleção obrigatória e cache isolado.
+- CPU-only mapped reads preserva a vigilância física e elimina as leituras emuladas medidas.
+- Timers inclusivos, hits/misses e resultados de timestamps GPU no perfil.
+- Logs059 demonstram custo de compilação e lentidão sustentada mesmo com cache aquecido.
+- Pedido960×540, registro do swap real e métricas malloc: compilados, hardware pendente.
+- Documentação atualizada, com limites dos resultados e referências Rayman/XenosRecomp.
 # Mudanças desde a publicação inicial (035)
 
 ## Plataforma e estabilidade
@@ -42,3 +52,4 @@
 | 052 | Conversão de resolve ativa, pouca melhora visual; foco passa à comparação com PC |
 
 O NRO de captura foi compilado depois do 052; seu comportamento no console ainda não foi confirmado.
+

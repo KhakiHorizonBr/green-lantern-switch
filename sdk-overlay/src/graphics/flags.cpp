@@ -34,6 +34,10 @@ REXCVAR_DEFINE_BOOL(gamma_render_target_as_unorm16, true, "GPU",
                     "Use R16G16B16A16_UNORM for gamma render targets (more accurate than sRGB)")
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
 REXCVAR_DEFINE_STRING(dump_shaders, "", "GPU", "Path to dump shaders to");
+REXCVAR_DEFINE_STRING(gpu_compare_ps_hash, "", "GPU",
+                     "Opt-in bounded CPU draw-state snapshots for a hexadecimal guest pixel shader hash");
+REXCVAR_DEFINE_STRING(gpu_compare_resolve_address, "", "GPU",
+                     "Opt-in four synchronized GPU resolve snapshots at a hexadecimal guest address");
 REXCVAR_DEFINE_BOOL(use_fuzzy_alpha_epsilon, false, "GPU",
                     "Use approximate compare for alpha test values to prevent "
                     "flickering on NVIDIA graphics cards");

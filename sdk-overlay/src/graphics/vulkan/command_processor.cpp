@@ -31,6 +31,7 @@
 #include <rex/dbg.h>
 #include <rex/hash.h>
 #include <rex/logging.h>
+#include <rex/graphics/draw_compare.h>
 #include <rex/math.h>
 #include <rex/graphics/util/draw.h>
 #include <rex/graphics/flags.h>
@@ -93,6 +94,7 @@ REXCVAR_DEFINE_BOOL(vulkan_dynamic_rendering, true, "GPU/Vulkan",
 
 #include <rex/platform.h>
 #if REX_PLATFORM_SWITCH
+#include <rex/graphics/switch_gpu_timing.h>
 // Counters and A/B skips of the Switch profiler (switch_perf.cpp).
 extern "C" void RexSwitchPerfCount(unsigned id);
 extern "C" void RexSwitchPerfAdd(unsigned id, uint64_t value);
@@ -2416,6 +2418,17 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
   ++draw_census_swap_ordinal_;
 #if REX_PLATFORM_SWITCH
   RexSwitchPerfCount(0);
+  // Confirm the buffer the guest actually presents, rather than inferring a
+  // render resolution from the configured video mode or the window size.
+  static uint32_t logged_swap_width = 0;
+  static uint32_t logged_swap_height = 0;
+  if (draw_census_swap_ordinal_ <= 4 || frontbuffer_width != logged_swap_width ||
+      frontbuffer_height != logged_swap_height) {
+    REXGPU_INFO("[gl-fsi-video] Actual guest swap {}x{} address={:08X} ordinal={}",
+                frontbuffer_width, frontbuffer_height, frontbuffer_ptr, draw_census_swap_ordinal_);
+    logged_swap_width = frontbuffer_width;
+    logged_swap_height = frontbuffer_height;
+  }
   // Once per frame: pages the fault handler stopped watching because they were
   // read over and over are checked for CPU writes (see xmemory.cpp).
   memory_->SwitchCheckUnwatchedPages();
@@ -3812,6 +3825,9 @@ Shader* VulkanCommandProcessor::LoadShader(xenos::ShaderType shader_type, uint32
 bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type, uint32_t index_count,
                                        IndexBufferInfo* index_buffer_info,
                                        bool major_mode_explicit) {
+#if REX_PLATFORM_SWITCH
+  switch_timing::Scope timing(switch_timing::kDrawCpuUs);
+#endif
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
@@ -4366,6 +4382,14 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type, uint32_t 
   UpdateSystemConstantValues(primitive_polygonal, primitive_processing_result,
                              shader_32bit_index_dma, 0, viewport_info, used_texture_mask,
                              normalized_depth_control, normalized_color_mask);
+
+  if (pixel_shader) {
+    CaptureDrawComparison(regs,
+                          render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock
+                              ? "vulkan-fsi" : "vulkan-host",
+                          vertex_shader->ucode_data_hash(), pixel_shader->ucode_data_hash(),
+                          index_count, system_constants_);
+  }
 
   // Update uniform buffers and descriptor sets after binding the pipeline with
   // the new layout.
@@ -4973,6 +4997,9 @@ void VulkanCommandProcessor::RecordDrawCensusCopy(uint32_t written_address,
 }
 
 bool VulkanCommandProcessor::IssueCopy() {
+#if REX_PLATFORM_SWITCH
+  switch_timing::Scope timing(switch_timing::kResolveCpuUs);
+#endif
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
@@ -4982,7 +5009,8 @@ bool VulkanCommandProcessor::IssueCopy() {
   }
 
   ReadbackResolveMode readback_mode = GetReadbackResolveMode(REXCVAR_GET(vulkan_readback_resolve));
-  if (readback_mode == ReadbackResolveMode::kDisabled) {
+  if (readback_mode == ReadbackResolveMode::kDisabled &&
+      REXCVAR_GET(gpu_compare_resolve_address).empty()) {
     uint32_t written_address, written_length;
     bool resolved = render_target_cache_->Resolve(*memory_, *shared_memory_, *texture_cache_,
                                                   written_address, written_length);
@@ -5026,7 +5054,8 @@ bool VulkanCommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   ReadbackResolveMode readback_mode = GetReadbackResolveMode(REXCVAR_GET(vulkan_readback_resolve));
-  if (readback_mode == ReadbackResolveMode::kDisabled) {
+  const bool compare_pixels = WantsResolveComparison(written_address, written_length);
+  if (readback_mode == ReadbackResolveMode::kDisabled && !compare_pixels) {
     return true;
   }
 
@@ -5258,8 +5287,8 @@ bool VulkanCommandProcessor::IssueCopy_ReadbackResolvePath() {
                           VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
                           VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
 
-  bool use_delayed_sync =
-      readback_mode == ReadbackResolveMode::kFast || readback_mode == ReadbackResolveMode::kSome;
+  bool use_delayed_sync = !compare_pixels &&
+      (readback_mode == ReadbackResolveMode::kFast || readback_mode == ReadbackResolveMode::kSome);
   uint32_t read_index = write_index;
   if (use_delayed_sync) {
     read_index = 1 - write_index;
@@ -5278,7 +5307,7 @@ bool VulkanCommandProcessor::IssueCopy_ReadbackResolvePath() {
     }
   }
 
-  bool should_copy = (readback_mode == ReadbackResolveMode::kSome) ? is_cache_miss : true;
+  bool should_copy = compare_pixels || (readback_mode != ReadbackResolveMode::kSome) || is_cache_miss;
   if (should_copy && readback.buffers[read_index] != VK_NULL_HANDLE &&
       written_length <= readback.sizes[read_index] && readback.mapped_data[read_index] != nullptr) {
     VkMappedMemoryRange readback_memory_range = {};
@@ -5286,10 +5315,22 @@ bool VulkanCommandProcessor::IssueCopy_ReadbackResolvePath() {
     readback_memory_range.memory = readback.memories[read_index];
     readback_memory_range.offset = 0;
     readback_memory_range.size = VK_WHOLE_SIZE;
-    dfn.vkInvalidateMappedMemoryRanges(device, 1, &readback_memory_range);
+    const VkResult invalidate_status =
+        dfn.vkInvalidateMappedMemoryRanges(device, 1, &readback_memory_range);
+    if (compare_pixels && invalidate_status != VK_SUCCESS) {
+      REXGPU_WARN("[gl-pixels] readback invalidation failed: {}", int32_t(invalidate_status));
+      return true;
+    }
+
+    if (compare_pixels) {
+      CaptureResolveComparison(*register_file_, "vulkan", written_address, written_length,
+          frame_current_, active_vertex_shader() ? active_vertex_shader()->ucode_data_hash() : 0,
+          active_pixel_shader() ? active_pixel_shader()->ucode_data_hash() : 0,
+          readback.mapped_data[read_index]);
+    }
 
     uint8_t* destination = memory_->TranslatePhysical(written_address);
-    if (destination) {
+    if (destination && readback_mode != ReadbackResolveMode::kDisabled) {
       std::memcpy(destination, readback.mapped_data[read_index], written_length);
     }
   }
@@ -5603,6 +5644,10 @@ void VulkanCommandProcessor::CheckSubmissionFenceAndDeviceLoss(uint64_t await_su
   size_t fences_total = submissions_in_flight_fences_.size();
   size_t fences_awaited = 0;
   if (await_submission > submission_completed_) {
+#if REX_PLATFORM_SWITCH
+    RexSwitchPerfCount(switch_timing::kFenceWaitCount);
+    switch_timing::Scope wait_timing(switch_timing::kFenceWaitUs);
+#endif
     // Await in a blocking way if requested.
     // TODO(Triang3l): Await only one fence. "Fence signal operations that are
     // defined by vkQueueSubmit additionally include in the first
@@ -5850,6 +5895,10 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
           if (stamps[1] > stamps[0]) {
             const double ns = double(stamps[1] - stamps[0]) * timestamp_period_ns_;
             rex::perf::SetCounter(rex::perf::CounterId::kGpuFrameUs, int64_t(ns / 1000.0));
+#if REX_PLATFORM_SWITCH
+            RexSwitchPerfAdd(switch_timing::kGpuFrameSpanUs, uint64_t(ns / 1000.0));
+            RexSwitchPerfCount(switch_timing::kGpuFrameSpanCount);
+#endif
           }
           timestamp_slot_frame_[slot] = 0;
         }
@@ -5933,6 +5982,9 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
 }
 
 bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
+#if REX_PLATFORM_SWITCH
+  switch_timing::Scope timing(switch_timing::kEndSubmissionCpuUs);
+#endif
   const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();

@@ -44,11 +44,13 @@
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
+#include <malloc.h>
 #include <string>
 #include <vector>
 
 #include <switch.h>
 #include <rex/logging.h>
+#include <rex/graphics/switch_gpu_timing.h>
 
 #include "rex/ui/switch_apm.h"
 #include "rex/ui/switch_saltynx.h"
@@ -57,6 +59,7 @@ extern "C" {
 void _start(void);
 /* rexglue log folder, ending in '/' (switch_crash_hooks.c). */
 const char* RexSwitchLogDir(void);
+bool RexSwitchPerfForceNoStackSampling(void) __attribute__((weak));
 /*
  * From the guest memory core (guest_memory_switch.cpp): how much backing is
  * committed and how much is mapped in total, counting the 360 mirrors.
@@ -112,7 +115,7 @@ constexpr u64 kReportSeconds = 10;
 constexpr u64 kStartDelayNs = 8000000000ULL;
 constexpr size_t kMaxSamples = 1 << 15;
 constexpr size_t kFrames = 10;
-constexpr unsigned kCounterCount = 35;  // 33 = hot pages unwatched, 34 = unwatch refused
+constexpr unsigned kCounterCount = rex::graphics::switch_timing::kCounterEnd;
 // In <NRO folder>/logs/rex/ (switch_crash_hooks.c computes it at startup).
 std::string ReportPath() {
   return std::string(RexSwitchLogDir()) + "rex_perfil.log";
@@ -417,6 +420,13 @@ void Report(u64 elapsed_ticks, u64 tick_freq, u64 counters_last[kCounterCount],
                 double(counters_now[20] - counters_last[20]) / seconds,
                 double(counters_now[19] - counters_last[19]) / seconds);
   // Work the game sends to the GPU, per presented frame. One screen is
+  const struct mallinfo malloc_info = mallinfo();
+  std::fprintf(f,
+      "     [gl-memory-budget] malloc_used_mib=%.2f malloc_free_mib=%.2f "
+      "(malloc only; free total is not largest contiguous block; driver allocations may be separate)\n",
+      double(static_cast<unsigned>(malloc_info.uordblks)) / 1048576.0,
+      double(static_cast<unsigned>(malloc_info.fordblks)) / 1048576.0);
+  // Work the game sends to the GPU, per presented frame. One screen is
   // 1280x720 = 921,600 pixels.
   const auto delta = [&](unsigned id) { return double(counters_now[id] - counters_last[id]); };
   const double frames = delta(0);
@@ -555,6 +565,26 @@ void Report(u64 elapsed_ticks, u64 tick_freq, u64 counters_last[kCounterCount],
                  delta(28) / frames, delta(29) / frames, delta(30) / frames, delta(31) / frames,
                  delta(32) / frames);
   }
+
+  // Always print timing, including intervals with no presents while a shader
+  // compiler blocks progress. Values are wall time inside each stage, not
+  // mutually exclusive CPU time; configure includes shader/driver compilation.
+  using namespace rex::graphics::switch_timing;
+  std::fprintf(f,
+      "     [gl-vk-timing] cache: last_hits=%.0f map_hits=%.0f misses=%.0f | "
+      "shader_calls=%.0f shader_ms=%.3f | driver_creates=%.0f driver_ms=%.3f driver_failures=%.0f | "
+      "configure_ms=%.3f draw_ms=%.3f resolve_ms=%.3f end_submission_ms=%.3f | "
+      "fence_waits=%.0f fence_wait_ms=%.3f | gpu_span_samples=%.0f gpu_span_avg_ms=%.3f | "
+      "interval_ms=%.3f (wall times overlap; GPU span includes gaps between submissions)\n",
+      delta(kLastPipelineHit), delta(kPipelineMapHit), delta(kPipelineMiss),
+      delta(kShaderTranslationCount), delta(kShaderTranslationUs) / 1000.0,
+      delta(16), delta(kPipelineDriverUs) / 1000.0, delta(kPipelineDriverFailure),
+      delta(kConfigurePipelineUs) / 1000.0, delta(kDrawCpuUs) / 1000.0,
+      delta(kResolveCpuUs) / 1000.0, delta(kEndSubmissionCpuUs) / 1000.0,
+      delta(kFenceWaitCount), delta(kFenceWaitUs) / 1000.0,
+      delta(kGpuFrameSpanCount), delta(kGpuFrameSpanCount) > 0.0
+          ? delta(kGpuFrameSpanUs) / delta(kGpuFrameSpanCount) / 1000.0 : 0.0,
+      seconds * 1000.0);
 
   for (unsigned i = 0; i < kCounterCount; ++i) {
     counters_last[i] = counters_now[i];
@@ -817,10 +847,32 @@ void ProfilerMain(void*) {
 
   // Invasive sampling is only enabled explicitly, for diagnostics.
   // The normal mode keeps FPS, CPU and counters, without stopping the game.
-  bool sample_stacks = false;
+#ifndef REX_SWITCH_PROFILE_STACKS
+#define REX_SWITCH_PROFILE_STACKS 0
+#endif
+  bool sample_stacks = REX_SWITCH_PROFILE_STACKS != 0;
+  bool sampling_configured = false;
+  // Diagnostic builds can sample without requiring another SD marker file.
+  // The user may disable it for normal play with profile_sampling=0.
+  if (FILE* tuning = std::fopen("sdmc:/switch/green_lantern/tuning.ini", "r")) {
+    char line[128];
+    while (std::fgets(line, sizeof(line), tuning)) {
+      unsigned value = 0;
+      char trailing = 0;
+      if (std::sscanf(line, " profile_sampling = %u %c", &value, &trailing) == 1 && value <= 1) {
+        sample_stacks = value != 0;
+        sampling_configured = true;
+      }
+    }
+    std::fclose(tuning);
+  }
   if (FILE* flag = std::fopen(StackFlagPath().c_str(), "r")) {
-    sample_stacks = true;
+    if (!sampling_configured) sample_stacks = true;
     std::fclose(flag);
+  }
+  if (RexSwitchPerfForceNoStackSampling && RexSwitchPerfForceNoStackSampling()) {
+    sample_stacks = false;
+    REXLOG_INFO("[gl-fsi-variant] intrusive CPU stack sampling disabled for benchmark");
   }
 
   u64 counters_last[kCounterCount]{};

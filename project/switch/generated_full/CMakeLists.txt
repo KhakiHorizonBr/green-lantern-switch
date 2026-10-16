@@ -159,3 +159,35 @@ if (GREEN_LANTERN_SWITCH_HEAP_MIB LESS 1024 OR GREEN_LANTERN_SWITCH_HEAP_MIB GRE
 endif()
 target_compile_definitions(rexglue_switch_startup PRIVATE
     REX_SWITCH_HEAP_MIB=${GREEN_LANTERN_SWITCH_HEAP_MIB})
+option(GREEN_LANTERN_SWITCH_PROFILE_STACKS "Enable invasive stack sampling in diagnostic NRO" OFF)
+target_compile_definitions(rexglue_switch_startup PRIVATE
+    REX_SWITCH_PROFILE_STACKS=$<BOOL:${GREEN_LANTERN_SWITCH_PROFILE_STACKS}>)
+
+option(GREEN_LANTERN_BUILD_FSI_VARIANT "Build a separate stock Xenos/Vulkan FSI benchmark NRO" OFF)
+if(GREEN_LANTERN_BUILD_FSI_VARIANT)
+    add_executable(green_lantern_switch_xenos_fsi
+        "${CMAKE_CURRENT_LIST_DIR}/../source/green_lantern_switch_main.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/../runtime/horizon_guest_memory.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/../runtime/horizon_shared_memory.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/../runtime/sparse_guest_pages.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/../runtime/memory_telemetry.cpp"
+        $<TARGET_OBJECTS:green_lantern_recomp>)
+    target_include_directories(green_lantern_switch_xenos_fsi PRIVATE
+        "${GREEN_LANTERN_PROJECT_ROOT}"
+        "${GREEN_LANTERN_PROJECT_ROOT}/src"
+        "${GREEN_LANTERN_PROJECT_ROOT}/generated/hinted"
+        "${REXGLUE_SWITCH_OVERLAY_DIR}"
+        "${CMAKE_CURRENT_LIST_DIR}/../include"
+        "${CMAKE_CURRENT_LIST_DIR}/../runtime")
+    target_compile_definitions(green_lantern_switch_xenos_fsi PRIVATE
+        GREEN_LANTERN_XENOS_FSI=1 REX_PLATFORM_SWITCH=1
+        GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB=${GREEN_LANTERN_SWITCH_BACKING_ARENA_MIB})
+    rexglue_switch_configure_target(green_lantern_switch_xenos_fsi GPU_PLUGINS xenos)
+    target_link_directories(green_lantern_switch_xenos_fsi PRIVATE "${LIBNX_ROOT}/lib")
+    target_link_libraries(green_lantern_switch_xenos_fsi PRIVATE nx)
+    target_link_options(green_lantern_switch_xenos_fsi PRIVATE "-specs=${LIBNX_ROOT}/switch.specs")
+    rexglue_switch_add_nro(green_lantern_switch_xenos_fsi
+        NAME "Green Lantern - Xenos FSI"
+        AUTHOR "Green Lantern Recomp"
+        VERSION "0.1.0")
+endif()

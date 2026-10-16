@@ -1,8 +1,7 @@
-# Publicação — 15/10/2026
+# Publicação — 16/10/2026
 
-Atualização dos fontes até o candidato de captura posterior ao teste 052.
-Overlay do SDK, renderer, integração, telemetria, shader de cópia e ferramentas de captura atualizados.
-README e documentação em português. Logs 050–052 e CSVs anexados para revisão técnica.
-Fotos, vídeos, readbacks e executáveis permanecem locais.
-Os registros de crash antigos não foram adicionados como se fossem falhas novas.
-Build/link do novo NRO concluídos; validação da captura no Switch pendente.
+Fontes e documentação atualizados até FSI v4 (pedido540p), compilado e ainda não testado no Switch.
+Resultados recebidos até059; logs e resumo métricos059 publicados com caminhos pessoais removidos.
+Capturas GPU/CPU, recursos, código recompilado gerado, saves, caches e executáveis permanecem locais.
+Não atribuir ganho de FPS ao candidato ainda pendente. Histórico052 preservado em docs/PORT_LOG_052.md.
+

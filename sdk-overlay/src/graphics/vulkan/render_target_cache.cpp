@@ -40,6 +40,9 @@
 REXCVAR_DEFINE_STRING(render_target_path_vulkan, "", "GPU/Vulkan",
                       "Vulkan render target implementation path")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_BOOL(vulkan_fsi_required, false, "GPU/Vulkan",
+                    "Fail initialization instead of falling back when explicitly requested FSI is unavailable")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 // DEFINE_string(
 //     render_target_path_vulkan, "",
@@ -242,9 +245,24 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     // shaders, and the usage of fragment shader interlock, prefer the former
     // for simplicity.
     if (!fsi_path_supported) {
+      if (REXCVAR_GET(vulkan_fsi_required)) {
+        REXGPU_ERROR("[gl-fsi-variant] FSI requested but unavailable: sample_interlock={} pixel_interlock={} stores_atomics={} sample_rate={} standard_samples={} shared_bindings={} max_storage_buffers={}",
+            device_properties.fragmentShaderSampleInterlock,
+            device_properties.fragmentShaderPixelInterlock,
+            device_properties.fragmentStoresAndAtomics, device_properties.sampleRateShading,
+            device_properties.standardSampleLocations, shared_memory_binding_count,
+            device_properties.maxPerStageDescriptorStorageBuffers);
+        return false;
+      }
       path_ = Path::kHostRenderTargets;
     }
   }
+
+  REXLOG_INFO("[gl-pc-compare] Vulkan render targets: requested='{}' selected={} fsi_supported={} direct_host_resolve={} snorm16_full_range={}",
+              REXCVAR_GET(render_target_path_vulkan),
+              path_ == Path::kPixelShaderInterlock ? "fsi" : "host_render_targets",
+              fsi_path_supported, REXCVAR_GET(direct_host_resolve),
+              REXCVAR_GET(snorm16_render_target_full_range));
 
   // Format support.
   constexpr VkFormatFeatureFlags kUsedDepthFormatFeatures =

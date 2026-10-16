@@ -202,6 +202,21 @@ RexGmAccess AccessOf(State& s, size_t page_off) {
  * relies on read-only pages faulting on write.
  */
 bool g_ro_mapped = false;
+bool g_cpu_ro_mapped = false;
+
+// GPU write watches cover physical backing, including its virtual aliases.
+// Decide by backing offset, never merely by the guest virtual address (0x7F...
+// is an alias of physical memory). Refuse mixed-view and boundary-crossing ranges.
+bool IsCpuOnlyReadRange(State& s, uint64_t address, size_t length) {
+    if (!length) return false;
+    const View* first = ViewFor(s, address);
+    const View* last = ViewFor(s, address + length - 1);
+    if (!first || first != last) return false;
+    const size_t offset = first->offset +
+        static_cast<size_t>(address - reinterpret_cast<uint64_t>(first->base));
+    constexpr size_t kPhysicalBacking = 0x100000000ull;
+    return offset < kPhysicalBacking && length <= kPhysicalBacking - offset;
+}
 
 RexGmAccess ReportedAccessOf(const State& s, size_t page_off) {
     auto it = s.protection.find(page_off);
@@ -902,7 +917,8 @@ bool RexGmProtect(uint8_t* address, size_t length, RexGmAccess access, RexGmAcce
 
     if (out_old) *out_old = ReportedAccessOf(s, begin);
 
-    const bool ro_mapped = g_ro_mapped && access == REX_GM_READ;
+    const bool ro_mapped = access == REX_GM_READ &&
+        (g_ro_mapped || (g_cpu_ro_mapped && IsCpuOnlyReadRange(s, addr, length)));
     for (size_t p = begin; p < end; p += kPageSize) {
         if (ro_mapped) s.readonly_logical.insert(p);
         else s.readonly_logical.erase(p);
@@ -1042,5 +1058,10 @@ extern "C" void RexGmSetReadOnlyMapped(bool enabled) {
     State& s = S();
     std::lock_guard<std::mutex> lock(s.mutex);
     g_ro_mapped = enabled;
+}
+extern "C" void RexGmSetCpuReadOnlyMapped(bool enabled) {
+    State& s = S();
+    std::lock_guard<std::mutex> lock(s.mutex);
+    g_cpu_ro_mapped = enabled;
 }
 #endif
