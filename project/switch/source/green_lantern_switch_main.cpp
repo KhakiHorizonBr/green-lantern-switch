@@ -11,6 +11,7 @@
 #include "../native_experiment/native/native_system.h"
 #endif
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -22,6 +23,13 @@ extern "C" void RexGmSetCpuReadOnlyMapped(bool enabled);
 extern "C" size_t __nx_heap_size;
 
 #if defined(GREEN_LANTERN_XENOS_FSI)
+static std::atomic<bool> fsi_capture_requested{false};
+extern "C" void GreenLanternRequestGraphicsCapture(void) {
+  fsi_capture_requested.store(true, std::memory_order_relaxed);
+}
+extern "C" bool GreenLanternConsumeGraphicsCapture(void) {
+  return fsi_capture_requested.exchange(false, std::memory_order_relaxed);
+}
 // Benchmark variant must not inherit intrusive sampling from a previous INI.
 extern "C" bool RexSwitchPerfForceNoStackSampling(void) { return true; }
 #endif
@@ -46,7 +54,7 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
 
   void OnPreSetup(rex::RuntimeConfig& config) override {
 #if defined(GREEN_LANTERN_XENOS_FSI)
-    REXLOG_INFO("[gl-fsi-variant] Xenos/Vulkan FSI benchmark v4 guest video mode; CPU-only mapped reads; heap={} MiB; native renderer excluded",
+    REXLOG_INFO("[gl-fsi-variant] Xenos/Vulkan FSI capture v5 L+R+Minus; guest video mode; CPU-only mapped reads; heap={} MiB; native renderer excluded",
                 __nx_heap_size >> 20);
     RexGmSetReadOnlyMapped(false);
     RexGmSetCpuReadOnlyMapped(true);
@@ -72,7 +80,7 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
     // blit. The game still decides its internal target sizes; IssueSwap logs
     // actual frontbuffer dimensions and the profiler records draw widths/area.
     // 540p is above the SDK's minimum height of 480 and keeps a 16:9 aspect.
-    unsigned video_mode = 540;
+    unsigned video_mode = 720;
     if (FILE* video_ini = std::fopen("sdmc:/switch/green_lantern/fsi_video.ini", "r")) {
       char line[128];
       while (std::fgets(line, sizeof(line), video_ini)) {
@@ -85,6 +93,7 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       }
       std::fclose(video_ini);
     }
+    video_mode = 720; // Paired capture baseline, preserve the v4 NRO for resolution experiments.
     const unsigned video_width = video_mode == 540 ? 960 : 1280;
     const std::string video_width_text = std::to_string(video_width);
     const std::string video_height_text = std::to_string(video_mode);
@@ -98,6 +107,7 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
     return;
 #endif
 #if defined(GREEN_LANTERN_NATIVE_RENDERER)
+    rex::cvar::SetFlagByName("nx_renderer", "native");
     if (green_lantern::native::Enabled()) {
       // O perfil 041 mede dezenas de milhares de leituras emuladas/s.
       // A verificação de escritas por quadro é feita por NativeGraphicsSystem.
@@ -108,6 +118,8 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       bool auto_memory = true;
       bool resolve_atlas = true;
       bool signed_resolve_views = true;
+      bool depth_stencil_restore = true;
+      bool edram_color_cache = true;
       if (FILE* tuning = std::fopen("sdmc:/switch/green_lantern/tuning.ini", "r")) {
         char line[128];
         while (std::fgets(line, sizeof(line), tuning)) {
@@ -126,6 +138,12 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
           if (std::sscanf(line, " signed_resolve_views = %u %c", &value, &trailing) == 1 && value <= 1) {
             signed_resolve_views = value != 0;
           }
+          if (std::sscanf(line, " depth_stencil_restore = %u %c", &value, &trailing) == 1 && value <= 1) {
+            depth_stencil_restore = value != 0;
+          }
+          if (std::sscanf(line, " edram_color_cache = %u %c", &value, &trailing) == 1 && value <= 1) {
+            edram_color_cache = value != 0;
+          }
           if (std::sscanf(line, " native_stream_mib = %u %c", &value, &trailing) == 1 &&
               (value == 0 || (value >= 64 && value <= 192 && value % 16 == 0))) {
             native_stream_mib = value;
@@ -143,6 +161,14 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       if (readonly_mapped) hot_read_tracking = false;
       rex::cvar::SetFlagByName("nx_resolve_atlas", resolve_atlas ? "true" : "false");
       rex::cvar::SetFlagByName("nx_signed_resolve_views", signed_resolve_views ? "true" : "false");
+      const bool stencil_applied = rex::cvar::SetFlagByName("nx_restore_depth_stencil",
+          depth_stencil_restore ? "true" : "false");
+      const bool edram_applied = rex::cvar::SetFlagByName("nx_edram_color_cache",
+          edram_color_cache ? "true" : "false");
+      REXLOG_INFO("[gl-edram] candidate v2 enabled={} applied={}; heap unchanged; color cache requests10MiB",
+          edram_color_cache, edram_applied);
+      REXLOG_INFO("[gl-stencil] candidate v1 preserve float24 stencil + packed words + known restore pass: enabled={} applied={}; heap unchanged",
+          depth_stencil_restore, stencil_applied);
       REXLOG_INFO("Green Lantern signed resolve views: enabled={}", signed_resolve_views);
       REXLOG_INFO("Green Lantern resolve atlas assembly: enabled={}", resolve_atlas);
       const bool applied = rex::cvar::SetFlagByName(

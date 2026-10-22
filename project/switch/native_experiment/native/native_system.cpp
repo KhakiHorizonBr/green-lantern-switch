@@ -707,6 +707,25 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
             "[native] ring thread ms per frame: state {:.2f}, indices {:.2f}, vertices {:.2f}, "
             "constants+textures {:.2f}, recording {:.2f}, resolves {:.2f}, swap {:.2f}",
             ms(0), ms(1), ms(2), ms(3), ms(4), ms(5), ms(6));
+        const uint64_t resolve_count =
+            std::max<uint64_t>(1, s.resolves - reported_render_.resolves);
+        auto resolve_ms = [&](int i) {
+          return double(s.resolve_phase_ns[i] - reported_render_.resolve_phase_ns[i]) / 1e6 /
+                 double(resolve_count);
+        };
+        REXLOG_INFO(
+            "[native] resolve CPU ms each ({} resolves): decode/setup {:.3f}, source/import "
+            "{:.3f}, pre-destination {:.3f}, destination lookup {:.3f}, copy/convert {:.3f}, "
+            "clear/tail {:.3f}",
+            s.resolves - reported_render_.resolves, resolve_ms(0), resolve_ms(1), resolve_ms(2),
+            resolve_ms(3), resolve_ms(4), resolve_ms(5));
+        REXLOG_INFO(
+            "[native] swap CPU ms per frame: frontbuffer lookup {:.3f}, presenter refresh {:.3f}, "
+            "final submit {:.3f}, frame bookkeeping {:.3f}",
+            double(s.swap_phase_ns[0] - reported_render_.swap_phase_ns[0]) / 1e6 / double(frames),
+            double(s.swap_phase_ns[1] - reported_render_.swap_phase_ns[1]) / 1e6 / double(frames),
+            double(s.swap_phase_ns[2] - reported_render_.swap_phase_ns[2]) / 1e6 / double(frames),
+            double(s.swap_phase_ns[3] - reported_render_.swap_phase_ns[3]) / 1e6 / double(frames));
       }
       REXLOG_INFO(
           "[native] textures: {} made now, {} streamed in, {} replaced after use, {} lookups "

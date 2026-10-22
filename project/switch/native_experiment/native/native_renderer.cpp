@@ -48,6 +48,7 @@
 #include <rex/graphics/pipeline/texture/util.h>
 #include <rex/graphics/registers.h>
 #include <rex/graphics/util/draw.h>
+#include <rex/graphics/draw_compare.h>
 #include <rex/graphics/vulkan/shader.h>
 #include <rex/kernel/xboxkrnl/video.h>
 #include <rex/system/xmemory.h>
@@ -85,6 +86,8 @@ REXCVAR_DEFINE_BOOL(gpu_specialize_texture_signs, false, "Switch",
 REXCVAR_DEFINE_UINT32(nx_trace_frame, 0, "Switch",
                       "Log every draw and resolve of this frame (0 = off)");
 REXCVAR_DEFINE_UINT32(nx_trace_frames, 1, "Switch", "Frames nx_trace_frame logs");
+REXCVAR_DEFINE_UINT32(nx_capture_frame, 0, "Graphics",
+                      "Automatically capture one native frame (0 = manual only)");
 REXCVAR_DEFINE_BOOL(nx_trace_draws, true, "Switch",
                     "With nx_trace_frame, log every draw (false: only resolves and swaps)");
 REXCVAR_DEFINE_BOOL(nx_debug_depth_always, false, "Switch",
@@ -107,7 +110,26 @@ REXCVAR_DEFINE_BOOL(nx_depth24, true, "Switch",
                     "Store depth in 32 bits per pixel (24-bit depth with stencil, or float "
                     "without) instead of 32-bit float with stencil, which NVIDIA GPUs keep "
                     "in 64");
-REXCVAR_DEFINE_BOOL(nx_gpu_profile, false, "Switch",
+REXCVAR_DEFINE_BOOL(nx_restore_depth_stencil, true, "Switch",
+                    "Green Lantern: preserve float24 stencil, pack depth words and restore "
+                    "stencil for the identified depth-restore pixel shader");
+REXCVAR_DEFINE_BOOL(nx_guest_depth_range, true, "Graphics",
+                    "Native depth: use guest 0..1 consistently for viewport, oDepth, clear and resolve");
+REXCVAR_DEFINE_BOOL(nx_stencil_color_layout, true, "Graphics",
+                    "Restore stencil using Xenos color/depth 40-sample half-tile permutation");
+REXCVAR_DEFINE_UINT32(nx_vertex_fetch_safety, 8, "Graphics",
+                    "Vertex copy checks: bit1 revisit, bit2 whole buffers, bit4 fresh hashes, bit8 whole indirect buffers");
+#if defined(_WIN32)
+REXCVAR_DEFINE_BOOL(nx_debug_material_no_depth, false, "Development",
+                    "PC diagnostic: bypass depth/stencil on the two identified body material shaders");
+REXCVAR_DEFINE_BOOL(nx_debug_full_vertex_fetch, false, "Development",
+                    "PC diagnostic: copy complete vertex buffers with fresh hashes, bypass per-frame fetch reuse");
+#endif
+REXCVAR_DEFINE_BOOL(nx_zero_clear_alias, true, "Graphics",
+                    "Propagate proven zero depth/stencil clears to aliased color render targets");
+REXCVAR_DEFINE_BOOL(nx_edram_color_cache, true, "Switch",
+                    "Preserve EDRAM words across RGBA8/RG16_SNORM color target aliases (1x)");
+REXCVAR_DEFINE_BOOL(nx_gpu_profile, true, "Switch",
                     "Log GPU time by render pass and resolve, measured on one frame in 16");
 REXCVAR_DEFINE_BOOL(nx_record_thread, true, "Switch",
                     "Make the Vulkan calls of draws on a second thread, so the command ring "
@@ -128,6 +150,7 @@ namespace shaders {
 #include "shaders/depth_resolve_cs.h"
 #include "shaders/depth_to_float_cs.h"
 #include "shaders/copy_color_cs.h"
+#include "shaders/restore_stencil_cs.h"
 }  // namespace shaders
 
 namespace {
@@ -277,6 +300,7 @@ struct RenderTarget {
   uint32_t width = 0;
   uint32_t height = 0;
   uint64_t last_used_frame = 0;
+  std::array<uint32_t, 2048> edram_seen = {};
 };
 
 // The attachments of a rendering scope: color 0-3 and depth.
@@ -414,10 +438,13 @@ struct Renderer::Impl {
   bool multisample = true;
   // D24_UNORM_S8_UINT for the game's kD24S8 buffers (nx_depth24).
   bool depth24 = false;
-  // The float24 ones (here only shadow maps) become D32_SFLOAT without
-  // stencil, 32 instead of 64 bits per pixel; a stencil test on them passes.
+  // Green Lantern uses float24 WITH stencil for its main depth surface too.
+  // Keep the old memory optimization only when the compatibility path is off.
   VkFormat DepthFormatFor(uint32_t guest_format) const {
     if (!depth24) return kDepthFormat;
+    if (REXCVAR_GET(nx_restore_depth_stencil) &&
+        guest_format == uint32_t(xenos::DepthRenderTargetFormat::kD24FS8))
+      return kDepthFormat;
     return guest_format == uint32_t(xenos::DepthRenderTargetFormat::kD24S8)
                ? VK_FORMAT_D24_UNORM_S8_UINT
                : VK_FORMAT_D32_SFLOAT;
@@ -426,6 +453,8 @@ struct Renderer::Impl {
   VkDescriptorSetLayout depth_convert_set_layout = VK_NULL_HANDLE;
   VkPipelineLayout depth_convert_layout = VK_NULL_HANDLE;
   VkPipeline depth_convert_pipeline = VK_NULL_HANDLE;
+  VkPipeline restore_stencil_pipeline = VK_NULL_HANDLE;
+  uint32_t stencil_restore_reports = 0;
   VkDescriptorPool depth_convert_pool = VK_NULL_HANDLE;
   VkDescriptorSet depth_convert_set = VK_NULL_HANDLE;
   // Depth straight from the depth buffer into the R32_SFLOAT image, in one
@@ -502,6 +531,35 @@ struct Renderer::Impl {
   bool in_pass = false;
   PassTargets pass;
   VkExtent2D pass_extent = {};
+  static constexpr uint32_t kEdramTiles = 2048;
+  static constexpr VkDeviceSize kEdramTileBytes = 80u * 16u * 4u;
+  VkBuffer edram_color_buffer = VK_NULL_HANDLE;
+  VkDeviceMemory edram_color_memory = VK_NULL_HANDLE;
+  PFN_vkCmdFillBuffer edram_fill_buffer = nullptr;
+  struct EdramColorTile {
+    uint32_t version = 0, producer_base = 0, producer_pitch = 0, producer_format = 0;
+    bool unknown_write = false;
+    bool known_zero = false;
+  };
+  std::array<EdramColorTile, kEdramTiles> edram_color_tiles = {};
+  uint32_t edram_color_version = 0;
+  std::unordered_set<uint64_t> edram_logged_imports;
+  uint64_t edram_tiles_imported = 0, edram_tiles_published = 0;
+  struct EdramPendingWrite {
+    RenderTarget* target = nullptr;
+    VkRect2D rect = {};
+    uint32_t guest_msaa = 0;
+    bool full_overwrite = false;
+    bool zero_word_clear = false;
+  };
+  std::array<EdramPendingWrite, 5> edram_pending = {};
+  bool EdramColorSupported(const RenderTarget& rt) const;
+  void ImportEdramColor(RenderTarget& rt);
+  void MarkEdramWrite(RenderTarget& rt, VkRect2D rect, uint32_t guest_msaa,
+                      bool full_overwrite = false, bool zero_word_clear = false);
+  void PublishEdramZeroClear(const EdramPendingWrite& write);
+  void FlushEdramWrites();
+  void InvalidateEdramWrite(const EdramPendingWrite& write);
 
   // Pipelines.
   std::unordered_map<uint64_t, VkPipeline> pipelines;
@@ -792,13 +850,21 @@ struct Renderer::Impl {
     VkFormat format = VK_FORMAT_UNDEFINED;
     size_t bytes = 0;
     std::string name;
+    std::string metadata;
+    std::vector<uint32_t> registers;
   };
   std::vector<TraceDump> trace_dumps;
   uint32_t trace_resolve = 0;
   void TraceDumpImage(VkCommandBuffer c, VkImage image, uint32_t width, uint32_t height,
-                      VkFormat format, uint32_t address, bool priority = false) {
+                      VkFormat format, uint32_t address, bool priority = false,
+                      uint32_t rx = 0, uint32_t ry = 0, uint32_t rw = 0, uint32_t rh = 0,
+                      const char* role_override = nullptr) {
     const std::string prefix = frame == manual_capture_frame
-        ? "sdmc:/switch/green_lantern/logs/capture/pass"
+#if defined(__SWITCH__)
+        ? "sdmc:/switch/green_lantern/logs/capture/native/pass"
+#else
+        ? "capture/native/pass"
+#endif
         : REXCVAR_GET(nx_trace_dump_prefix);
     if (prefix.empty() || !width || !height) return;
     uint32_t texel_bytes = 0;
@@ -808,7 +874,7 @@ struct Renderer::Impl {
       case VK_FORMAT_A2B10G10R10_UNORM_PACK32: case VK_FORMAT_R32_SFLOAT:
       case VK_FORMAT_R16G16_SNORM: case VK_FORMAT_R16G16_SFLOAT:
         texel_bytes = 4; break;
-      case VK_FORMAT_R16_UNORM: case VK_FORMAT_R16_SFLOAT:
+      case VK_FORMAT_R16_UNORM: case VK_FORMAT_R16_SNORM: case VK_FORMAT_R16_SFLOAT:
         texel_bytes = 2; break;
       case VK_FORMAT_R16G16B16A16_SFLOAT: case VK_FORMAT_R16G16B16A16_SNORM:
       case VK_FORMAT_R32G32_SFLOAT:
@@ -821,8 +887,14 @@ struct Renderer::Impl {
     // One frame only; diagnostics must not exhaust the heap being diagnosed.
     // Reserve 20 MiB for assembled atlases, which are sampled after the early
     // G-buffer resolves otherwise consume the entire readback allowance.
+#if defined(__SWITCH__)
     const uint64_t budget = uint64_t(priority ? 64 : 44) << 20;
-    if (trace_dumps.size() >= 64 || trace_bytes + bytes > budget) {
+    constexpr size_t file_limit = 64;
+#else
+    const uint64_t budget = uint64_t(priority ? 512 : 480) << 20;
+    constexpr size_t file_limit = 256;
+#endif
+    if (trace_dumps.size() >= file_limit || trace_bytes + bytes > budget) {
       REXLOG_WARN("[trace] capture truncated at {} MiB (priority={})", budget >> 20, priority);
       return;
     }
@@ -831,6 +903,21 @@ struct Renderer::Impl {
     dump.height = height;
     dump.format = format;
     dump.bytes = size_t(bytes);
+    if (regs) {
+      dump.registers.assign(regs->values, regs->values + RegisterFile::kRegisterCount);
+      const auto info = regs->Get<reg::RB_COPY_DEST_INFO>();
+      dump.metadata = fmt::format(
+          ",\"backend\":\"native\",\"address\":\"{:08X}\",\"frame\":{},\"pass\":{},"
+          "\"role\":\"{}\",\"copy_base\":{},\"pitch\":{},\"dest_format\":{},"
+          "\"vs\":\"{:016X}\",\"ps\":\"{:016X}\"",
+          address & 0x1FFFFFFFu, frame, trace_resolve,
+          role_override ? role_override : priority ? "atlas" :
+              (address & 0x80000000u) ? "source" : "destination",
+          (*regs)[rex::graphics::XE_GPU_REG_RB_COPY_DEST_BASE],
+          uint32_t(regs->Get<reg::RB_COPY_DEST_PITCH>().copy_dest_pitch), uint32_t(info.copy_dest_format),
+          active_vs ? active_vs->ucode_data_hash() : 0, active_ps ? active_ps->ucode_data_hash() : 0);
+    }
+    dump.metadata += fmt::format(",\"rect\":[{},{},{},{}]", rx, ry, rw, rh);
     dump.name = fmt::format("{}_f{}_r{:02}_{:08X}_n{}", prefix, frame, trace_resolve,
                             address, trace_dumps.size());
     if (!rex::ui::vulkan::util::CreateDedicatedAllocationBuffer(
@@ -874,12 +961,16 @@ struct Renderer::Impl {
           if (FILE* meta = std::fopen((dump.name + ".json").c_str(), "w")) {
             const auto json = fmt::format(
                 "{{\"width\":{},\"height\":{},\"vk_format\":{},\"bytes\":{},"
-                "\"row_bytes\":{},\"layout\":\"tightly-packed little-endian\"}}\n",
+                "\"row_bytes\":{},\"layout\":\"tightly-packed little-endian\"{} }}\n",
                 dump.width, dump.height, uint32_t(dump.format), dump.bytes,
-                dump.bytes / dump.height);
+                dump.bytes / dump.height, dump.metadata);
             saved = std::fwrite(json.data(), 1, json.size(), meta) == json.size();
             saved = std::fclose(meta) == 0 && saved;
           } else saved = false;
+        }
+        if (saved && !dump.registers.empty()) {
+          saved = rex::graphics::WriteCaptureSnapshot(dump.name + ".registers.bin",
+              dump.registers.data(), dump.registers.size() * sizeof(uint32_t));
         }
         if (!saved) REXLOG_ERROR("[trace] failed to save {} (invalidate={})", dump.name, int(invalidated));
         else REXLOG_INFO("[trace] saved {} ({}x{} vk{})", dump.name, dump.width, dump.height,
@@ -1803,6 +1894,7 @@ struct Renderer::Impl {
     if (in_pass) {
       dfn().vkCmdEndRendering(cmd());
       in_pass = false;
+      FlushEdramWrites();
     }
   }
   bool BeginPass(const PassTargets& targets);
@@ -1810,6 +1902,7 @@ struct Renderer::Impl {
   // --- Draws ---------------------------------------------------------------------
 
   void Draw(const uint32_t* immediate_indices, uint32_t immediate_index_words);
+  bool RestoreStencilFromColor(RenderTarget& color, RenderTarget& depth, VkRect2D rect);
   void UpdateSystemConstants(bool primitive_polygonal, const draw_util::ViewportInfo& viewport,
                              uint32_t used_texture_mask, uint32_t vertex_index_endian_flags,
                              const VulkanShader* vs, const VulkanShader* ps);
@@ -2066,6 +2159,17 @@ bool Renderer::Impl::Initialize() {
     if (depth_convert_pipeline) dfn().vkDestroyPipeline(vk, depth_convert_pipeline, nullptr);
     depth_convert_pipeline = VK_NULL_HANDLE;
   }
+  if (REXCVAR_GET(nx_edram_color_cache)) {
+    if (!rex::ui::vulkan::util::CreateDedicatedAllocationBuffer(device,
+            kEdramTiles * kEdramTileBytes,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            rex::ui::vulkan::util::MemoryPurpose::kDeviceLocal,
+            edram_color_buffer, edram_color_memory)) {
+      REXLOG_WARN("[gl-edram] 10 MiB color cache unavailable; alias transfers disabled");
+    } else {
+      REXLOG_INFO("[gl-edram] v2 color-word cache ready: 10 MiB, 2048 tiles; bounded clear vertices, sample coordinates normalized once");
+    }
+  }
   if (copy_color_pipeline) {
     textures.SetComputeCopy([this](VkCommandBuffer c, VkImageView source, VkImageView dest,
                                    int32_t sx, int32_t sy, int32_t dx, int32_t dy, uint32_t width,
@@ -2134,6 +2238,12 @@ bool Renderer::Impl::CreateDepthConversion() {
       device, depth_convert_layout, shaders::kDepthResolveCs, sizeof(shaders::kDepthResolveCs));
   if (!depth_convert_pipeline) {
     return false;
+  }
+  if (REXCVAR_GET(nx_restore_depth_stencil)) {
+    restore_stencil_pipeline = rex::ui::vulkan::util::CreateComputePipeline(
+        device, depth_convert_layout, shaders::kRestoreStencilCs, sizeof(shaders::kRestoreStencilCs));
+    if (!restore_stencil_pipeline)
+      REXLOG_WARN("[gl-stencil] restore pipeline unavailable; compatibility path incomplete");
   }
   VkDescriptorPoolSize size = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
   VkDescriptorPoolCreateInfo pool_info = {};
@@ -2255,6 +2365,79 @@ bool Renderer::Impl::ComputeColorCopy(VkCommandBuffer c, VkImageView source, VkI
           VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
       0, 1, &after, 0, nullptr, 0, nullptr);
+  return true;
+}
+
+bool Renderer::Impl::RestoreStencilFromColor(RenderTarget& color, RenderTarget& depth,
+                                            VkRect2D rect) {
+  if (!depth_scratch || !restore_stencil_pipeline || !depth_convert_set ||
+      color.format != VK_FORMAT_R8G8B8A8_UNORM || !HasStencil(depth.format) ||
+      color.samples != VK_SAMPLE_COUNT_1_BIT || depth.samples != VK_SAMPLE_COUNT_1_BIT ||
+      rect.offset.x < 0 || rect.offset.y < 0) return false;
+  const uint32_t x = uint32_t(rect.offset.x), y = uint32_t(rect.offset.y);
+  const uint32_t max_width = std::min(color.width, depth.width);
+  const uint32_t max_height = std::min(color.height, depth.height);
+  if (x >= max_width || y >= max_height) return false;
+  const uint32_t width = std::min(rect.extent.width, max_width - x);
+  const uint32_t height = std::min(rect.extent.height, max_height - y);
+  const uint64_t texels = uint64_t(width) * height;
+  if (!texels) return false;
+  const VkDeviceSize packed_offset = rex::align(VkDeviceSize(texels * 4), VkDeviceSize(256));
+  if (packed_offset + rex::align(VkDeviceSize(texels), VkDeviceSize(4)) > kDepthScratchSize)
+    return false;
+
+  const bool color_layout = REXCVAR_GET(nx_stencil_color_layout);
+  // This identified restore uses full, aligned rows. Partial half-tile copies
+  // would need source pixels outside the scratch region and aren't modeled.
+  if (color_layout && (x % 80 || width % 80)) return false;
+  // Drain the recording thread, then run outside dynamic rendering. The game's
+  // source-coordinate remap does not remove the color/depth EDRAM half-tile swap.
+  EndPass();
+  VkCommandBuffer c = cmd();
+#if defined(_WIN32)
+  if (Tracing()) {
+    TraceDumpImage(c, color.image, color.width, color.height, color.format,
+        0x20000000u | color.key.base_tiles, false, x, y, width, height,
+        "stencil_restore_color");
+  }
+#endif
+  VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+      VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 1, &before, 0, nullptr, 0, nullptr);
+  VkBufferImageCopy region = {};
+  region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  region.imageOffset = {int32_t(x), int32_t(y), 0};
+  region.imageExtent = {width, height, 1};
+  dfn().vkCmdCopyImageToBuffer(c, color.image, VK_IMAGE_LAYOUT_GENERAL, depth_scratch, 1, &region);
+  VkMemoryBarrier to_compute = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+      0, 1, &to_compute, 0, nullptr, 0, nullptr);
+  const uint32_t params[5] = {uint32_t(texels), width, 0, uint32_t(packed_offset / 4),
+                            color_layout ? 1u : 0u};
+  dfn().vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, restore_stencil_pipeline);
+  dfn().vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_convert_layout, 0, 1,
+      &depth_convert_set, 0, nullptr);
+  dfn().vkCmdPushConstants(c, depth_convert_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+      sizeof(params), params);
+  dfn().vkCmdDispatch(c, uint32_t((texels + 255) / 256), 1, 1);
+  VkMemoryBarrier to_copy = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 1, &to_copy, 0, nullptr, 0, nullptr);
+  region.bufferOffset = packed_offset;
+  region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+  dfn().vkCmdCopyBufferToImage(c, depth_scratch, depth.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+  VkMemoryBarrier after = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+      0, 1, &after, 0, nullptr, 0, nullptr);
+  if (stencil_restore_reports++ < 8)
+    REXLOG_INFO("[gl-stencil] restored R8 -> stencil tile={} pitch={} rect={},{},{}x{} frame={}",
+        depth.key.base_tiles, depth.key.pitch, x, y, width, height, frame);
   return true;
 }
 
@@ -2470,6 +2653,10 @@ void Renderer::Impl::Shutdown() {
     if (rt->memory) dfn().vkFreeMemory(vk, rt->memory, nullptr);
   }
   render_targets.clear();
+  if (edram_color_buffer) dfn().vkDestroyBuffer(vk, edram_color_buffer, nullptr);
+  if (edram_color_memory) dfn().vkFreeMemory(vk, edram_color_memory, nullptr);
+  edram_color_buffer = VK_NULL_HANDLE;
+  edram_color_memory = VK_NULL_HANDLE;
   for (auto& retired : retired_render_targets) {
     if (retired.sample_view) dfn().vkDestroyImageView(vk, retired.sample_view, nullptr);
     dfn().vkDestroyImageView(vk, retired.view, nullptr);
@@ -2478,6 +2665,7 @@ void Renderer::Impl::Shutdown() {
   }
   retired_render_targets.clear();
   if (depth_convert_pipeline) dfn().vkDestroyPipeline(vk, depth_convert_pipeline, nullptr);
+  if (restore_stencil_pipeline) dfn().vkDestroyPipeline(vk, restore_stencil_pipeline, nullptr);
   if (depth_convert_layout) dfn().vkDestroyPipelineLayout(vk, depth_convert_layout, nullptr);
   if (depth_copy_pipeline) dfn().vkDestroyPipeline(vk, depth_copy_pipeline, nullptr);
   if (copy_color_pipeline) dfn().vkDestroyPipeline(vk, copy_color_pipeline, nullptr);
@@ -2903,7 +3091,8 @@ VkPipeline Renderer::Impl::CreatePipeline(const PipelineJob& job) {
   rendering.colorAttachmentCount = attachment_count;
   rendering.pColorAttachmentFormats = color_formats;
   rendering.depthAttachmentFormat = VkFormat(key.depth_format);
-  rendering.stencilAttachmentFormat = VkFormat(key.depth_format);
+  rendering.stencilAttachmentFormat = key.depth_format && HasStencil(VkFormat(key.depth_format))
+      ? VkFormat(key.depth_format) : VK_FORMAT_UNDEFINED;
 
   VkGraphicsPipelineCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -2921,6 +3110,7 @@ VkPipeline Renderer::Impl::CreatePipeline(const PipelineJob& job) {
   info.layout = layout;
   std::lock_guard<std::mutex> compile_lock(
       rex::ui::vulkan::util::GraphicsPipelineCompileMutex());
+#if defined(__SWITCH__)
   const auto compile_heap = mallinfo();
   if (compile_heap.fordblks < (64u << 20)) {
     std::fprintf(stderr, "[gl-pipeline] native vs=%016llX ps=%016llX malloc_used=%zu malloc_free=%zu\n",
@@ -2928,6 +3118,7 @@ VkPipeline Renderer::Impl::CreatePipeline(const PipelineJob& job) {
                  static_cast<unsigned long long>(key.ps_hash),
                  size_t(compile_heap.uordblks), size_t(compile_heap.fordblks));
   }
+#endif
   VkPipeline pipeline = VK_NULL_HANDLE;
   if (dfn().vkCreateGraphicsPipelines(vk, driver_cache, 1, &info, nullptr, &pipeline) !=
       VK_SUCCESS) {
@@ -3024,6 +3215,7 @@ RenderTarget* Renderer::Impl::GetRenderTarget(const RenderTargetKey& key, uint32
                                &view.subresourceRange);
   }
   if (old) {
+    rt->edram_seen = old->edram_seen;
     VkImageCopy copy = {};
     copy.srcSubresource = {aspect, 0, 0, 1};
     copy.dstSubresource = copy.srcSubresource;
@@ -3063,6 +3255,8 @@ RenderTarget* Renderer::Impl::GetRenderTarget(const RenderTargetKey& key, uint32
   return result;
 }
 
+#include "edram_color_cache.inl"
+
 bool Renderer::Impl::BeginPass(const PassTargets& targets) {
   if (in_pass) {
     // Keep the scope if every attachment the draw needs is already bound at
@@ -3078,6 +3272,9 @@ bool Renderer::Impl::BeginPass(const PassTargets& targets) {
     EndPass();
   }
   FlushResolveBarrier();
+  for (RenderTarget* rt : targets.color) {
+    if (rt) ImportEdramColor(*rt);
+  }
   ProfileMark((kProfilePass << 60) | (ProfileTargetBits(targets.color[0]) << 24) |
               ProfileTargetBits(targets.depth));
   pass = targets;
@@ -3420,7 +3617,12 @@ bool Renderer::Impl::BuildDrawSetup(uint32_t initiator_value) {
   draw_util::GetHostViewportInfo(r, sample_scale_x, sample_scale_y, false,
                                  properties.maxViewportDimensions[0],
                                  properties.maxViewportDimensions[1], true, depth_control, false,
-                                 true, ps && ps->writes_depth(), st.viewport);
+                                 // Unlike the SDK's quantizing host path, native
+                                 // oDepth/clear/resolve use guest [0,1] directly.
+                                 // Halving only viewport Z breaks restored-depth
+                                 // comparisons and the depth texture consumers.
+                                 !REXCVAR_GET(nx_guest_depth_range),
+                                 ps && ps->writes_depth(), st.viewport);
   // Rows the draw can touch: the viewport, cut by the scissor. The scissor
   // alone is often the 8192-pixel default and made every target 2048 tall.
   uint32_t needed_height = st.scissor.offset[1] + st.scissor.extent[1];
@@ -3535,6 +3737,18 @@ bool Renderer::Impl::BuildDrawSetup(uint32_t initiator_value) {
       }
     }
   }
+#if defined(_WIN32)
+  if (ps && REXCVAR_GET(nx_debug_material_no_depth) &&
+      (ps->ucode_data_hash() == 0x661AA86C99CEBF6Cull ||
+       ps->ucode_data_hash() == 0x9A68539EE8578330ull)) {
+    key.depth_test = key.depth_write = key.stencil_test = 0;
+    static bool reported = false;
+    if (!reported) {
+      reported = true;
+      REXLOG_WARN("[gl-material-diagnostic] body depth/stencil bypass ACTIVE; diagnostic image only");
+    }
+  }
+#endif
   for (uint32_t i = 0; i < 4; ++i) {
     uint32_t mask = (color_mask >> (4 * i)) & 0xF;
     if (!targets.color[i]) mask = 0;
@@ -3640,6 +3854,24 @@ struct SectionTimer {
     current = next;
   }
   ~SectionTimer() { Mark(-1); }
+};
+
+// Bounded CPU-only timing for a hot ring-thread section. It records no Vulkan
+// commands and does not change their ordering.
+struct PhaseTimer {
+  uint64_t* totals;
+  int current;
+  std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
+  void Mark(int next) {
+    const auto now = std::chrono::steady_clock::now();
+    if (current >= 0) {
+      totals[current] +=
+          uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(now - last).count());
+    }
+    last = now;
+    current = next;
+  }
+  ~PhaseTimer() { Mark(-1); }
 };
 
 void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_index_words) {
@@ -3948,13 +4180,18 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
     *last_out = draw_last;
     return true;
   };
+  uint32_t vertex_safety = REXCVAR_GET(nx_vertex_fetch_safety) & 15u;
+#if defined(_WIN32)
+  if (REXCVAR_GET(nx_debug_full_vertex_fetch)) vertex_safety = 7;
+#endif
   for (uint32_t word = 0; word < 3; ++word) {
     uint32_t bits = vs_constants.vertex_fetch_bitmap[word];
     uint32_t bit;
     while (rex::bit_scan_forward(bits, &bit)) {
       bits &= ~(1u << bit);
       uint32_t fetch_index = word * 32 + bit;
-      if (fetch_resolved_frame[fetch_index] == frame &&
+      if (!(vertex_safety & 1u) &&
+          fetch_resolved_frame[fetch_index] == frame &&
           fetch_dynamic_frame[fetch_index] != frame) {
         continue;
       }
@@ -3979,7 +4216,12 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
       bool known_hashed = false;
       auto whole_hash = [&]() -> uint64_t {
         if (!known_hashed) {
-          RangeHash(known, source, bytes, address);
+          if (vertex_safety & 4u) {
+            known.hash = XXH3_64bits(source, bytes);
+            vertex_hash_bytes += bytes;
+          } else {
+            RangeHash(known, source, bytes, address);
+          }
           known_hashed = true;
         }
         return known.hash;
@@ -3994,6 +4236,11 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
       // all their draws.
       uint32_t stride = 0, first = 0, last = 0;
       const uint32_t whole_reason = [&]() -> uint32_t {
+        if (vertex_safety & 2u) return 2;
+        // Only direct vertex-index streams have a proven simple range here.
+        // An indirect fetch (for example, a skinning palette) may access many
+        // independently indexed rows even within one guest vertex shader.
+        if ((vertex_safety & 8u) && !IndexStrides(vs)[fetch_index]) return 2;
         if (bytes <= (16u << 10)) return 1;
         stride = IndexStrides(vs)[fetch_index];
         if (stride) {
@@ -4373,6 +4620,10 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
     last_system = {submission_number, 0, nullptr, frame, system_offset};
   }
 
+  if (frame == manual_capture_frame) {
+    rex::graphics::CaptureManualDrawInputs(r, "native", frame, vs->ucode_data_hash(),
+        ps ? ps->ucode_data_hash() : 0, &system_constants, sizeof(system_constants));
+  }
   if (Tracing() && REXCVAR_GET(nx_trace_draws)) {
     std::string textures_text;
     for (uint32_t slot = 0; slot < 32; ++slot) {
@@ -4513,6 +4764,215 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
     }
   }
   SubmitDraw(d);
+  if (edram_color_buffer) {
+    VkRect2D touched = sr;
+    if (st.viewport.xy_extent[0] && st.viewport.xy_extent[1]) {
+      const uint32_t left = std::max(uint32_t(sr.offset.x), st.viewport.xy_offset[0]);
+      const uint32_t top = std::max(uint32_t(sr.offset.y), st.viewport.xy_offset[1]);
+      const uint32_t right = std::min(uint32_t(sr.offset.x) + sr.extent.width,
+          st.viewport.xy_offset[0] + st.viewport.xy_extent[0]);
+      const uint32_t bottom = std::min(uint32_t(sr.offset.y) + sr.extent.height,
+          st.viewport.xy_offset[1] + st.viewport.xy_extent[1]);
+      touched = {{int32_t(left), int32_t(top)},
+          {right > left ? right - left : 0, bottom > top ? bottom - top : 0}};
+    }
+    // The D3D clear rectangle runs with clipping disabled and an 8192x8192
+    // scissor. Those limits describe possible coverage, not the rectangle it
+    // actually draws. Interpret only this known, tiny VS (three vertices).
+    // In particular, do not invalidate the entire EDRAM for a 640x360 4x clear.
+    bool rectangle_bounds_known = false, rectangle_color_uniform = false;
+    bool rectangle_zero_depth = false;
+    float rectangle_depth_value = 0.0f;
+    if (vs && guest_count == 3 &&
+        initiator.prim_type == xenos::PrimitiveType::kRectangleList &&
+        vs->ucode_data_hash() == 0x1E6883FCCDE1F688ull &&
+        rex::graphics::ShaderInterpreter::CanInterpretShader(*vs)) {
+      struct PositionSink final : rex::graphics::ShaderInterpreter::ExportSink {
+        float position[4] = {};
+        float color[4] = {};
+        uint32_t mask = 0, color_mask = 0;
+        void Export(rex::graphics::ucode::ExportRegister target, const float* value,
+                    uint32_t value_mask) override {
+          const bool is_color = target == rex::graphics::ucode::ExportRegister::kVSInterpolator0;
+          if (!is_color && target != rex::graphics::ucode::ExportRegister::kVSPosition) return;
+          for (uint32_t i = 0; i < 4; ++i) {
+            if (value_mask & (1u << i)) (is_color ? color : position)[i] = value[i];
+          }
+          (is_color ? color_mask : mask) |= value_mask;
+        }
+      } sink;
+      if (!interpreter)
+        interpreter = std::make_unique<rex::graphics::ShaderInterpreter>(*regs, *memory);
+      interpreter->SetVertexFetchObserver(nullptr);
+      interpreter->SetExportSink(&sink);
+      interpreter->SetShader(*vs);
+      const auto vte = r.Get<reg::PA_CL_VTE_CNTL>();
+      float points[3][2] = {};
+      float first_color[4] = {};
+      bool uniform = true;
+      bool zero_depth = true;
+      float first_depth = 0.0f;
+      bool valid = true;
+      for (uint32_t i = 0; i < 3; ++i) {
+        uint32_t index = read_index(i);
+        if (reset_enabled && index == reset_index) { valid = false; break; }
+        index = (index + r[rex::graphics::XE_GPU_REG_VGT_INDX_OFFSET]) & xenos::kVertexIndexMask;
+        index = std::clamp(index,
+            r[rex::graphics::XE_GPU_REG_VGT_MIN_VTX_INDX] & xenos::kVertexIndexMask,
+            r[rex::graphics::XE_GPU_REG_VGT_MAX_VTX_INDX] & xenos::kVertexIndexMask);
+        std::memset(interpreter->temp_registers(), 0,
+                    sizeof(float) * 4 * xenos::kMaxShaderTempRegisters);
+        interpreter->temp_registers()[0] = float(index);
+        sink.mask = sink.color_mask = 0;
+        interpreter->Execute();
+        float guest_z = sink.position[2] / (vte.vtx_z_fmt ? 1.0f : sink.position[3]);
+        if (vte.vport_z_scale_ena) guest_z *= r.Get<float>(rex::graphics::XE_GPU_REG_PA_CL_VPORT_ZSCALE);
+        if (vte.vport_z_offset_ena) guest_z += r.Get<float>(rex::graphics::XE_GPU_REG_PA_CL_VPORT_ZOFFSET);
+        if (!i) first_depth = guest_z;
+        // The game's packed zero clears use a tiny negative vertex Z. The
+        // enabled depth clamp maps it to zero; this is not an epsilon test.
+        const bool clamps_to_zero = guest_z < 0.0f &&
+            device->properties().depthClamp &&
+            r.Get<reg::PA_CL_CLIP_CNTL>().clip_disable;
+        zero_depth &= (sink.mask & 4) && std::isfinite(guest_z) &&
+            (guest_z == 0.0f || clamps_to_zero);
+        uniform &= sink.color_mask == 15;
+        if (!i) std::memcpy(first_color, sink.color, sizeof(first_color));
+        else uniform &= std::memcmp(first_color, sink.color, sizeof(first_color)) == 0;
+        if ((sink.mask & 11) != 11 || !std::isfinite(sink.position[3]) ||
+            (!vte.vtx_xy_fmt && sink.position[3] == 0.0f)) { valid = false; break; }
+        for (uint32_t axis = 0; axis < 2; ++axis) {
+          const float p = sink.position[axis] / (vte.vtx_xy_fmt ? 1.0f : sink.position[3]);
+          const float ndc = p * st.viewport.ndc_scale[axis] + st.viewport.ndc_offset[axis];
+          points[i][axis] = (ndc + 1.0f) * 0.5f * (axis ? st.vp.height : st.vp.width) +
+              (axis ? st.vp.y : st.vp.x);
+          valid &= std::isfinite(points[i][axis]);
+        }
+      }
+      interpreter->SetExportSink(nullptr);
+      if (valid) {
+        float lo[2], hi[2];
+        for (uint32_t axis = 0; axis < 2; ++axis) {
+          lo[axis] = std::min({points[0][axis], points[1][axis], points[2][axis]});
+          hi[axis] = std::max({points[0][axis], points[1][axis], points[2][axis]});
+          valid &= lo[axis] < hi[axis];
+          for (uint32_t i = 0; i < 3; ++i) {
+            // Only axis-aligned, integer-boundary rectangles may reinitialize
+            // unknown tiles; fractional/rotated cases keep conservative bounds.
+            valid &= points[i][axis] == lo[axis] || points[i][axis] == hi[axis];
+          }
+          valid &= std::abs(lo[axis] - std::round(lo[axis])) < 0.001f &&
+                   std::abs(hi[axis] - std::round(hi[axis])) < 0.001f;
+        }
+        valid &= (points[0][0] != points[1][0] || points[0][1] != points[1][1]) &&
+                 (points[0][0] != points[2][0] || points[0][1] != points[2][1]) &&
+                 (points[1][0] != points[2][0] || points[1][1] != points[2][1]);
+        if (valid) {
+          const uint32_t left = uint32_t(std::clamp(std::round(lo[0]), float(touched.offset.x),
+              float(uint32_t(touched.offset.x) + touched.extent.width)));
+          const uint32_t top = uint32_t(std::clamp(std::round(lo[1]), float(touched.offset.y),
+              float(uint32_t(touched.offset.y) + touched.extent.height)));
+          const uint32_t right = uint32_t(std::clamp(std::round(hi[0]), float(left),
+              float(uint32_t(touched.offset.x) + touched.extent.width)));
+          const uint32_t bottom = uint32_t(std::clamp(std::round(hi[1]), float(top),
+              float(uint32_t(touched.offset.y) + touched.extent.height)));
+          touched = {{int32_t(left), int32_t(top)}, {right - left, bottom - top}};
+          rectangle_bounds_known = true;
+          rectangle_color_uniform = uniform;
+          rectangle_zero_depth = zero_depth;
+          rectangle_depth_value = first_depth;
+          if (Tracing()) REXLOG_INFO("[gl-edram] rectangle vertex bounds: {},{}/{}x{} guest_msaa={}",
+              left, top, right - left, bottom - top,
+              uint32_t(r.Get<reg::RB_SURFACE_INFO>().msaa_samples));
+        }
+      }
+    }
+    const auto dc = st.depth_control;
+    const auto cc = r.Get<reg::RB_COLORCONTROL>();
+    // Captured initialization rectangle: the PS only forwards its input color,
+    // no texture fetch, discard or depth export. Do not call arbitrary draws
+    // full overwrites merely because their scissor is large.
+    const bool initialization_rectangle = rectangle_bounds_known && rectangle_color_uniform &&
+        ps && vs && guest_count == 3 &&
+        initiator.prim_type == xenos::PrimitiveType::kRectangleList &&
+        vs->ucode_data_hash() == 0x1E6883FCCDE1F688ull &&
+        ps->ucode_data_hash() == 0xA4A965C189287B99ull &&
+        (!dc.z_enable || dc.zfunc == xenos::CompareFunction::kAlways) &&
+        (!dc.stencil_enable || (dc.stencilfunc == xenos::CompareFunction::kAlways &&
+            (!dc.backface_enable || dc.stencilfunc_bf == xenos::CompareFunction::kAlways))) &&
+        (!cc.alpha_test_enable || cc.alpha_func == xenos::CompareFunction::kAlways);
+    const uint32_t guest_samples = uint32_t(r.Get<reg::RB_SURFACE_INFO>().msaa_samples);
+    const uint32_t mask = r[rex::graphics::XE_GPU_REG_RB_COLOR_MASK];
+    for (uint32_t i = 0; i < 4; ++i) {
+      if (targets.color[i] && ((mask >> (i * 4)) & 15)) {
+        const bool replaces_all = initialization_rectangle && ((mask >> (i * 4)) & 15) == 15 &&
+            r[reg::RB_BLENDCONTROL::rt_register_indices[i]] == 0x00010001u;
+        MarkEdramWrite(*targets.color[i], touched, guest_samples, replaces_all);
+      }
+    }
+    const bool stencil_changes = dc.stencil_enable &&
+        ((st.stencil[2] && (dc.stencilfail != xenos::StencilOp::kKeep ||
+                           dc.stencilzfail != xenos::StencilOp::kKeep ||
+                           dc.stencilzpass != xenos::StencilOp::kKeep)) ||
+         (dc.backface_enable && st.stencil[3] &&
+              (dc.stencilfail_bf != xenos::StencilOp::kKeep ||
+               dc.stencilzfail_bf != xenos::StencilOp::kKeep ||
+               dc.stencilzpass_bf != xenos::StencilOp::kKeep)));
+    // The game clears color EDRAM via a depth/stencil-only rectangle at the
+    // same address (notably tile1328 before its HDR pass). Only publish an
+    // actual zero word: depthAlways/write0 and stencilAlways/replace0/fullmask.
+    const bool zero_depth_clear = REXCVAR_GET(nx_zero_clear_alias) && !ps &&
+        rectangle_bounds_known && rectangle_zero_depth &&
+        r.Get<reg::PA_CL_CLIP_CNTL>().clip_disable &&
+        !r.Get<reg::PA_CL_CLIP_CNTL>().ucp_ena &&
+        !r.Get<reg::PA_SU_SC_MODE_CNTL>().cull_front &&
+        !r.Get<reg::PA_SU_SC_MODE_CNTL>().cull_back &&
+        (r[rex::graphics::XE_GPU_REG_PA_SC_AA_MASK] & 0xFFFFu) == 0xFFFFu &&
+        st.bias_constant == 0.0f && st.bias_slope == 0.0f &&
+        dc.z_enable && dc.z_write_enable && dc.zfunc == xenos::CompareFunction::kAlways &&
+        dc.stencil_enable && dc.stencilfunc == xenos::CompareFunction::kAlways &&
+        dc.stencilzpass == xenos::StencilOp::kReplace && st.stencil[2] == 255 && !st.stencil[4] &&
+        (!dc.backface_enable || (dc.stencilfunc_bf == xenos::CompareFunction::kAlways &&
+            dc.stencilzpass_bf == xenos::StencilOp::kReplace && st.stencil[3] == 255 && !st.stencil[5]));
+    if (Tracing() && !ps && rectangle_bounds_known && targets.depth)
+      REXLOG_INFO("[gl-zero-alias] candidate base={} z={} all_zero={} clip={} ucp={} cull={}/{} ref={} write_mask={} matched={}",
+          targets.depth->key.base_tiles, rectangle_depth_value, rectangle_zero_depth,
+          r.Get<reg::PA_CL_CLIP_CNTL>().clip_disable, r.Get<reg::PA_CL_CLIP_CNTL>().ucp_ena,
+          r.Get<reg::PA_SU_SC_MODE_CNTL>().cull_front, r.Get<reg::PA_SU_SC_MODE_CNTL>().cull_back,
+          st.stencil[4], st.stencil[2], zero_depth_clear);
+    if (targets.depth && ((dc.z_enable && dc.z_write_enable) || stencil_changes))
+      MarkEdramWrite(*targets.depth, touched, guest_samples, false, zero_depth_clear);
+    // Publish known initializers separately, preserving their exact coverage.
+    if (initialization_rectangle || zero_depth_clear) EndPass();
+  }
+  // Shader F57... copies packed stencil to oC0.r and restores depth through
+  // oDepth. On Xenos those writes share EDRAM; on the host they are separate.
+  // Recognize only this full-screen, unconditional restore operation. This is
+  // not a general emulation of overlapping color/depth surfaces.
+  if (REXCVAR_GET(nx_restore_depth_stencil) && ps && vs && guest_count == 4 &&
+      ps->ucode_data_hash() == 0xF57B6BC95EB4EC9Bull &&
+      vs->ucode_data_hash() == 0x101E86A7F525A236ull &&
+      targets.color[0] && targets.depth &&
+      (r[rex::graphics::XE_GPU_REG_RB_COLOR_MASK] & 0xFFFFu) == 1u &&
+      targets.color[0]->key.base_tiles == targets.depth->key.base_tiles &&
+      targets.color[0]->key.pitch == targets.depth->key.pitch) {
+    const auto restore_depth = r.Get<reg::RB_DEPTHCONTROL>();
+    if (restore_depth.z_enable && restore_depth.z_write_enable &&
+        restore_depth.zfunc == xenos::CompareFunction::kAlways && !restore_depth.stencil_enable) {
+      const uint32_t left = std::max(uint32_t(sr.offset.x), st.viewport.xy_offset[0]);
+      const uint32_t top = std::max(uint32_t(sr.offset.y), st.viewport.xy_offset[1]);
+      const uint32_t right = std::min(uint32_t(sr.offset.x) + sr.extent.width,
+                                    st.viewport.xy_offset[0] + st.viewport.xy_extent[0]);
+      const uint32_t bottom = std::min(uint32_t(sr.offset.y) + sr.extent.height,
+                                     st.viewport.xy_offset[1] + st.viewport.xy_extent[1]);
+      if (right > left && bottom > top) {
+        const VkRect2D restore_rect = {{int32_t(left), int32_t(top)}, {right - left, bottom - top}};
+        if (!RestoreStencilFromColor(*targets.color[0], *targets.depth, restore_rect) &&
+            stencil_restore_reports++ < 8)
+          REXLOG_WARN("[gl-stencil] restore pass matched but transfer unavailable");
+      }
+    }
+  }
   ProfileDraw();
   ++frame_draw_count;
   ++stats().draws;
@@ -4535,6 +4995,7 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
 
 void Renderer::Impl::Resolve() {
   SectionTimer section{stats().section_ns, 5};
+  PhaseTimer phases{stats().resolve_phase_ns, 0};
   const RegisterFile& r = *regs;
   auto copy_control = r.Get<reg::RB_COPY_CONTROL>();
   auto surface_info = r.Get<reg::RB_SURFACE_INFO>();
@@ -4602,6 +5063,7 @@ void Renderer::Impl::Resolve() {
               (uint64_t(surface_info.surface_pitch & 0x7FF) << 32) |
               (uint64_t(uint32_t(x1 - x0) & 0xFFFF) << 16) | uint32_t(y1 - y0));
   VkCommandBuffer c = cmd();
+  phases.Mark(1);
 
   RenderTargetKey source_key = {};
   source_key.pitch = surface_info.surface_pitch;
@@ -4619,6 +5081,8 @@ void Renderer::Impl::Resolve() {
   }
   RenderTarget* source = GetRenderTarget(source_key, uint32_t(y1));
   if (!source) return;
+  ImportEdramColor(*source);
+  phases.Mark(2);
   c = cmd();
   uint32_t width = uint32_t(x1 - x0);
   uint32_t height = std::min(uint32_t(y1 - y0), source->height - std::min(uint32_t(y0), source->height));
@@ -4692,8 +5156,10 @@ void Renderer::Impl::Resolve() {
     if (!is_depth && dest_info.copy_dest_swap) {
       host_swizzle = XE_GPU_MAKE_TEXTURE_SWIZZLE(B, G, R, A);
     }
+    phases.Mark(3);
     ResolveDestination* dest = textures.GetResolveDestination(
         dest_base & 0x1FFFFFFF, dest_width, dest_height, dest_format, host_swizzle, c);
+    phases.Mark(4);
     if (dest) {
       if (Tracing() && !is_depth && !msaa) {
         // The high bit distinguishes the source before conversion from its destination.
@@ -4717,8 +5183,9 @@ void Renderer::Impl::Resolve() {
         const bool has_stencil = HasStencil(source->format);
         const bool unorm_guest = xenos::DepthRenderTargetFormat(source->key.format) ==
                                  xenos::DepthRenderTargetFormat::kD24S8;
-        if (msaa == 0 && depth_copy_pipeline && source->sample_view &&
-            !textures.WantsDepthWords(dest_base & 0x1FFFFFFF)) {
+        const bool need_words = textures.WantsDepthWords(dest_base & 0x1FFFFFFF) ||
+            (REXCVAR_GET(nx_restore_depth_stencil) && !unorm_guest);
+        if (msaa == 0 && depth_copy_pipeline && source->sample_view && !need_words) {
           // The usual case: the game samples the resolve only as depth.
           VkMemoryBarrier to_compute = {
               VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
@@ -4790,7 +5257,8 @@ void Renderer::Impl::Resolve() {
           uint32_t params[5] = {count, kGroupsPerRow * 64, uint32_t(stencil_offset / 4),
                                 uint32_t(packed_offset / 4),
                                 (source->format == VK_FORMAT_D24_UNORM_S8_UINT ? 1u : 0u) |
-                                    (has_stencil ? 2u : 0u)};
+                                    (has_stencil ? 2u : 0u) |
+                                    (!unorm_guest && REXCVAR_GET(nx_restore_depth_stencil) ? 4u : 0u)};
           dfn().vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_convert_pipeline);
           dfn().vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_convert_layout,
                                         0, 1, &depth_convert_set, 0, nullptr);
@@ -4807,9 +5275,9 @@ void Renderer::Impl::Resolve() {
           out.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
           dfn().vkCmdCopyBufferToImage(c, depth_scratch, dest->image, VK_IMAGE_LAYOUT_GENERAL, 1,
                                        &out);
-          // The words only for unorm depth: float24 would need its own
-          // encoding, and the game samples those buffers (shadow maps) as depth.
-          if (unorm_guest) {
+          // Float24 also needs raw words: Green Lantern restores the stencil
+          // from the packed byte texture, not from the floating depth view.
+          if (unorm_guest || REXCVAR_GET(nx_restore_depth_stencil)) {
             ResolveDestination* words = textures.GetResolveDestination(
                 (dest_base & 0x1FFFFFFF) | TextureCache::kDepthWordsTag, dest_width, dest_height,
                 VK_FORMAT_R8G8B8A8_UNORM, uint32_t(xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA), c);
@@ -4818,6 +5286,20 @@ void Renderer::Impl::Resolve() {
               dfn().vkCmdCopyBufferToImage(c, depth_scratch, words->image,
                                            VK_IMAGE_LAYOUT_GENERAL, 1, &out);
               textures.CopyToSized(*words, c);
+#if defined(_WIN32)
+              // Inspect the exact byte texture consumed by the stencil-restore
+              // shader. Do not spend the Switch's capture budget on this probe.
+              if (Tracing()) {
+                TraceDumpImage(c, words->image, dest_width, dest_height,
+                    VK_FORMAT_R8G8B8A8_UNORM,
+                    (dest_base & 0x1FFFFFFFu) | 0x40000000u, false,
+                    0, 0, dest_width, dest_height, "packed_depth_words");
+              }
+#endif
+              static uint32_t packed_reports = 0;
+              if (packed_reports++ < 8)
+                REXLOG_INFO("[gl-stencil] packed depth words base={:08X} float24={} stencil={} {}x{}",
+                    dest_base & 0x1FFFFFFF, !unorm_guest, has_stencil, width, height);
             }
           }
         } else {
@@ -4858,11 +5340,12 @@ void Renderer::Impl::Resolve() {
       textures.CopyToSized(*dest, c);
       if (Tracing()) {
         TraceDumpImage(c, dest->image, dest->width, dest->height, dest->format,
-                       dest_base & 0x1FFFFFFF);
+                       dest_base & 0x1FFFFFFF, false, uint32_t(x0), uint32_t(y0), width, height);
         ++trace_resolve;
       }
     }
   }
+  phases.Mark(5);
 
   // Clear (RenderTargetCache::PerformTransfersAndResolveClears).
   bool clear_depth = copy_control.depth_clear_enable != 0;
@@ -4979,6 +5462,10 @@ void Renderer::Impl::Resolve() {
       rect.layerCount = 1;
       if (rect.rect.extent.width && rect.rect.extent.height) {
         dfn().vkCmdClearAttachments(c, count, attachments, 1, &rect);
+        if (color_target) MarkEdramWrite(*color_target, rect.rect,
+            uint32_t(surface_info.msaa_samples), true);
+        if (depth_target) MarkEdramWrite(*depth_target, rect.rect,
+            uint32_t(surface_info.msaa_samples), true);
       }
       EndPass();
     }
@@ -5020,6 +5507,7 @@ void Renderer::Impl::FlushResolveBarrier() {
 void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, uint32_t width,
                           uint32_t height) {
   SectionTimer section{stats().section_ns, 6};
+  PhaseTimer phases{stats().swap_phase_ns, 0};
   // VdSwap describes the frontbuffer in texture fetch constant 0, swizzle
   // included; the SDK presents from it too (RequestSwapTexture). Without the
   // swizzle, red and blue come out swapped.
@@ -5051,6 +5539,7 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
     REXLOG_INFO("[native] Frontbuffer {:08X} {}x{}, swizzle {:03X}", address, width, height,
                 guest_swizzle);
   }
+  phases.Mark(1);
   if (presenter && source_view) {
     width = std::min(width ? width : source_width, source_width);
     height = std::min(height ? height : source_height, source_height);
@@ -5126,7 +5615,9 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
           return true;
         });
   }
+  phases.Mark(2);
   Submit();
+  phases.Mark(3);
   // Frame boundary.
   trace_draw = 0;
   trace_resolve = 0;
@@ -5170,10 +5661,21 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
   frame_upload_wait_ns = frame_fence_wait_ns = frame_drain_wait_ns = frame_texture_ns = 0;
   frame_draw_count = 0;
   ++frame;
-  if (graphics_capture_requested.exchange(false, std::memory_order_relaxed)) {
+  if (edram_color_buffer && frame % 300 == 0) {
+    uint32_t unknown_tiles = 0;
+    for (const auto& tile : edram_color_tiles) unknown_tiles += tile.unknown_write;
+    REXLOG_INFO("[gl-edram] frame={} imported_tiles_total={} published_tiles_total={} unknown_tiles={}",
+        frame, edram_tiles_imported, edram_tiles_published, unknown_tiles);
+  }
+  if (graphics_capture_requested.exchange(false, std::memory_order_relaxed) ||
+      (REXCVAR_GET(nx_capture_frame) && frame == REXCVAR_GET(nx_capture_frame))) {
     if (manual_capture_count < 4) {
       std::error_code error;
-      std::filesystem::create_directories("sdmc:/switch/green_lantern/logs/capture", error);
+#if defined(__SWITCH__)
+      std::filesystem::create_directories("sdmc:/switch/green_lantern/logs/capture/native", error);
+#else
+      std::filesystem::create_directories("capture/native", error);
+#endif
       if (!error) {
         manual_capture_frame = frame;
         ++manual_capture_count;
@@ -5197,6 +5699,7 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
       ++it;
     }
   }
+  phases.Mark(-1);
 }
 
 // --- Driver pipeline cache ---------------------------------------------------------------

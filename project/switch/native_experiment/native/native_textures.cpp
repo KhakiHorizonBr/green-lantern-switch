@@ -1061,6 +1061,7 @@ void TextureCache::BeginFrame(uint64_t frame, uint64_t completed_frame) {
   }
   // Adapt the reference port's frame-age eviction; never destroy GPU-in-flight resources.
   const bool adaptive = REXCVAR_GET(nx_auto_memory);
+#if defined(__SWITCH__)
   if (adaptive && frame % 30 == 0) {
     const auto heap = mallinfo();
     const bool before = im.memory_pressure;
@@ -1072,6 +1073,11 @@ void TextureCache::BeginFrame(uint64_t frame, uint64_t completed_frame) {
                    __nx_heap_size >> 20, pending_staging_bytes.load() >> 20);
     }
   } else if (!adaptive) im.memory_pressure = false;
+#else
+  // The desktop comparison has no libnx malloc heap budget. Keep the same
+  // age-based cache eviction, without inventing a Switch pressure measurement.
+  im.memory_pressure = false;
+#endif
   const uint64_t evict_age = im.memory_pressure ? 60 : 600;
   const uint64_t scan_interval = im.memory_pressure ? 15 : 60;
   if (frame % scan_interval == 0) {

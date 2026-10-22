@@ -66,6 +66,12 @@ struct RendererStats {
   // Ring thread time: 0 render state, 1 indices, 2 vertices and fetch
   // constants, 3 shader constants and textures, 4 recording, 5 resolves, 6 swaps.
   uint64_t section_ns[8] = {};
+  // CPU-only breakdown of the two hottest ring-thread sections. Resolve:
+  // decode/setup, source target+import, pre-destination setup, destination
+  // lookup, copy/convert command recording, clear/tail. Swap: frontbuffer
+  // lookup/metadata, presenter refresh, final submit, end-of-frame bookkeeping.
+  uint64_t resolve_phase_ns[6] = {};
+  uint64_t swap_phase_ns[4] = {};
   // Whole-buffer copies by reason (see the fetch constants in Draw).
   uint64_t vertex_bytes_whole[8] = {};
   uint64_t stream_bytes = 0;

@@ -1,7725 +1,1375 @@
-/**
- ******************************************************************************
- * Xenia : Xbox 360 Emulator Research Project                                 *
- ******************************************************************************
- * Copyright 2022 Ben Vanik. All rights reserved.                             *
- * Released under the BSD license - see LICENSE in the root for more details. *
- ******************************************************************************
- *
- * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
- */
-
-#include <algorithm>
-#include <array>
-#include <atomic>
-#include <bit>
-#include <chrono>
-#include <cstdint>
-#include <cstring>
-#include <iterator>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <utility>
-#include <vector>
-
-#include <SPIRV/GlslangToSpv.h>
-#include <glslang/Public/ShaderLang.h>
-#include <rex/assert.h>
-#include <rex/cvar.h>
-#include <rex/dbg.h>
-#include <rex/hash.h>
-#include <rex/logging.h>
-#include <rex/graphics/draw_compare.h>
-#include <rex/math.h>
-#include <rex/graphics/util/draw.h>
-#include <rex/graphics/flags.h>
-#include <rex/graphics/pipeline/shader/shader.h>
-#include <rex/graphics/pipeline/shader/spirv_translator.h>
-#include <rex/graphics/registers.h>
-#include <rex/graphics/vulkan/command_processor.h>
-#include <rex/graphics/vulkan/pipeline_cache.h>
-#include <rex/graphics/vulkan/render_target_cache.h>
-#include <rex/graphics/vulkan/shader.h>
-#include <rex/graphics/vulkan/shared_memory.h>
-#include <rex/graphics/xenos.h>
-#include <rex/kernel/xboxkrnl/video.h>
-#include <rex/perf/counter.h>
-#include <rex/system/kernel_state.h>
-#include <rex/types.h>
-#include <rex/memory/utils.h>
-#include <rex/ui/flags.h>
-#include <rex/ui/vulkan/presenter.h>
-#include <rex/ui/vulkan/util.h>
-
-// Plugin-internal, so not under include/rex.
-#include "draw_census.h"
-#include "native_residency.h"
-
-// Legacy backend compatibility aliases for shared readback controls.
-REXCVAR_DEFINE_BOOL(gpu_timestamp_queries, false, "GPU",
-                    "Measure GPU time per frame with a pair of Vulkan timestamp queries and "
-                    "publish it as the gpu_frame_us counter. Every other counter here is "
-                    "CPU-side, which on an APU is only half the picture.")
-    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
-REXCVAR_DEFINE_BOOL(gpu_sampler_set_reuse, false, "GPU/Vulkan",
-                    "EXPERIMENTAL - reuse an identical adjacent sampler set within a submission")
-    .lifecycle(rex::cvar::Lifecycle::kHotReload);
-REXCVAR_DEFINE_BOOL(
-    gpu_texture_descriptor_set_adjacent_reuse, false, "GPU/Vulkan",
-    "EXPERIMENTAL - reuse the immediately preceding exact texture/sampler descriptor set")
-    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
-REXCVAR_DEFINE_BOOL(vulkan_readback_resolve, false, "GPU/Vulkan",
-                    "Read render-to-texture results on the CPU")
-    .lifecycle(rex::cvar::Lifecycle::kHotReload);
-
-REXCVAR_DEFINE_BOOL(vulkan_readback_memexport, false, "GPU/Vulkan",
-                    "Read data written by memory export in shaders on the CPU")
-    .lifecycle(rex::cvar::Lifecycle::kHotReload);
-
-REXCVAR_DEFINE_BOOL(vulkan_async_skip_incomplete_frames, true, "GPU/Vulkan",
-                    "When async shader compilation is enabled, skip presenting frames that "
-                    "used placeholder pipelines to avoid visible flashing")
-    .lifecycle(rex::cvar::Lifecycle::kHotReload);
-
-REXCVAR_DEFINE_BOOL(vulkan_submit_on_primary_buffer_end, true, "GPU/Vulkan",
-                    "Submit command buffer when PM4 primary buffer ends")
-    .lifecycle(rex::cvar::Lifecycle::kHotReload);
-
-REXCVAR_DEFINE_BOOL(vulkan_dynamic_rendering, true, "GPU/Vulkan",
-                    "Use VK_KHR_dynamic_rendering for Vulkan GPU emulation when supported by the "
-                    "device (falls back to render passes otherwise)")
-    .lifecycle(rex::cvar::Lifecycle::kHotReload);
-
-#include <rex/platform.h>
-#if REX_PLATFORM_SWITCH
-#include <rex/graphics/switch_gpu_timing.h>
-// Counters and A/B skips of the Switch profiler (switch_perf.cpp).
-extern "C" void RexSwitchPerfCount(unsigned id);
-extern "C" void RexSwitchPerfAdd(unsigned id, uint64_t value);
-extern "C" bool RexSwitchPerfSkip(unsigned bit);
-#endif
-
-namespace rex::graphics::vulkan {
-
-namespace {
-
-// True when draws should be dropped for the suppression oracle. Refuses to
-// engage alongside native residency, which it would silently invalidate.
-bool NativeSuppressDrawsActive() {
-  if (!REXCVAR_GET(gpu_native_suppress_draws)) {
-    return false;
-  }
-  if (REXCVAR_GET(gpu_native_residency)) {
-    static bool refusal_logged = false;
-    if (!refusal_logged) {
-      refusal_logged = true;
-      REXGPU_WARN("gpu_native_suppress_draws ignored: it cannot be combined with "
-                  "gpu_native_residency");
-    }
-    return false;
-  }
-  return true;
-}
-
-class CensusDrawAttempt {
- public:
-  explicit CensusDrawAttempt(draw_census::Recorder* recorder) : recorder_(recorder) {}
-  ~CensusDrawAttempt() {
-    if (recorder_ && !committed_) {
-      recorder_->NoteDrawSkipped();
-    }
-  }
-  void Commit() { committed_ = true; }
-
- private:
-  draw_census::Recorder* recorder_;
-  bool committed_ = false;
-};
-
-draw_census::ShaderRecord MakeCensusShaderRecord(const VulkanShader& shader) {
-  draw_census::ShaderRecord record{};
-  const Shader::ConstantRegisterMap& constants = shader.constant_register_map();
-  record.ucode_hash = shader.ucode_data_hash();
-  record.shader_type = uint8_t(shader.type());
-  record.memexport = shader.memexport_eM_written() != 0;
-  record.vertex_binding_count =
-      uint16_t(std::min<size_t>(shader.vertex_bindings().size(), UINT16_MAX));
-  record.ucode_dword_count = uint32_t(shader.ucode_dword_count());
-  record.float_count = constants.float_count;
-  std::memcpy(record.float_bitmap, constants.float_bitmap, sizeof(record.float_bitmap));
-  std::memcpy(record.bool_bitmap, constants.bool_bitmap, sizeof(record.bool_bitmap));
-  record.loop_bitmap = constants.loop_bitmap;
-  std::memcpy(record.vertex_fetch_bitmap, constants.vertex_fetch_bitmap,
-              sizeof(record.vertex_fetch_bitmap));
-  record.texture_mask = shader.GetUsedTextureMaskAfterTranslation();
-
-  // Hash explicit-width fields one by one so no host padding or enum width can
-  // enter the canonical declared-layout identity.
-  XXH3_state_t hash_state;
-  XXH3_64bits_reset(&hash_state);
-  for (const Shader::VertexBinding& binding : shader.vertex_bindings()) {
-    const uint32_t fetch_constant = binding.fetch_constant;
-    const uint32_t stride_words = binding.stride_words;
-    const uint32_t attribute_count = uint32_t(binding.attributes.size());
-    XXH3_64bits_update(&hash_state, &fetch_constant, sizeof(fetch_constant));
-    XXH3_64bits_update(&hash_state, &stride_words, sizeof(stride_words));
-    XXH3_64bits_update(&hash_state, &attribute_count, sizeof(attribute_count));
-    for (const Shader::VertexBinding::Attribute& attribute : binding.attributes) {
-      const ParsedVertexFetchInstruction::Attributes& layout = attribute.fetch_instr.attributes;
-      const uint32_t data_format = uint32_t(layout.data_format);
-      const uint32_t signed_rf_mode = uint32_t(layout.signed_rf_mode);
-      const uint8_t flags = uint8_t(layout.is_index_rounded) |
-                            (uint8_t(layout.is_signed) << 1) |
-                            (uint8_t(layout.is_integer) << 2);
-      XXH3_64bits_update(&hash_state, &data_format, sizeof(data_format));
-      XXH3_64bits_update(&hash_state, &layout.offset, sizeof(layout.offset));
-      XXH3_64bits_update(&hash_state, &layout.stride, sizeof(layout.stride));
-      XXH3_64bits_update(&hash_state, &layout.exp_adjust, sizeof(layout.exp_adjust));
-      XXH3_64bits_update(&hash_state, &layout.prefetch_count, sizeof(layout.prefetch_count));
-      XXH3_64bits_update(&hash_state, &signed_rf_mode, sizeof(signed_rf_mode));
-      XXH3_64bits_update(&hash_state, &flags, sizeof(flags));
-    }
-  }
-  record.vertex_layout_hash = XXH3_64bits_digest(&hash_state);
-  return record;
-}
-
-// glslang default built-in resource limits.
-constexpr TBuiltInResource kGlslangDefaultTBuiltInResource = {
-    /* .maxLights = */ 32,
-    /* .maxClipPlanes = */ 6,
-    /* .maxTextureUnits = */ 32,
-    /* .maxTextureCoords = */ 32,
-    /* .maxVertexAttribs = */ 64,
-    /* .maxVertexUniformComponents = */ 4096,
-    /* .maxVaryingFloats = */ 64,
-    /* .maxVertexTextureImageUnits = */ 32,
-    /* .maxCombinedTextureImageUnits = */ 80,
-    /* .maxTextureImageUnits = */ 32,
-    /* .maxFragmentUniformComponents = */ 4096,
-    /* .maxDrawBuffers = */ 32,
-    /* .maxVertexUniformVectors = */ 128,
-    /* .maxVaryingVectors = */ 8,
-    /* .maxFragmentUniformVectors = */ 16,
-    /* .maxVertexOutputVectors = */ 16,
-    /* .maxFragmentInputVectors = */ 15,
-    /* .minProgramTexelOffset = */ -8,
-    /* .maxProgramTexelOffset = */ 7,
-    /* .maxClipDistances = */ 8,
-    /* .maxComputeWorkGroupCountX = */ 65535,
-    /* .maxComputeWorkGroupCountY = */ 65535,
-    /* .maxComputeWorkGroupCountZ = */ 65535,
-    /* .maxComputeWorkGroupSizeX = */ 1024,
-    /* .maxComputeWorkGroupSizeY = */ 1024,
-    /* .maxComputeWorkGroupSizeZ = */ 64,
-    /* .maxComputeUniformComponents = */ 1024,
-    /* .maxComputeTextureImageUnits = */ 16,
-    /* .maxComputeImageUniforms = */ 8,
-    /* .maxComputeAtomicCounters = */ 8,
-    /* .maxComputeAtomicCounterBuffers = */ 1,
-    /* .maxVaryingComponents = */ 60,
-    /* .maxVertexOutputComponents = */ 64,
-    /* .maxGeometryInputComponents = */ 64,
-    /* .maxGeometryOutputComponents = */ 128,
-    /* .maxFragmentInputComponents = */ 128,
-    /* .maxImageUnits = */ 8,
-    /* .maxCombinedImageUnitsAndFragmentOutputs = */ 8,
-    /* .maxCombinedShaderOutputResources = */ 8,
-    /* .maxImageSamples = */ 0,
-    /* .maxVertexImageUniforms = */ 0,
-    /* .maxTessControlImageUniforms = */ 0,
-    /* .maxTessEvaluationImageUniforms = */ 0,
-    /* .maxGeometryImageUniforms = */ 0,
-    /* .maxFragmentImageUniforms = */ 8,
-    /* .maxCombinedImageUniforms = */ 8,
-    /* .maxGeometryTextureImageUnits = */ 16,
-    /* .maxGeometryOutputVertices = */ 256,
-    /* .maxGeometryTotalOutputComponents = */ 1024,
-    /* .maxGeometryUniformComponents = */ 1024,
-    /* .maxGeometryVaryingComponents = */ 64,
-    /* .maxTessControlInputComponents = */ 128,
-    /* .maxTessControlOutputComponents = */ 128,
-    /* .maxTessControlTextureImageUnits = */ 16,
-    /* .maxTessControlUniformComponents = */ 1024,
-    /* .maxTessControlTotalOutputComponents = */ 4096,
-    /* .maxTessEvaluationInputComponents = */ 128,
-    /* .maxTessEvaluationOutputComponents = */ 128,
-    /* .maxTessEvaluationTextureImageUnits = */ 16,
-    /* .maxTessEvaluationUniformComponents = */ 1024,
-    /* .maxTessPatchComponents = */ 120,
-    /* .maxPatchVertices = */ 32,
-    /* .maxTessGenLevel = */ 64,
-    /* .maxViewports = */ 16,
-    /* .maxVertexAtomicCounters = */ 0,
-    /* .maxTessControlAtomicCounters = */ 0,
-    /* .maxTessEvaluationAtomicCounters = */ 0,
-    /* .maxGeometryAtomicCounters = */ 0,
-    /* .maxFragmentAtomicCounters = */ 8,
-    /* .maxCombinedAtomicCounters = */ 8,
-    /* .maxAtomicCounterBindings = */ 1,
-    /* .maxVertexAtomicCounterBuffers = */ 0,
-    /* .maxTessControlAtomicCounterBuffers = */ 0,
-    /* .maxTessEvaluationAtomicCounterBuffers = */ 0,
-    /* .maxGeometryAtomicCounterBuffers = */ 0,
-    /* .maxFragmentAtomicCounterBuffers = */ 1,
-    /* .maxCombinedAtomicCounterBuffers = */ 1,
-    /* .maxAtomicCounterBufferSize = */ 16384,
-    /* .maxTransformFeedbackBuffers = */ 4,
-    /* .maxTransformFeedbackInterleavedComponents = */ 64,
-    /* .maxCullDistances = */ 8,
-    /* .maxCombinedClipAndCullDistances = */ 8,
-    /* .maxSamples = */ 4,
-    /* .maxMeshOutputVerticesNV = */ 256,
-    /* .maxMeshOutputPrimitivesNV = */ 512,
-    /* .maxMeshWorkGroupSizeX_NV = */ 32,
-    /* .maxMeshWorkGroupSizeY_NV = */ 1,
-    /* .maxMeshWorkGroupSizeZ_NV = */ 1,
-    /* .maxTaskWorkGroupSizeX_NV = */ 32,
-    /* .maxTaskWorkGroupSizeY_NV = */ 1,
-    /* .maxTaskWorkGroupSizeZ_NV = */ 1,
-    /* .maxMeshViewCountNV = */ 4,
-    /* .maxDualSourceDrawBuffersEXT = */ 1,
-    /* .limits = */
-    {
-        /* .nonInductiveForLoops = */ 1,
-        /* .whileLoops = */ 1,
-        /* .doWhileLoops = */ 1,
-        /* .generalUniformIndexing = */ 1,
-        /* .generalAttributeMatrixVectorIndexing = */ 1,
-        /* .generalVaryingIndexing = */ 1,
-        /* .generalSamplerIndexing = */ 1,
-        /* .generalVariableIndexing = */ 1,
-        /* .generalConstantMatrixVectorIndexing = */ 1,
-    },
-};
-
-const char* GetSwapFxaaComputeSource(bool extreme_quality) {
-  return extreme_quality ? R"(#version 450
-layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
-
-layout(push_constant) uniform XeApplyGammaRampConstants {
-  uvec2 xe_fxaa_size;
-  vec2 xe_fxaa_size_inv;
-};
-
-layout(set = 0, binding = 0) uniform sampler2D xe_fxaa_source;
-layout(set = 1, binding = 0, rgb10_a2) writeonly uniform image2D xe_fxaa_dest;
-
-const vec3 kLumaWeights = vec3(0.299, 0.587, 0.114);
-const float kEdgeThreshold = 0.063;
-const float kEdgeThresholdMin = 0.0312;
-const float kSpanMax = 12.0;
-const float kDirReduceMul = 0.125;
-const float kDirReduceMin = 1.0 / 128.0;
-
-float SampleLuma(vec2 uv) {
-  return textureLod(xe_fxaa_source, uv, 0.0).a;
-}
-
-void main() {
-  uvec2 pixel = gl_GlobalInvocationID.xy;
-  if (any(greaterThanEqual(pixel, xe_fxaa_size))) {
-    return;
-  }
-
-  vec2 uv = (vec2(pixel) + vec2(0.5)) * xe_fxaa_size_inv;
-  vec2 texel = xe_fxaa_size_inv;
-  vec4 rgbm = textureLod(xe_fxaa_source, uv, 0.0);
-
-  float lumaM = rgbm.a;
-  float lumaNW = SampleLuma(uv + vec2(-texel.x, -texel.y));
-  float lumaNE = SampleLuma(uv + vec2( texel.x, -texel.y));
-  float lumaSW = SampleLuma(uv + vec2(-texel.x,  texel.y));
-  float lumaSE = SampleLuma(uv + vec2( texel.x,  texel.y));
-
-  float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-  float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-  float lumaRange = lumaMax - lumaMin;
-
-  vec3 result = rgbm.rgb;
-  if (lumaRange >= max(kEdgeThresholdMin, lumaMax * kEdgeThreshold)) {
-    vec2 dir;
-    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-
-    float dirReduce = max(
-        (lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * kDirReduceMul),
-        kDirReduceMin);
-    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
-    dir = clamp(dir * rcpDirMin, vec2(-kSpanMax), vec2(kSpanMax)) * texel;
-
-    vec3 rgbA =
-        0.5 *
-        (textureLod(xe_fxaa_source, uv + dir * (1.0 / 3.0 - 0.5), 0.0).rgb +
-         textureLod(xe_fxaa_source, uv + dir * (2.0 / 3.0 - 0.5), 0.0).rgb);
-    vec3 rgbB =
-        rgbA * 0.5 +
-        0.25 *
-            (textureLod(xe_fxaa_source, uv + dir * -0.5, 0.0).rgb +
-             textureLod(xe_fxaa_source, uv + dir * 0.5, 0.0).rgb);
-    float lumaB = dot(rgbB, kLumaWeights);
-    result = (lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB;
-  }
-
-  imageStore(xe_fxaa_dest, ivec2(pixel), vec4(result, 1.0));
-}
-)"
-                         : R"(#version 450
-layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
-
-layout(push_constant) uniform XeApplyGammaRampConstants {
-  uvec2 xe_fxaa_size;
-  vec2 xe_fxaa_size_inv;
-};
-
-layout(set = 0, binding = 0) uniform sampler2D xe_fxaa_source;
-layout(set = 1, binding = 0, rgb10_a2) writeonly uniform image2D xe_fxaa_dest;
-
-const vec3 kLumaWeights = vec3(0.299, 0.587, 0.114);
-const float kEdgeThreshold = 0.166;
-const float kEdgeThresholdMin = 0.0833;
-const float kSpanMax = 8.0;
-const float kDirReduceMul = 0.125;
-const float kDirReduceMin = 1.0 / 128.0;
-
-float SampleLuma(vec2 uv) {
-  return textureLod(xe_fxaa_source, uv, 0.0).a;
-}
-
-void main() {
-  uvec2 pixel = gl_GlobalInvocationID.xy;
-  if (any(greaterThanEqual(pixel, xe_fxaa_size))) {
-    return;
-  }
-
-  vec2 uv = (vec2(pixel) + vec2(0.5)) * xe_fxaa_size_inv;
-  vec2 texel = xe_fxaa_size_inv;
-  vec4 rgbm = textureLod(xe_fxaa_source, uv, 0.0);
-
-  float lumaM = rgbm.a;
-  float lumaNW = SampleLuma(uv + vec2(-texel.x, -texel.y));
-  float lumaNE = SampleLuma(uv + vec2( texel.x, -texel.y));
-  float lumaSW = SampleLuma(uv + vec2(-texel.x,  texel.y));
-  float lumaSE = SampleLuma(uv + vec2( texel.x,  texel.y));
-
-  float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-  float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-  float lumaRange = lumaMax - lumaMin;
-
-  vec3 result = rgbm.rgb;
-  if (lumaRange >= max(kEdgeThresholdMin, lumaMax * kEdgeThreshold)) {
-    vec2 dir;
-    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-
-    float dirReduce = max(
-        (lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * kDirReduceMul),
-        kDirReduceMin);
-    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
-    dir = clamp(dir * rcpDirMin, vec2(-kSpanMax), vec2(kSpanMax)) * texel;
-
-    vec3 rgbA =
-        0.5 *
-        (textureLod(xe_fxaa_source, uv + dir * (1.0 / 3.0 - 0.5), 0.0).rgb +
-         textureLod(xe_fxaa_source, uv + dir * (2.0 / 3.0 - 0.5), 0.0).rgb);
-    vec3 rgbB =
-        rgbA * 0.5 +
-        0.25 *
-            (textureLod(xe_fxaa_source, uv + dir * -0.5, 0.0).rgb +
-             textureLod(xe_fxaa_source, uv + dir * 0.5, 0.0).rgb);
-    float lumaB = dot(rgbB, kLumaWeights);
-    result = (lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB;
-  }
-
-  imageStore(xe_fxaa_dest, ivec2(pixel), vec4(result, 1.0));
-}
-)";
-}
-
-const char* GetSwapApplyGammaTablePixelRbSwapSource() {
-  return R"(#version 450
-layout(set = 0, binding = 0) uniform textureBuffer xe_apply_gamma_ramp;
-layout(set = 1, binding = 0) uniform texture2D xe_apply_gamma_source;
-
-layout(location = 0) out vec4 xe_apply_gamma_color;
-
-void main() {
-  ivec2 pixel = ivec2(gl_FragCoord.xy);
-  uvec3 source = uvec3(texelFetch(xe_apply_gamma_source, pixel, 0).rgb * 255.0 + vec3(0.5)).bgr;
-  xe_apply_gamma_color = vec4(
-      texelFetch(xe_apply_gamma_ramp, int(source.r)).b,
-      texelFetch(xe_apply_gamma_ramp, int(source.g)).g,
-      texelFetch(xe_apply_gamma_ramp, int(source.b)).r,
-      1.0);
-}
-)";
-}
-
-const char* GetSwapApplyGammaPwlPixelRbSwapSource() {
-  return R"(#version 450
-layout(set = 0, binding = 0) uniform utextureBuffer xe_apply_gamma_ramp;
-layout(set = 1, binding = 0) uniform texture2D xe_apply_gamma_source;
-
-layout(location = 0) out vec4 xe_apply_gamma_color;
-
-float ApplyPwl(uint source_value_10b, uint channel) {
-  uint source_value_base = source_value_10b >> 3u;
-  uvec4 pwl = texelFetch(xe_apply_gamma_ramp, int(source_value_base * 3u + channel));
-  float value = float(pwl.x) + float((source_value_10b & 7u) * pwl.y) * 0.125;
-  return clamp(value * 1.52737048e-05, 0.0, 1.0);
-}
-
-void main() {
-  ivec2 pixel = ivec2(gl_FragCoord.xy);
-  uvec3 source = uvec3(texelFetch(xe_apply_gamma_source, pixel, 0).rgb * 1023.0 + vec3(0.5)).bgr;
-  xe_apply_gamma_color = vec4(
-      ApplyPwl(source.r, 0u),
-      ApplyPwl(source.g, 1u),
-      ApplyPwl(source.b, 2u),
-      1.0);
-}
-)";
-}
-
-const char* GetSwapApplyGammaTableComputeRbSwapSource() {
-  return R"(#version 450
-layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
-
-layout(push_constant) uniform XeApplyGammaRampConstants {
-  uvec2 xe_apply_gamma_size;
-};
-
-layout(set = 0, binding = 0) uniform textureBuffer xe_apply_gamma_ramp;
-layout(set = 1, binding = 0) uniform texture2D xe_apply_gamma_source;
-layout(set = 2, binding = 0, rgb10_a2) writeonly uniform image2D xe_apply_gamma_dest;
-
-void main() {
-  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-  if (any(greaterThanEqual(uvec2(pixel), xe_apply_gamma_size))) {
-    return;
-  }
-
-  uvec3 source = uvec3(texelFetch(xe_apply_gamma_source, pixel, 0).rgb * 255.0 + vec3(0.5)).bgr;
-  imageStore(
-      xe_apply_gamma_dest, pixel,
-      vec4(texelFetch(xe_apply_gamma_ramp, int(source.r)).b,
-           texelFetch(xe_apply_gamma_ramp, int(source.g)).g,
-           texelFetch(xe_apply_gamma_ramp, int(source.b)).r, 1.0));
-}
-)";
-}
-
-const char* GetSwapApplyGammaPwlComputeRbSwapSource() {
-  return R"(#version 450
-layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
-
-layout(push_constant) uniform XeApplyGammaRampConstants {
-  uvec2 xe_apply_gamma_size;
-};
-
-layout(set = 0, binding = 0) uniform utextureBuffer xe_apply_gamma_ramp;
-layout(set = 1, binding = 0) uniform texture2D xe_apply_gamma_source;
-layout(set = 2, binding = 0, rgb10_a2) writeonly uniform image2D xe_apply_gamma_dest;
-
-float ApplyPwl(uint source_value_10b, uint channel) {
-  uint source_value_base = source_value_10b >> 3u;
-  uvec4 pwl = texelFetch(xe_apply_gamma_ramp, int(source_value_base * 3u + channel));
-  float value = float(pwl.x) + float((source_value_10b & 7u) * pwl.y) * 0.125;
-  return clamp(value * 1.52737048e-05, 0.0, 1.0);
-}
-
-void main() {
-  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-  if (any(greaterThanEqual(uvec2(pixel), xe_apply_gamma_size))) {
-    return;
-  }
-
-  uvec3 source = uvec3(texelFetch(xe_apply_gamma_source, pixel, 0).rgb * 1023.0 + vec3(0.5)).bgr;
-  imageStore(xe_apply_gamma_dest, pixel,
-             vec4(ApplyPwl(source.r, 0u), ApplyPwl(source.g, 1u),
-                  ApplyPwl(source.b, 2u), 1.0));
-}
-)";
-}
-
-const char* GetSwapApplyGammaTableFxaaLumaComputeRbSwapSource() {
-  return R"(#version 450
-layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
-
-layout(push_constant) uniform XeApplyGammaRampConstants {
-  uvec2 xe_apply_gamma_size;
-};
-
-layout(set = 0, binding = 0) uniform textureBuffer xe_apply_gamma_ramp;
-layout(set = 1, binding = 0) uniform texture2D xe_apply_gamma_source;
-layout(set = 2, binding = 0, rgba16f) writeonly uniform image2D xe_apply_gamma_dest;
-
-const vec3 kLumaWeights = vec3(0.299, 0.587, 0.114);
-
-void main() {
-  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-  if (any(greaterThanEqual(uvec2(pixel), xe_apply_gamma_size))) {
-    return;
-  }
-
-  uvec3 source = uvec3(texelFetch(xe_apply_gamma_source, pixel, 0).rgb * 255.0 + vec3(0.5)).bgr;
-  vec3 rgb = vec3(texelFetch(xe_apply_gamma_ramp, int(source.r)).b,
-                  texelFetch(xe_apply_gamma_ramp, int(source.g)).g,
-                  texelFetch(xe_apply_gamma_ramp, int(source.b)).r);
-  imageStore(xe_apply_gamma_dest, pixel, vec4(rgb, dot(rgb, kLumaWeights)));
-}
-)";
-}
-
-const char* GetSwapApplyGammaPwlFxaaLumaComputeRbSwapSource() {
-  return R"(#version 450
-layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
-
-layout(push_constant) uniform XeApplyGammaRampConstants {
-  uvec2 xe_apply_gamma_size;
-};
-
-layout(set = 0, binding = 0) uniform utextureBuffer xe_apply_gamma_ramp;
-layout(set = 1, binding = 0) uniform texture2D xe_apply_gamma_source;
-layout(set = 2, binding = 0, rgba16f) writeonly uniform image2D xe_apply_gamma_dest;
-
-const vec3 kLumaWeights = vec3(0.299, 0.587, 0.114);
-
-float ApplyPwl(uint source_value_10b, uint channel) {
-  uint source_value_base = source_value_10b >> 3u;
-  uvec4 pwl = texelFetch(xe_apply_gamma_ramp, int(source_value_base * 3u + channel));
-  float value = float(pwl.x) + float((source_value_10b & 7u) * pwl.y) * 0.125;
-  return clamp(value * 1.52737048e-05, 0.0, 1.0);
-}
-
-void main() {
-  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-  if (any(greaterThanEqual(uvec2(pixel), xe_apply_gamma_size))) {
-    return;
-  }
-
-  uvec3 source = uvec3(texelFetch(xe_apply_gamma_source, pixel, 0).rgb * 1023.0 + vec3(0.5)).bgr;
-  vec3 rgb = vec3(ApplyPwl(source.r, 0u), ApplyPwl(source.g, 1u),
-                  ApplyPwl(source.b, 2u));
-  imageStore(xe_apply_gamma_dest, pixel, vec4(rgb, dot(rgb, kLumaWeights)));
-}
-)";
-}
-
-bool CompileGlslToSpirvInternal(EShLanguage stage, std::string_view source,
-                                std::vector<uint32_t>& spirv_out, std::string& error_out) {
-  static std::once_flag glslang_initialize_once;
-  std::call_once(glslang_initialize_once, []() { glslang::InitializeProcess(); });
-
-  const char* source_c_str = source.data();
-  glslang::TShader shader(stage);
-  shader.setStrings(&source_c_str, 1);
-  shader.setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 450);
-  shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
-  shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
-
-  EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
-  if (!shader.parse(&kGlslangDefaultTBuiltInResource, 450, false, messages)) {
-    error_out = "glslang shader parse failed";
-    if (const char* shader_log = shader.getInfoLog();
-        shader_log != nullptr && shader_log[0] != '\0') {
-      error_out += ": ";
-      error_out += shader_log;
-    }
-    return false;
-  }
-
-  glslang::TProgram program;
-  program.addShader(&shader);
-  if (!program.link(messages)) {
-    error_out = "glslang program link failed";
-    if (const char* program_log = program.getInfoLog();
-        program_log != nullptr && program_log[0] != '\0') {
-      error_out += ": ";
-      error_out += program_log;
-    }
-    return false;
-  }
-
-  const glslang::TIntermediate* intermediate = program.getIntermediate(stage);
-  if (intermediate == nullptr) {
-    error_out = "glslang produced no stage intermediate";
-    return false;
-  }
-
-  glslang::SpvOptions spv_options = {};
-  spv_options.disableOptimizer = true;
-  spv_options.optimizeSize = false;
-  glslang::GlslangToSpv(*intermediate, spirv_out, &spv_options);
-  if (spirv_out.empty()) {
-    error_out = "glslang produced empty SPIR-V";
-    return false;
-  }
-  return true;
-}
-
-}  // namespace
-
-// Generated with `xb buildshaders`.
-namespace shaders {
-#include "../shaders/vulkan_spirv/apply_gamma_pwl_cs.h"
-#include "../shaders/vulkan_spirv/apply_gamma_pwl_fxaa_luma_ps.h"
-#include "../shaders/vulkan_spirv/apply_gamma_pwl_fxaa_luma_cs.h"
-#include "../shaders/vulkan_spirv/apply_gamma_pwl_ps.h"
-#include "../shaders/vulkan_spirv/apply_gamma_table_cs.h"
-#include "../shaders/vulkan_spirv/apply_gamma_table_fxaa_luma_ps.h"
-#include "../shaders/vulkan_spirv/apply_gamma_table_fxaa_luma_cs.h"
-#include "../shaders/vulkan_spirv/apply_gamma_table_ps.h"
-#include "../shaders/vulkan_spirv/fullscreen_cw_vs.h"
-#include "../shaders/vulkan_spirv/resolve_downscale_cs.h"
-}  // namespace shaders
-
-const VkDescriptorPoolSize VulkanCommandProcessor::kDescriptorPoolSizeUniformBuffer = {
-    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    SpirvShaderTranslator::kConstantBufferCount* kLinkedTypeDescriptorPoolSetCount};
-
-const VkDescriptorPoolSize VulkanCommandProcessor::kDescriptorPoolSizeStorageBuffer = {
-    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 * kLinkedTypeDescriptorPoolSetCount};
-
-// 2x descriptors for texture images because of unsigned and signed bindings.
-const VkDescriptorPoolSize VulkanCommandProcessor::kDescriptorPoolSizeTextures[2] = {
-    {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 2 * kLinkedTypeDescriptorPoolSetCount},
-    {VK_DESCRIPTOR_TYPE_SAMPLER, kLinkedTypeDescriptorPoolSetCount},
-};
-
-VulkanCommandProcessor::VulkanCommandProcessor(VulkanGraphicsSystem* graphics_system,
-                                               system::KernelState* kernel_state)
-    : CommandProcessor(graphics_system, kernel_state),
-      deferred_command_buffer_(*this),
-      transient_descriptor_allocator_uniform_buffer_(
-          static_cast<const ui::vulkan::VulkanProvider*>(graphics_system->provider())
-              ->vulkan_device(),
-          &kDescriptorPoolSizeUniformBuffer, 1, kLinkedTypeDescriptorPoolSetCount),
-      transient_descriptor_allocator_storage_buffer_(
-          static_cast<const ui::vulkan::VulkanProvider*>(graphics_system->provider())
-              ->vulkan_device(),
-          &kDescriptorPoolSizeStorageBuffer, 1, kLinkedTypeDescriptorPoolSetCount),
-      transient_descriptor_allocator_textures_(
-          static_cast<const ui::vulkan::VulkanProvider*>(graphics_system->provider())
-              ->vulkan_device(),
-          kDescriptorPoolSizeTextures, uint32_t(rex::countof(kDescriptorPoolSizeTextures)),
-          kLinkedTypeDescriptorPoolSetCount),
-      native_residency_(std::make_unique<NativeResidency>()) {
-  legacy_readback_memexport_cvar_name_ = "vulkan_readback_memexport";
-}
-
-VulkanCommandProcessor::~VulkanCommandProcessor() = default;
-
-void VulkanCommandProcessor::ClearCaches() {
-  CommandProcessor::ClearCaches();
-  InvalidateAllVertexBufferResidency();
-  cache_clear_requested_ = true;
-}
-
-void VulkanCommandProcessor::InvalidateGpuMemory() {
-  if (shared_memory_) {
-    shared_memory_->InvalidateAllPages();
-  }
-}
-
-void VulkanCommandProcessor::InvalidateAllVertexBufferResidency() {
-  vertex_buffers_in_sync_[0] = 0;
-  vertex_buffers_in_sync_[1] = 0;
-  for (VertexBufferState& state : vertex_buffer_states_) {
-    state.address = UINT32_MAX;
-    state.size = UINT32_MAX;
-  }
-}
-
-void VulkanCommandProcessor::InvalidateVertexBufferResidency(uint32_t vfetch_index) {
-  if (vfetch_index >= vertex_buffer_states_.size()) {
-    return;
-  }
-  vertex_buffers_in_sync_[vfetch_index >> 6] &= ~(uint64_t(1) << (vfetch_index & 63));
-}
-
-void VulkanCommandProcessor::InvalidateVertexBufferResidencyRange(uint32_t first_vfetch,
-                                                                  uint32_t last_vfetch) {
-  if (first_vfetch > last_vfetch) {
-    std::swap(first_vfetch, last_vfetch);
-  }
-  if (first_vfetch >= vertex_buffer_states_.size()) {
-    return;
-  }
-  last_vfetch = std::min(last_vfetch, uint32_t(vertex_buffer_states_.size() - 1));
-  for (uint32_t vfetch_index = first_vfetch; vfetch_index <= last_vfetch; ++vfetch_index) {
-    InvalidateVertexBufferResidency(vfetch_index);
-  }
-}
-
-void VulkanCommandProcessor::InitializeShaderStorage(const std::filesystem::path& cache_root,
-                                                     uint32_t title_id, bool blocking) {
-  CommandProcessor::InitializeShaderStorage(cache_root, title_id, blocking);
-  pipeline_cache_->InitializeShaderStorage(cache_root, title_id, blocking);
-}
-
-bool VulkanCommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* reader,
-                                                                uint32_t packet, uint32_t count) {
-  if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_) {
-    return CommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(reader, packet, count);
-  }
-
-  const uint32_t kQueryFinished = rex::byte_swap(0xFFFFFEED);
-  assert_true(count == 1);
-  uint32_t initiator = reader->ReadAndSwap<uint32_t>();
-  WriteRegister(XE_GPU_REG_VGT_EVENT_INITIATOR, initiator & 0x3F);
-
-  uint32_t sample_count_addr = register_file_->values[XE_GPU_REG_RB_SAMPLE_COUNT_ADDR];
-  auto* sample_counts =
-      memory_->TranslatePhysical<xenos::xe_gpu_depth_sample_counts*>(sample_count_addr);
-  if (!sample_counts) {
-    DisableHostOcclusionQueries();
-    return true;
-  }
-
-  auto write_fallback_result = [sample_counts]() -> bool {
-    auto fake_sample_count = REXCVAR_GET(query_occlusion_fake_sample_count);
-    if (fake_sample_count < 0) {
-      return true;
-    }
-    bool is_end_via_z_pass =
-        sample_counts->ZPass_A == kQueryFinished || sample_counts->ZPass_B == kQueryFinished;
-    bool is_end_via_z_fail =
-        sample_counts->ZFail_A == kQueryFinished || sample_counts->ZFail_B == kQueryFinished;
-    std::memset(sample_counts, 0, sizeof(xenos::xe_gpu_depth_sample_counts));
-    if (is_end_via_z_pass || is_end_via_z_fail) {
-      sample_counts->ZPass_A = fake_sample_count;
-      sample_counts->Total_A = fake_sample_count;
-    }
-    return true;
-  };
-
-  bool is_end_via_z_pass =
-      sample_counts->ZPass_A == kQueryFinished || sample_counts->ZPass_B == kQueryFinished;
-  bool is_end_via_z_fail =
-      sample_counts->ZFail_A == kQueryFinished || sample_counts->ZFail_B == kQueryFinished;
-  bool is_end = is_end_via_z_pass || is_end_via_z_fail;
-
-  if (!is_end) {
-    if (active_occlusion_query_.valid &&
-        active_occlusion_query_.sample_count_address != sample_count_addr) {
-      DisableHostOcclusionQueries();
-      return write_fallback_result();
-    }
-    if (!BeginGuestOcclusionQuery(sample_count_addr)) {
-      return write_fallback_result();
-    }
-    return true;
-  }
-
-  if (!active_occlusion_query_.valid ||
-      active_occlusion_query_.sample_count_address != sample_count_addr) {
-    DisableHostOcclusionQueries();
-    return write_fallback_result();
-  }
-
-  if (!EndGuestOcclusionQuery(sample_count_addr)) {
-    return write_fallback_result();
-  }
-  return true;
-}
-
-std::string VulkanCommandProcessor::GetWindowTitleText() const {
-  std::ostringstream title;
-  title << "Vulkan";
-  if (render_target_cache_) {
-    switch (render_target_cache_->GetPath()) {
-      case RenderTargetCache::Path::kHostRenderTargets:
-        title << " - FBO";
-        break;
-      case RenderTargetCache::Path::kPixelShaderInterlock:
-        title << " - FSI";
-        break;
-      default:
-        break;
-    }
-    uint32_t draw_resolution_scale_x =
-        texture_cache_ ? texture_cache_->draw_resolution_scale_x() : 1;
-    uint32_t draw_resolution_scale_y =
-        texture_cache_ ? texture_cache_->draw_resolution_scale_y() : 1;
-    if (draw_resolution_scale_x > 1 || draw_resolution_scale_y > 1) {
-      title << ' ' << draw_resolution_scale_x << 'x' << draw_resolution_scale_y;
-    }
-  }
-  title << " - HEAVILY INCOMPLETE, early development";
-  return title.str();
-}
-
-bool VulkanCommandProcessor::CompileGlslToSpirv(VkShaderStageFlagBits stage,
-                                                std::string_view source,
-                                                std::vector<uint32_t>& spirv_out,
-                                                std::string& error_out) const {
-  EShLanguage glslang_stage;
-  switch (stage) {
-    case VK_SHADER_STAGE_VERTEX_BIT:
-      glslang_stage = EShLangVertex;
-      break;
-    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
-      glslang_stage = EShLangTessControl;
-      break;
-    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
-      glslang_stage = EShLangTessEvaluation;
-      break;
-    case VK_SHADER_STAGE_GEOMETRY_BIT:
-      glslang_stage = EShLangGeometry;
-      break;
-    case VK_SHADER_STAGE_FRAGMENT_BIT:
-      glslang_stage = EShLangFragment;
-      break;
-    case VK_SHADER_STAGE_COMPUTE_BIT:
-      glslang_stage = EShLangCompute;
-      break;
-    default:
-      error_out = fmt::format("Unsupported Vulkan shader stage mask {}", uint32_t(stage));
-      return false;
-  }
-  return CompileGlslToSpirvInternal(glslang_stage, source, spirv_out, error_out);
-}
-
-bool VulkanCommandProcessor::SetupContext() {
-  if (!CommandProcessor::SetupContext()) {
-    REXGPU_ERROR("Failed to initialize base command processor context");
-    return false;
-  }
-  InvalidateAllVertexBufferResidency();
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-  const ui::vulkan::VulkanDevice::Properties& device_properties = vulkan_device->properties();
-
-  // The unconditional inclusion of the vertex shader stage also covers the case
-  // of manual index / factor buffer fetch (the system constants and the shared
-  // memory are needed for that) in the tessellation vertex shader when
-  // fullDrawIndexUint32 is not supported.
-  guest_shader_pipeline_stages_ =
-      VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  guest_shader_vertex_stages_ = VK_SHADER_STAGE_VERTEX_BIT;
-  if (device_properties.tessellationShader) {
-    guest_shader_pipeline_stages_ |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
-                                     VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
-    guest_shader_vertex_stages_ |=
-        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-  }
-  if (!device_properties.vertexPipelineStoresAndAtomics) {
-    // For memory export from vertex shaders converted to compute shaders.
-    guest_shader_pipeline_stages_ |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-    guest_shader_vertex_stages_ |= VK_SHADER_STAGE_COMPUTE_BIT;
-  }
-
-  // 16384 is bigger than any single uniform buffer that Xenia needs, but is the
-  // minimum maxUniformBufferRange, thus the safe minimum amount.
-  uniform_buffer_pool_ = std::make_unique<ui::vulkan::VulkanUploadBufferPool>(
-      vulkan_device, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-      rex::align(std::max(ui::GraphicsUploadBufferPool::kDefaultPageSize, size_t(16384)),
-                 size_t(device_properties.minUniformBufferOffsetAlignment)));
-
-  // Descriptor set layouts that don't depend on the setup of other subsystems.
-  VkShaderStageFlags guest_shader_stages =
-      guest_shader_vertex_stages_ | VK_SHADER_STAGE_FRAGMENT_BIT;
-  // Empty.
-  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info;
-  descriptor_set_layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  descriptor_set_layout_create_info.pNext = nullptr;
-  descriptor_set_layout_create_info.flags = 0;
-  descriptor_set_layout_create_info.bindingCount = 0;
-  descriptor_set_layout_create_info.pBindings = nullptr;
-  if (dfn.vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, nullptr,
-                                      &descriptor_set_layout_empty_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create an empty Vulkan descriptor set layout");
-    return false;
-  }
-  // Guest draw constants.
-  VkDescriptorSetLayoutBinding
-      descriptor_set_layout_bindings_constants[SpirvShaderTranslator::kConstantBufferCount] = {};
-  for (uint32_t i = 0; i < SpirvShaderTranslator::kConstantBufferCount; ++i) {
-    VkDescriptorSetLayoutBinding& constants_binding = descriptor_set_layout_bindings_constants[i];
-    constants_binding.binding = i;
-    constants_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    constants_binding.descriptorCount = 1;
-    constants_binding.pImmutableSamplers = nullptr;
-  }
-  descriptor_set_layout_bindings_constants[SpirvShaderTranslator::kConstantBufferSystem]
-      .stageFlags =
-      guest_shader_stages |
-      (device_properties.tessellationShader ? VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT : 0) |
-      (device_properties.geometryShader ? VK_SHADER_STAGE_GEOMETRY_BIT : 0);
-  descriptor_set_layout_bindings_constants[SpirvShaderTranslator::kConstantBufferFloatVertex]
-      .stageFlags = guest_shader_vertex_stages_;
-  descriptor_set_layout_bindings_constants[SpirvShaderTranslator::kConstantBufferFloatPixel]
-      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  descriptor_set_layout_bindings_constants[SpirvShaderTranslator::kConstantBufferBoolLoop]
-      .stageFlags = guest_shader_stages;
-  descriptor_set_layout_bindings_constants[SpirvShaderTranslator::kConstantBufferFetch].stageFlags =
-      guest_shader_stages;
-  descriptor_set_layout_create_info.bindingCount =
-      uint32_t(rex::countof(descriptor_set_layout_bindings_constants));
-  descriptor_set_layout_create_info.pBindings = descriptor_set_layout_bindings_constants;
-  if (dfn.vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, nullptr,
-                                      &descriptor_set_layout_constants_) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create a Vulkan descriptor set layout for guest draw "
-        "constant buffers");
-    return false;
-  }
-  // Transient: storage buffer for compute shaders.
-  VkDescriptorSetLayoutBinding descriptor_set_layout_binding_transient;
-  descriptor_set_layout_binding_transient.binding = 0;
-  descriptor_set_layout_binding_transient.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  descriptor_set_layout_binding_transient.descriptorCount = 1;
-  descriptor_set_layout_binding_transient.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  descriptor_set_layout_binding_transient.pImmutableSamplers = nullptr;
-  descriptor_set_layout_create_info.bindingCount = 1;
-  descriptor_set_layout_create_info.pBindings = &descriptor_set_layout_binding_transient;
-  if (dfn.vkCreateDescriptorSetLayout(
-          device, &descriptor_set_layout_create_info, nullptr,
-          &descriptor_set_layouts_single_transient_[size_t(
-              SingleTransientDescriptorLayout::kStorageBufferCompute)]) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create a Vulkan descriptor set layout for a storage buffer "
-        "bound to the compute shader");
-    return false;
-  }
-  // Transient: two storage buffers for compute shaders.
-  VkDescriptorSetLayoutBinding descriptor_set_layout_bindings_transient_pair[2];
-  descriptor_set_layout_bindings_transient_pair[0] = descriptor_set_layout_binding_transient;
-  descriptor_set_layout_bindings_transient_pair[1] = descriptor_set_layout_binding_transient;
-  descriptor_set_layout_bindings_transient_pair[1].binding = 1;
-  descriptor_set_layout_create_info.bindingCount = 2;
-  descriptor_set_layout_create_info.pBindings = descriptor_set_layout_bindings_transient_pair;
-  if (dfn.vkCreateDescriptorSetLayout(
-          device, &descriptor_set_layout_create_info, nullptr,
-          &descriptor_set_layouts_single_transient_[size_t(
-              SingleTransientDescriptorLayout::kStorageBufferPairCompute)]) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create a Vulkan descriptor set layout for two storage "
-        "buffers bound to the compute shader");
-    return false;
-  }
-
-  shared_memory_ =
-      std::make_unique<VulkanSharedMemory>(*this, *memory_, guest_shader_pipeline_stages_);
-  if (!shared_memory_->Initialize()) {
-    REXGPU_ERROR("Failed to initialize shared memory");
-    return false;
-  }
-
-  primitive_processor_ =
-      std::make_unique<VulkanPrimitiveProcessor>(*register_file_, *memory_, *shared_memory_, *this);
-  if (!primitive_processor_->Initialize()) {
-    REXGPU_ERROR("Failed to initialize the geometric primitive processor");
-    return false;
-  }
-
-  uint32_t shared_memory_binding_count_log2 =
-      SpirvShaderTranslator::GetSharedMemoryStorageBufferCountLog2(
-          device_properties.maxStorageBufferRange);
-  uint32_t shared_memory_binding_count = UINT32_C(1) << shared_memory_binding_count_log2;
-
-  uint32_t draw_resolution_scale_x, draw_resolution_scale_y;
-  bool draw_resolution_scale_not_clamped =
-      TextureCache::GetConfigDrawResolutionScale(draw_resolution_scale_x, draw_resolution_scale_y);
-  if (!draw_resolution_scale_not_clamped) {
-    REXGPU_WARN(
-        "The requested draw resolution scale is not supported by the "
-        "emulator, reducing to {}x{}",
-        draw_resolution_scale_x, draw_resolution_scale_y);
-  }
-  if (draw_resolution_scale_x > 1 || draw_resolution_scale_y > 1) {
-    REXGPU_WARN(
-        "Vulkan draw resolution scaling is experimental and may not affect all "
-        "titles correctly");
-  }
-  if (!device_properties.fragmentStoresAndAtomics) {
-    REXGPU_ERROR(
-        "Vulkan fragmentStoresAndAtomics is required for GPU emulation and "
-        "D3D12 parity, but unsupported by the selected device");
-    return false;
-  }
-  if (!device_properties.vertexPipelineStoresAndAtomics) {
-    REXGPU_ERROR(
-        "Vulkan vertexPipelineStoresAndAtomics is required for GPU emulation and "
-        "D3D12 parity, but unsupported by the selected device");
-    return false;
-  }
-  if (!device_properties.geometryShader) {
-    if (REXCVAR_GET(vulkan_require_geometry_shader)) {
-      REXGPU_ERROR(
-          "Vulkan geometryShader is required for GPU emulation "
-          "(vulkan_require_geometry_shader=true), but unsupported by the "
-          "selected device");
-      return false;
-    }
-    REXGPU_WARN(
-        "Vulkan geometryShader is not supported by the device; primitive "
-        "fallback conversion/expansion paths will be used");
-  }
-  if (!device_properties.fillModeNonSolid) {
-    if (REXCVAR_GET(vulkan_require_fill_mode_non_solid)) {
-      REXGPU_ERROR(
-          "Vulkan fillModeNonSolid is required for GPU emulation "
-          "(vulkan_require_fill_mode_non_solid=true), but unsupported by the "
-          "selected device");
-      return false;
-    }
-    REXGPU_WARN(
-        "Vulkan fillModeNonSolid is not supported by the device; line/point "
-        "polygon modes will fall back to solid fill");
-  }
-
-  // Requires the transient descriptor set layouts.
-  render_target_cache_ = std::make_unique<VulkanRenderTargetCache>(
-      *register_file_, *memory_, draw_resolution_scale_x, draw_resolution_scale_y, *this);
-  if (!render_target_cache_->Initialize(shared_memory_binding_count)) {
-    REXGPU_ERROR("Failed to initialize the render target cache");
-    return false;
-  }
-
-  // Shared memory and EDRAM descriptor set layout.
-  bool edram_fragment_shader_interlock =
-      render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
-  VkDescriptorSetLayoutBinding shared_memory_and_edram_descriptor_set_layout_bindings[2];
-  shared_memory_and_edram_descriptor_set_layout_bindings[0].binding = 0;
-  shared_memory_and_edram_descriptor_set_layout_bindings[0].descriptorType =
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  shared_memory_and_edram_descriptor_set_layout_bindings[0].descriptorCount =
-      shared_memory_binding_count;
-  shared_memory_and_edram_descriptor_set_layout_bindings[0].stageFlags = guest_shader_stages;
-  shared_memory_and_edram_descriptor_set_layout_bindings[0].pImmutableSamplers = nullptr;
-  VkDescriptorSetLayoutCreateInfo shared_memory_and_edram_descriptor_set_layout_create_info;
-  shared_memory_and_edram_descriptor_set_layout_create_info.sType =
-      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  shared_memory_and_edram_descriptor_set_layout_create_info.pNext = nullptr;
-  shared_memory_and_edram_descriptor_set_layout_create_info.flags = 0;
-  shared_memory_and_edram_descriptor_set_layout_create_info.pBindings =
-      shared_memory_and_edram_descriptor_set_layout_bindings;
-  if (edram_fragment_shader_interlock) {
-    // EDRAM.
-    shared_memory_and_edram_descriptor_set_layout_bindings[1].binding = 1;
-    shared_memory_and_edram_descriptor_set_layout_bindings[1].descriptorType =
-        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    shared_memory_and_edram_descriptor_set_layout_bindings[1].descriptorCount = 1;
-    shared_memory_and_edram_descriptor_set_layout_bindings[1].stageFlags =
-        VK_SHADER_STAGE_FRAGMENT_BIT;
-    shared_memory_and_edram_descriptor_set_layout_bindings[1].pImmutableSamplers = nullptr;
-    shared_memory_and_edram_descriptor_set_layout_create_info.bindingCount = 2;
-  } else {
-    shared_memory_and_edram_descriptor_set_layout_create_info.bindingCount = 1;
-  }
-  if (dfn.vkCreateDescriptorSetLayout(
-          device, &shared_memory_and_edram_descriptor_set_layout_create_info, nullptr,
-          &descriptor_set_layout_shared_memory_and_edram_) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create a Vulkan descriptor set layout for the shared memory "
-        "and the EDRAM");
-    return false;
-  }
-
-  pipeline_cache_ = std::make_unique<VulkanPipelineCache>(
-      *this, *register_file_, *render_target_cache_, guest_shader_vertex_stages_);
-  if (!pipeline_cache_->Initialize()) {
-    REXGPU_ERROR("Failed to initialize the graphics pipeline cache");
-    return false;
-  }
-
-  // Requires the transient descriptor set layouts.
-  texture_cache_ =
-      VulkanTextureCache::Create(*register_file_, *shared_memory_, draw_resolution_scale_x,
-                                 draw_resolution_scale_y, *this, guest_shader_pipeline_stages_);
-  if (!texture_cache_) {
-    REXGPU_ERROR("Failed to initialize the texture cache");
-    return false;
-  }
-
-  // Shared memory and EDRAM common bindings.
-  VkDescriptorPoolSize descriptor_pool_sizes[1];
-  descriptor_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  descriptor_pool_sizes[0].descriptorCount =
-      shared_memory_binding_count + uint32_t(edram_fragment_shader_interlock);
-  VkDescriptorPoolCreateInfo descriptor_pool_create_info;
-  descriptor_pool_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  descriptor_pool_create_info.pNext = nullptr;
-  descriptor_pool_create_info.flags = 0;
-  descriptor_pool_create_info.maxSets = 1;
-  descriptor_pool_create_info.poolSizeCount = 1;
-  descriptor_pool_create_info.pPoolSizes = descriptor_pool_sizes;
-  if (dfn.vkCreateDescriptorPool(device, &descriptor_pool_create_info, nullptr,
-                                 &shared_memory_and_edram_descriptor_pool_) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create the Vulkan descriptor pool for shared memory and "
-        "EDRAM");
-    return false;
-  }
-  VkDescriptorSetAllocateInfo descriptor_set_allocate_info;
-  descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  descriptor_set_allocate_info.pNext = nullptr;
-  descriptor_set_allocate_info.descriptorPool = shared_memory_and_edram_descriptor_pool_;
-  descriptor_set_allocate_info.descriptorSetCount = 1;
-  descriptor_set_allocate_info.pSetLayouts = &descriptor_set_layout_shared_memory_and_edram_;
-  if (dfn.vkAllocateDescriptorSets(device, &descriptor_set_allocate_info,
-                                   &shared_memory_and_edram_descriptor_set_) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to allocate the Vulkan descriptor set for shared memory and "
-        "EDRAM");
-    return false;
-  }
-  VkDescriptorBufferInfo
-      shared_memory_descriptor_buffers_info[SharedMemory::kBufferSize / (128 << 20)];
-  uint32_t shared_memory_binding_range =
-      SharedMemory::kBufferSize >> shared_memory_binding_count_log2;
-  for (uint32_t i = 0; i < shared_memory_binding_count; ++i) {
-    VkDescriptorBufferInfo& shared_memory_descriptor_buffer_info =
-        shared_memory_descriptor_buffers_info[i];
-    shared_memory_descriptor_buffer_info.buffer = shared_memory_->buffer();
-    shared_memory_descriptor_buffer_info.offset = shared_memory_binding_range * i;
-    shared_memory_descriptor_buffer_info.range = shared_memory_binding_range;
-  }
-  VkWriteDescriptorSet write_descriptor_sets[2];
-  VkWriteDescriptorSet& write_descriptor_set_shared_memory = write_descriptor_sets[0];
-  write_descriptor_set_shared_memory.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  write_descriptor_set_shared_memory.pNext = nullptr;
-  write_descriptor_set_shared_memory.dstSet = shared_memory_and_edram_descriptor_set_;
-  write_descriptor_set_shared_memory.dstBinding = 0;
-  write_descriptor_set_shared_memory.dstArrayElement = 0;
-  write_descriptor_set_shared_memory.descriptorCount = shared_memory_binding_count;
-  write_descriptor_set_shared_memory.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  write_descriptor_set_shared_memory.pImageInfo = nullptr;
-  write_descriptor_set_shared_memory.pBufferInfo = shared_memory_descriptor_buffers_info;
-  write_descriptor_set_shared_memory.pTexelBufferView = nullptr;
-  VkDescriptorBufferInfo edram_descriptor_buffer_info;
-  if (edram_fragment_shader_interlock) {
-    edram_descriptor_buffer_info.buffer = render_target_cache_->edram_buffer();
-    edram_descriptor_buffer_info.offset = 0;
-    edram_descriptor_buffer_info.range = VK_WHOLE_SIZE;
-    VkWriteDescriptorSet& write_descriptor_set_edram = write_descriptor_sets[1];
-    write_descriptor_set_edram.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_descriptor_set_edram.pNext = nullptr;
-    write_descriptor_set_edram.dstSet = shared_memory_and_edram_descriptor_set_;
-    write_descriptor_set_edram.dstBinding = 1;
-    write_descriptor_set_edram.dstArrayElement = 0;
-    write_descriptor_set_edram.descriptorCount = 1;
-    write_descriptor_set_edram.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write_descriptor_set_edram.pImageInfo = nullptr;
-    write_descriptor_set_edram.pBufferInfo = &edram_descriptor_buffer_info;
-    write_descriptor_set_edram.pTexelBufferView = nullptr;
-  }
-  dfn.vkUpdateDescriptorSets(device, 1 + uint32_t(edram_fragment_shader_interlock),
-                             write_descriptor_sets, 0, nullptr);
-
-  // Swap objects.
-
-  // Gamma ramp, either device-local and host-visible at once, or separate
-  // device-local texel buffer and host-visible upload buffer.
-  gamma_ramp_256_entry_table_current_frame_ = UINT32_MAX;
-  gamma_ramp_pwl_current_frame_ = UINT32_MAX;
-  // Try to create a device-local host-visible buffer first, to skip copying.
-  constexpr uint32_t kGammaRampSize256EntryTable = sizeof(uint32_t) * 256;
-  constexpr uint32_t kGammaRampSizePWL = sizeof(uint16_t) * 2 * 3 * 128;
-  constexpr uint32_t kGammaRampSize = kGammaRampSize256EntryTable + kGammaRampSizePWL;
-  VkBufferCreateInfo gamma_ramp_host_visible_buffer_create_info;
-  gamma_ramp_host_visible_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  gamma_ramp_host_visible_buffer_create_info.pNext = nullptr;
-  gamma_ramp_host_visible_buffer_create_info.flags = 0;
-  gamma_ramp_host_visible_buffer_create_info.size = kGammaRampSize * kMaxFramesInFlight;
-  gamma_ramp_host_visible_buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-  gamma_ramp_host_visible_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  gamma_ramp_host_visible_buffer_create_info.queueFamilyIndexCount = 0;
-  gamma_ramp_host_visible_buffer_create_info.pQueueFamilyIndices = nullptr;
-  if (dfn.vkCreateBuffer(device, &gamma_ramp_host_visible_buffer_create_info, nullptr,
-                         &gamma_ramp_buffer_) == VK_SUCCESS) {
-    bool use_gamma_ramp_host_visible_buffer = false;
-    VkMemoryRequirements gamma_ramp_host_visible_buffer_memory_requirements;
-    dfn.vkGetBufferMemoryRequirements(device, gamma_ramp_buffer_,
-                                      &gamma_ramp_host_visible_buffer_memory_requirements);
-    uint32_t gamma_ramp_host_visible_buffer_memory_types =
-        gamma_ramp_host_visible_buffer_memory_requirements.memoryTypeBits &
-        (vulkan_device->memory_types().device_local & vulkan_device->memory_types().host_visible);
-    VkMemoryAllocateInfo gamma_ramp_host_visible_buffer_memory_allocate_info;
-    // Prefer a host-uncached (because it's write-only) memory type, but try a
-    // host-cached host-visible device-local one as well.
-    if (rex::bit_scan_forward(
-            gamma_ramp_host_visible_buffer_memory_types &
-                ~vulkan_device->memory_types().host_cached,
-            &(gamma_ramp_host_visible_buffer_memory_allocate_info.memoryTypeIndex)) ||
-        rex::bit_scan_forward(
-            gamma_ramp_host_visible_buffer_memory_types,
-            &(gamma_ramp_host_visible_buffer_memory_allocate_info.memoryTypeIndex))) {
-      VkMemoryAllocateInfo* gamma_ramp_host_visible_buffer_memory_allocate_info_last =
-          &gamma_ramp_host_visible_buffer_memory_allocate_info;
-      gamma_ramp_host_visible_buffer_memory_allocate_info.sType =
-          VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      gamma_ramp_host_visible_buffer_memory_allocate_info.pNext = nullptr;
-      gamma_ramp_host_visible_buffer_memory_allocate_info.allocationSize =
-          gamma_ramp_host_visible_buffer_memory_requirements.size;
-      VkMemoryDedicatedAllocateInfo gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info;
-      if (vulkan_device->extensions().ext_1_1_KHR_dedicated_allocation) {
-        gamma_ramp_host_visible_buffer_memory_allocate_info_last->pNext =
-            &gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info;
-        gamma_ramp_host_visible_buffer_memory_allocate_info_last =
-            reinterpret_cast<VkMemoryAllocateInfo*>(
-                &gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info);
-        gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info.sType =
-            VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
-        gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info.pNext = nullptr;
-        gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info.image = VK_NULL_HANDLE;
-        gamma_ramp_host_visible_buffer_memory_dedicated_allocate_info.buffer = gamma_ramp_buffer_;
-      }
-      if (dfn.vkAllocateMemory(device, &gamma_ramp_host_visible_buffer_memory_allocate_info,
-                               nullptr, &gamma_ramp_buffer_memory_) == VK_SUCCESS) {
-        if (dfn.vkBindBufferMemory(device, gamma_ramp_buffer_, gamma_ramp_buffer_memory_, 0) ==
-            VK_SUCCESS) {
-          if (dfn.vkMapMemory(device, gamma_ramp_buffer_memory_, 0, VK_WHOLE_SIZE, 0,
-                              &gamma_ramp_upload_mapping_) == VK_SUCCESS) {
-            use_gamma_ramp_host_visible_buffer = true;
-            gamma_ramp_upload_memory_size_ =
-                gamma_ramp_host_visible_buffer_memory_allocate_info.allocationSize;
-            gamma_ramp_upload_memory_type_ =
-                gamma_ramp_host_visible_buffer_memory_allocate_info.memoryTypeIndex;
-          }
-        }
-        if (!use_gamma_ramp_host_visible_buffer) {
-          dfn.vkFreeMemory(device, gamma_ramp_buffer_memory_, nullptr);
-          gamma_ramp_buffer_memory_ = VK_NULL_HANDLE;
-        }
-      }
-    }
-    if (!use_gamma_ramp_host_visible_buffer) {
-      dfn.vkDestroyBuffer(device, gamma_ramp_buffer_, nullptr);
-      gamma_ramp_buffer_ = VK_NULL_HANDLE;
-    }
-  }
-  if (gamma_ramp_buffer_ == VK_NULL_HANDLE) {
-    // Create separate buffers for the shader and uploading.
-    if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-            vulkan_device, kGammaRampSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT,
-            ui::vulkan::util::MemoryPurpose::kDeviceLocal, gamma_ramp_buffer_,
-            gamma_ramp_buffer_memory_)) {
-      REXGPU_ERROR("Failed to create the gamma ramp buffer");
-      return false;
-    }
-    if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-            vulkan_device, kGammaRampSize * kMaxFramesInFlight, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            ui::vulkan::util::MemoryPurpose::kUpload, gamma_ramp_upload_buffer_,
-            gamma_ramp_upload_buffer_memory_, &gamma_ramp_upload_memory_type_,
-            &gamma_ramp_upload_memory_size_)) {
-      REXGPU_ERROR("Failed to create the gamma ramp upload buffer");
-      return false;
-    }
-    if (dfn.vkMapMemory(device, gamma_ramp_upload_buffer_memory_, 0, VK_WHOLE_SIZE, 0,
-                        &gamma_ramp_upload_mapping_) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to map the gamma ramp upload buffer");
-      return false;
-    }
-  }
-
-  // Gamma ramp buffer views.
-  uint32_t gamma_ramp_frame_count =
-      gamma_ramp_upload_buffer_ == VK_NULL_HANDLE ? kMaxFramesInFlight : 1;
-  VkBufferViewCreateInfo gamma_ramp_buffer_view_create_info;
-  gamma_ramp_buffer_view_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-  gamma_ramp_buffer_view_create_info.pNext = nullptr;
-  gamma_ramp_buffer_view_create_info.flags = 0;
-  gamma_ramp_buffer_view_create_info.buffer = gamma_ramp_buffer_;
-  // 256-entry table.
-  gamma_ramp_buffer_view_create_info.format = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
-  gamma_ramp_buffer_view_create_info.range = kGammaRampSize256EntryTable;
-  for (uint32_t i = 0; i < gamma_ramp_frame_count; ++i) {
-    gamma_ramp_buffer_view_create_info.offset = kGammaRampSize * i;
-    if (dfn.vkCreateBufferView(device, &gamma_ramp_buffer_view_create_info, nullptr,
-                               &gamma_ramp_buffer_views_[i * 2]) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to create a 256-entry table gamma ramp buffer view");
-      return false;
-    }
-  }
-  // Piecewise linear.
-  gamma_ramp_buffer_view_create_info.format = VK_FORMAT_R16G16_UINT;
-  gamma_ramp_buffer_view_create_info.range = kGammaRampSizePWL;
-  for (uint32_t i = 0; i < gamma_ramp_frame_count; ++i) {
-    gamma_ramp_buffer_view_create_info.offset = kGammaRampSize * i + kGammaRampSize256EntryTable;
-    if (dfn.vkCreateBufferView(device, &gamma_ramp_buffer_view_create_info, nullptr,
-                               &gamma_ramp_buffer_views_[i * 2 + 1]) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to create a PWL gamma ramp buffer view");
-      return false;
-    }
-  }
-
-  // Swap descriptor set layouts.
-  VkDescriptorSetLayoutBinding swap_descriptor_set_layout_binding;
-  swap_descriptor_set_layout_binding.binding = 0;
-  swap_descriptor_set_layout_binding.descriptorCount = 1;
-  swap_descriptor_set_layout_binding.stageFlags =
-      VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
-  swap_descriptor_set_layout_binding.pImmutableSamplers = nullptr;
-  VkDescriptorSetLayoutCreateInfo swap_descriptor_set_layout_create_info;
-  swap_descriptor_set_layout_create_info.sType =
-      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  swap_descriptor_set_layout_create_info.pNext = nullptr;
-  swap_descriptor_set_layout_create_info.flags = 0;
-  swap_descriptor_set_layout_create_info.bindingCount = 1;
-  swap_descriptor_set_layout_create_info.pBindings = &swap_descriptor_set_layout_binding;
-  swap_descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-  if (dfn.vkCreateDescriptorSetLayout(device, &swap_descriptor_set_layout_create_info, nullptr,
-                                      &swap_descriptor_set_layout_sampled_image_) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create the presentation sampled image descriptor set "
-        "layout");
-    return false;
-  }
-  swap_descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-  if (dfn.vkCreateDescriptorSetLayout(device, &swap_descriptor_set_layout_create_info, nullptr,
-                                      &swap_descriptor_set_layout_uniform_texel_buffer_) !=
-      VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create the presentation uniform texel buffer descriptor set "
-        "layout");
-    return false;
-  }
-  swap_descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  swap_descriptor_set_layout_binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  if (dfn.vkCreateDescriptorSetLayout(device, &swap_descriptor_set_layout_create_info, nullptr,
-                                      &swap_descriptor_set_layout_combined_image_sampler_) !=
-      VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create the presentation combined image sampler descriptor "
-        "set layout");
-    return false;
-  }
-  swap_descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  if (dfn.vkCreateDescriptorSetLayout(device, &swap_descriptor_set_layout_create_info, nullptr,
-                                      &swap_descriptor_set_layout_storage_image_) != VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create the presentation storage image descriptor set "
-        "layout");
-    return false;
-  }
-
-  // Swap descriptor pool.
-  std::array<VkDescriptorPoolSize, 4> swap_descriptor_pool_sizes;
-  VkDescriptorPoolCreateInfo swap_descriptor_pool_create_info;
-  swap_descriptor_pool_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  swap_descriptor_pool_create_info.pNext = nullptr;
-  swap_descriptor_pool_create_info.flags = 0;
-  swap_descriptor_pool_create_info.maxSets = 0;
-  swap_descriptor_pool_create_info.poolSizeCount = 0;
-  swap_descriptor_pool_create_info.pPoolSizes = swap_descriptor_pool_sizes.data();
-  {
-    VkDescriptorPoolSize& swap_descriptor_pool_size_sampled_image =
-        swap_descriptor_pool_sizes[swap_descriptor_pool_create_info.poolSizeCount++];
-    swap_descriptor_pool_size_sampled_image.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    // Source images.
-    swap_descriptor_pool_size_sampled_image.descriptorCount = kMaxFramesInFlight;
-    swap_descriptor_pool_create_info.maxSets += kMaxFramesInFlight;
-  }
-  {
-    VkDescriptorPoolSize& swap_descriptor_pool_size_combined_image_sampler =
-        swap_descriptor_pool_sizes[swap_descriptor_pool_create_info.poolSizeCount++];
-    swap_descriptor_pool_size_combined_image_sampler.type =
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    swap_descriptor_pool_size_combined_image_sampler.descriptorCount = kMaxFramesInFlight;
-    swap_descriptor_pool_create_info.maxSets += kMaxFramesInFlight;
-  }
-  {
-    VkDescriptorPoolSize& swap_descriptor_pool_size_storage_image =
-        swap_descriptor_pool_sizes[swap_descriptor_pool_create_info.poolSizeCount++];
-    swap_descriptor_pool_size_storage_image.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    swap_descriptor_pool_size_storage_image.descriptorCount = kMaxFramesInFlight * 2;
-    swap_descriptor_pool_create_info.maxSets += kMaxFramesInFlight * 2;
-  }
-  // 256-entry table and PWL gamma ramps. If the gamma ramp buffer is
-  // host-visible, for multiple frames.
-  uint32_t gamma_ramp_buffer_view_count = 2 * gamma_ramp_frame_count;
-  {
-    VkDescriptorPoolSize& swap_descriptor_pool_size_uniform_texel_buffer =
-        swap_descriptor_pool_sizes[swap_descriptor_pool_create_info.poolSizeCount++];
-    swap_descriptor_pool_size_uniform_texel_buffer.type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-    swap_descriptor_pool_size_uniform_texel_buffer.descriptorCount = gamma_ramp_buffer_view_count;
-    swap_descriptor_pool_create_info.maxSets += gamma_ramp_buffer_view_count;
-  }
-  if (dfn.vkCreateDescriptorPool(device, &swap_descriptor_pool_create_info, nullptr,
-                                 &swap_descriptor_pool_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the presentation descriptor pool");
-    return false;
-  }
-
-  // Swap descriptor set allocation.
-  VkDescriptorSetAllocateInfo swap_descriptor_set_allocate_info;
-  swap_descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  swap_descriptor_set_allocate_info.pNext = nullptr;
-  swap_descriptor_set_allocate_info.descriptorPool = swap_descriptor_pool_;
-  swap_descriptor_set_allocate_info.descriptorSetCount = 1;
-  swap_descriptor_set_allocate_info.pSetLayouts = &swap_descriptor_set_layout_uniform_texel_buffer_;
-  for (uint32_t i = 0; i < gamma_ramp_buffer_view_count; ++i) {
-    if (dfn.vkAllocateDescriptorSets(device, &swap_descriptor_set_allocate_info,
-                                     &swap_descriptors_gamma_ramp_[i]) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to allocate the gamma ramp descriptor sets");
-      return false;
-    }
-  }
-  swap_descriptor_set_allocate_info.pSetLayouts = &swap_descriptor_set_layout_sampled_image_;
-  for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
-    if (dfn.vkAllocateDescriptorSets(device, &swap_descriptor_set_allocate_info,
-                                     &swap_descriptors_source_[i]) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to allocate the presentation source image descriptor sets");
-      return false;
-    }
-  }
-  swap_descriptor_set_allocate_info.pSetLayouts =
-      &swap_descriptor_set_layout_combined_image_sampler_;
-  for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
-    if (dfn.vkAllocateDescriptorSets(device, &swap_descriptor_set_allocate_info,
-                                     &swap_descriptors_fxaa_source_[i]) != VK_SUCCESS) {
-      REXGPU_ERROR(
-          "Failed to allocate the presentation FXAA source image descriptor "
-          "sets");
-      return false;
-    }
-  }
-  swap_descriptor_set_allocate_info.pSetLayouts = &swap_descriptor_set_layout_storage_image_;
-  for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
-    if (dfn.vkAllocateDescriptorSets(device, &swap_descriptor_set_allocate_info,
-                                     &swap_descriptors_destination_storage_[i]) != VK_SUCCESS) {
-      REXGPU_ERROR(
-          "Failed to allocate the presentation destination storage image "
-          "descriptor sets");
-      return false;
-    }
-  }
-  for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
-    if (dfn.vkAllocateDescriptorSets(device, &swap_descriptor_set_allocate_info,
-                                     &swap_descriptors_fxaa_destination_storage_[i]) !=
-        VK_SUCCESS) {
-      REXGPU_ERROR(
-          "Failed to allocate the presentation FXAA destination storage image "
-          "descriptor sets");
-      return false;
-    }
-  }
-
-  // Gamma ramp descriptor sets.
-  VkWriteDescriptorSet gamma_ramp_write_descriptor_set;
-  gamma_ramp_write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  gamma_ramp_write_descriptor_set.pNext = nullptr;
-  gamma_ramp_write_descriptor_set.dstBinding = 0;
-  gamma_ramp_write_descriptor_set.dstArrayElement = 0;
-  gamma_ramp_write_descriptor_set.descriptorCount = 1;
-  gamma_ramp_write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-  gamma_ramp_write_descriptor_set.pImageInfo = nullptr;
-  gamma_ramp_write_descriptor_set.pBufferInfo = nullptr;
-  for (uint32_t i = 0; i < gamma_ramp_buffer_view_count; ++i) {
-    gamma_ramp_write_descriptor_set.dstSet = swap_descriptors_gamma_ramp_[i];
-    gamma_ramp_write_descriptor_set.pTexelBufferView = &gamma_ramp_buffer_views_[i];
-    dfn.vkUpdateDescriptorSets(device, 1, &gamma_ramp_write_descriptor_set, 0, nullptr);
-  }
-
-  // Linear sampler for FXAA.
-  VkSamplerCreateInfo swap_sampler_create_info;
-  swap_sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  swap_sampler_create_info.pNext = nullptr;
-  swap_sampler_create_info.flags = 0;
-  swap_sampler_create_info.magFilter = VK_FILTER_LINEAR;
-  swap_sampler_create_info.minFilter = VK_FILTER_LINEAR;
-  swap_sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  swap_sampler_create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  swap_sampler_create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  swap_sampler_create_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  swap_sampler_create_info.mipLodBias = 0.0f;
-  swap_sampler_create_info.anisotropyEnable = VK_FALSE;
-  swap_sampler_create_info.maxAnisotropy = 1.0f;
-  swap_sampler_create_info.compareEnable = VK_FALSE;
-  swap_sampler_create_info.compareOp = VK_COMPARE_OP_NEVER;
-  swap_sampler_create_info.minLod = 0.0f;
-  swap_sampler_create_info.maxLod = 0.0f;
-  swap_sampler_create_info.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-  swap_sampler_create_info.unnormalizedCoordinates = VK_FALSE;
-  if (dfn.vkCreateSampler(device, &swap_sampler_create_info, nullptr,
-                          &swap_sampler_linear_clamp_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the presentation FXAA sampler");
-    return false;
-  }
-
-  // Gamma ramp application pipeline layout.
-  std::array<VkDescriptorSetLayout, kSwapApplyGammaDescriptorSetCount>
-      swap_apply_gamma_descriptor_set_layouts{};
-  swap_apply_gamma_descriptor_set_layouts[kSwapApplyGammaDescriptorSetRamp] =
-      swap_descriptor_set_layout_uniform_texel_buffer_;
-  swap_apply_gamma_descriptor_set_layouts[kSwapApplyGammaDescriptorSetSource] =
-      swap_descriptor_set_layout_sampled_image_;
-  VkPipelineLayoutCreateInfo swap_apply_gamma_pipeline_layout_create_info;
-  swap_apply_gamma_pipeline_layout_create_info.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  swap_apply_gamma_pipeline_layout_create_info.pNext = nullptr;
-  swap_apply_gamma_pipeline_layout_create_info.flags = 0;
-  swap_apply_gamma_pipeline_layout_create_info.setLayoutCount =
-      uint32_t(swap_apply_gamma_descriptor_set_layouts.size());
-  swap_apply_gamma_pipeline_layout_create_info.pSetLayouts =
-      swap_apply_gamma_descriptor_set_layouts.data();
-  swap_apply_gamma_pipeline_layout_create_info.pushConstantRangeCount = 0;
-  swap_apply_gamma_pipeline_layout_create_info.pPushConstantRanges = nullptr;
-  if (dfn.vkCreatePipelineLayout(device, &swap_apply_gamma_pipeline_layout_create_info, nullptr,
-                                 &swap_apply_gamma_pipeline_layout_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the gamma ramp application pipeline layout");
-    return false;
-  }
-
-  // Gamma ramp application compute pipeline layout.
-  std::array<VkDescriptorSetLayout, kSwapApplyGammaComputeDescriptorSetCount>
-      swap_apply_gamma_compute_descriptor_set_layouts{};
-  swap_apply_gamma_compute_descriptor_set_layouts[kSwapApplyGammaComputeDescriptorSetRamp] =
-      swap_descriptor_set_layout_uniform_texel_buffer_;
-  swap_apply_gamma_compute_descriptor_set_layouts[kSwapApplyGammaComputeDescriptorSetSource] =
-      swap_descriptor_set_layout_sampled_image_;
-  swap_apply_gamma_compute_descriptor_set_layouts[kSwapApplyGammaComputeDescriptorSetDestination] =
-      swap_descriptor_set_layout_storage_image_;
-  VkPushConstantRange swap_apply_gamma_compute_push_constant_range;
-  swap_apply_gamma_compute_push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  swap_apply_gamma_compute_push_constant_range.offset = 0;
-  swap_apply_gamma_compute_push_constant_range.size = sizeof(SwapApplyGammaConstants);
-  swap_apply_gamma_pipeline_layout_create_info.setLayoutCount =
-      uint32_t(swap_apply_gamma_compute_descriptor_set_layouts.size());
-  swap_apply_gamma_pipeline_layout_create_info.pSetLayouts =
-      swap_apply_gamma_compute_descriptor_set_layouts.data();
-  swap_apply_gamma_pipeline_layout_create_info.pushConstantRangeCount = 1;
-  swap_apply_gamma_pipeline_layout_create_info.pPushConstantRanges =
-      &swap_apply_gamma_compute_push_constant_range;
-  if (dfn.vkCreatePipelineLayout(device, &swap_apply_gamma_pipeline_layout_create_info, nullptr,
-                                 &swap_apply_gamma_compute_pipeline_layout_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the gamma ramp application compute pipeline layout");
-    return false;
-  }
-
-  // FXAA compute pipeline layout.
-  std::array<VkDescriptorSetLayout, kSwapFxaaDescriptorSetCount> swap_fxaa_descriptor_set_layouts{};
-  swap_fxaa_descriptor_set_layouts[kSwapFxaaDescriptorSetSource] =
-      swap_descriptor_set_layout_combined_image_sampler_;
-  swap_fxaa_descriptor_set_layouts[kSwapFxaaDescriptorSetDestination] =
-      swap_descriptor_set_layout_storage_image_;
-  VkPushConstantRange swap_fxaa_push_constant_range;
-  swap_fxaa_push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  swap_fxaa_push_constant_range.offset = 0;
-  swap_fxaa_push_constant_range.size = sizeof(SwapFxaaConstants);
-  swap_apply_gamma_pipeline_layout_create_info.setLayoutCount =
-      uint32_t(swap_fxaa_descriptor_set_layouts.size());
-  swap_apply_gamma_pipeline_layout_create_info.pSetLayouts =
-      swap_fxaa_descriptor_set_layouts.data();
-  swap_apply_gamma_pipeline_layout_create_info.pushConstantRangeCount = 1;
-  swap_apply_gamma_pipeline_layout_create_info.pPushConstantRanges = &swap_fxaa_push_constant_range;
-  if (dfn.vkCreatePipelineLayout(device, &swap_apply_gamma_pipeline_layout_create_info, nullptr,
-                                 &swap_fxaa_pipeline_layout_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the FXAA compute pipeline layout");
-    return false;
-  }
-
-  // Gamma application render pass. Doesn't make assumptions about outer usage
-  // (explicit barriers must be used instead) for simplicity of use in different
-  // scenarios with different pipelines.
-  VkAttachmentDescription swap_apply_gamma_render_pass_attachment;
-  swap_apply_gamma_render_pass_attachment.flags = 0;
-  swap_apply_gamma_render_pass_attachment.format = ui::vulkan::VulkanPresenter::kGuestOutputFormat;
-  swap_apply_gamma_render_pass_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-  swap_apply_gamma_render_pass_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  swap_apply_gamma_render_pass_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  swap_apply_gamma_render_pass_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  swap_apply_gamma_render_pass_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  swap_apply_gamma_render_pass_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  swap_apply_gamma_render_pass_attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  VkAttachmentReference swap_apply_gamma_render_pass_color_attachment;
-  swap_apply_gamma_render_pass_color_attachment.attachment = 0;
-  swap_apply_gamma_render_pass_color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  VkSubpassDescription swap_apply_gamma_render_pass_subpass = {};
-  swap_apply_gamma_render_pass_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  swap_apply_gamma_render_pass_subpass.colorAttachmentCount = 1;
-  swap_apply_gamma_render_pass_subpass.pColorAttachments =
-      &swap_apply_gamma_render_pass_color_attachment;
-  VkSubpassDependency swap_apply_gamma_render_pass_dependencies[2];
-  for (uint32_t i = 0; i < 2; ++i) {
-    VkSubpassDependency& swap_apply_gamma_render_pass_dependency =
-        swap_apply_gamma_render_pass_dependencies[i];
-    swap_apply_gamma_render_pass_dependency.srcSubpass = i ? 0 : VK_SUBPASS_EXTERNAL;
-    swap_apply_gamma_render_pass_dependency.dstSubpass = i ? VK_SUBPASS_EXTERNAL : 0;
-    swap_apply_gamma_render_pass_dependency.srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    swap_apply_gamma_render_pass_dependency.dstStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    swap_apply_gamma_render_pass_dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    swap_apply_gamma_render_pass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    swap_apply_gamma_render_pass_dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-  }
-  VkRenderPassCreateInfo swap_apply_gamma_render_pass_create_info;
-  swap_apply_gamma_render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  swap_apply_gamma_render_pass_create_info.pNext = nullptr;
-  swap_apply_gamma_render_pass_create_info.flags = 0;
-  swap_apply_gamma_render_pass_create_info.attachmentCount = 1;
-  swap_apply_gamma_render_pass_create_info.pAttachments = &swap_apply_gamma_render_pass_attachment;
-  swap_apply_gamma_render_pass_create_info.subpassCount = 1;
-  swap_apply_gamma_render_pass_create_info.pSubpasses = &swap_apply_gamma_render_pass_subpass;
-  swap_apply_gamma_render_pass_create_info.dependencyCount =
-      uint32_t(rex::countof(swap_apply_gamma_render_pass_dependencies));
-  swap_apply_gamma_render_pass_create_info.pDependencies =
-      swap_apply_gamma_render_pass_dependencies;
-  if (dfn.vkCreateRenderPass(device, &swap_apply_gamma_render_pass_create_info, nullptr,
-                             &swap_apply_gamma_render_pass_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the gamma ramp application render pass");
-    return false;
-  }
-
-  // Gamma ramp application pipeline.
-  // Using a graphics pipeline, not a compute one, because storage image support
-  // is optional for VK_FORMAT_A2B10G10R10_UNORM_PACK32.
-
-  enum SwapApplyGammaPixelShader {
-    kSwapApplyGammaPixelShader256EntryTable,
-    kSwapApplyGammaPixelShaderPWL,
-    kSwapApplyGammaPixelShader256EntryTableFxaaLuma,
-    kSwapApplyGammaPixelShaderPWLFxaaLuma,
-
-    kSwapApplyGammaPixelShaderCount,
-  };
-  std::array<VkShaderModule, kSwapApplyGammaPixelShaderCount> swap_apply_gamma_pixel_shaders{};
-  bool swap_apply_gamma_pixel_shaders_created =
-      (swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShader256EntryTable] =
-           ui::vulkan::util::CreateShaderModule(vulkan_device, shaders::apply_gamma_table_ps,
-                                                sizeof(shaders::apply_gamma_table_ps))) !=
-          VK_NULL_HANDLE &&
-      (swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShaderPWL] =
-           ui::vulkan::util::CreateShaderModule(vulkan_device, shaders::apply_gamma_pwl_ps,
-                                                sizeof(shaders::apply_gamma_pwl_ps))) !=
-          VK_NULL_HANDLE &&
-      (swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShader256EntryTableFxaaLuma] =
-           ui::vulkan::util::CreateShaderModule(
-               vulkan_device, shaders::apply_gamma_table_fxaa_luma_ps,
-               sizeof(shaders::apply_gamma_table_fxaa_luma_ps))) != VK_NULL_HANDLE &&
-      (swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShaderPWLFxaaLuma] =
-           ui::vulkan::util::CreateShaderModule(
-               vulkan_device, shaders::apply_gamma_pwl_fxaa_luma_ps,
-               sizeof(shaders::apply_gamma_pwl_fxaa_luma_ps))) != VK_NULL_HANDLE;
-  if (!swap_apply_gamma_pixel_shaders_created) {
-    REXGPU_ERROR("Failed to create the gamma ramp application pixel shader modules");
-    for (VkShaderModule swap_apply_gamma_pixel_shader : swap_apply_gamma_pixel_shaders) {
-      if (swap_apply_gamma_pixel_shader != VK_NULL_HANDLE) {
-        dfn.vkDestroyShaderModule(device, swap_apply_gamma_pixel_shader, nullptr);
-      }
-    }
-    return false;
-  }
-
-  VkPipelineShaderStageCreateInfo swap_apply_gamma_pipeline_stages[2];
-  swap_apply_gamma_pipeline_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  swap_apply_gamma_pipeline_stages[0].pNext = nullptr;
-  swap_apply_gamma_pipeline_stages[0].flags = 0;
-  swap_apply_gamma_pipeline_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  swap_apply_gamma_pipeline_stages[0].module = ui::vulkan::util::CreateShaderModule(
-      vulkan_device, shaders::fullscreen_cw_vs, sizeof(shaders::fullscreen_cw_vs));
-  if (swap_apply_gamma_pipeline_stages[0].module == VK_NULL_HANDLE) {
-    REXGPU_ERROR("Failed to create the gamma ramp application vertex shader module");
-    for (VkShaderModule swap_apply_gamma_pixel_shader : swap_apply_gamma_pixel_shaders) {
-      assert_true(swap_apply_gamma_pixel_shader != VK_NULL_HANDLE);
-      dfn.vkDestroyShaderModule(device, swap_apply_gamma_pixel_shader, nullptr);
-    }
-    return false;
-  }
-  swap_apply_gamma_pipeline_stages[0].pName = "main";
-  swap_apply_gamma_pipeline_stages[0].pSpecializationInfo = nullptr;
-  swap_apply_gamma_pipeline_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  swap_apply_gamma_pipeline_stages[1].pNext = nullptr;
-  swap_apply_gamma_pipeline_stages[1].flags = 0;
-  swap_apply_gamma_pipeline_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  // The fragment shader module will be specified later.
-  swap_apply_gamma_pipeline_stages[1].pName = "main";
-  swap_apply_gamma_pipeline_stages[1].pSpecializationInfo = nullptr;
-
-  VkPipelineVertexInputStateCreateInfo swap_apply_gamma_pipeline_vertex_input_state = {};
-  swap_apply_gamma_pipeline_vertex_input_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-  VkPipelineInputAssemblyStateCreateInfo swap_apply_gamma_pipeline_input_assembly_state;
-  swap_apply_gamma_pipeline_input_assembly_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  swap_apply_gamma_pipeline_input_assembly_state.pNext = nullptr;
-  swap_apply_gamma_pipeline_input_assembly_state.flags = 0;
-  swap_apply_gamma_pipeline_input_assembly_state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  swap_apply_gamma_pipeline_input_assembly_state.primitiveRestartEnable = VK_FALSE;
-
-  VkPipelineViewportStateCreateInfo swap_apply_gamma_pipeline_viewport_state;
-  swap_apply_gamma_pipeline_viewport_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  swap_apply_gamma_pipeline_viewport_state.pNext = nullptr;
-  swap_apply_gamma_pipeline_viewport_state.flags = 0;
-  swap_apply_gamma_pipeline_viewport_state.viewportCount = 1;
-  swap_apply_gamma_pipeline_viewport_state.pViewports = nullptr;
-  swap_apply_gamma_pipeline_viewport_state.scissorCount = 1;
-  swap_apply_gamma_pipeline_viewport_state.pScissors = nullptr;
-
-  VkPipelineRasterizationStateCreateInfo swap_apply_gamma_pipeline_rasterization_state = {};
-  swap_apply_gamma_pipeline_rasterization_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  swap_apply_gamma_pipeline_rasterization_state.polygonMode = VK_POLYGON_MODE_FILL;
-  swap_apply_gamma_pipeline_rasterization_state.cullMode = VK_CULL_MODE_NONE;
-  swap_apply_gamma_pipeline_rasterization_state.frontFace = VK_FRONT_FACE_CLOCKWISE;
-  swap_apply_gamma_pipeline_rasterization_state.lineWidth = 1.0f;
-
-  VkPipelineMultisampleStateCreateInfo swap_apply_gamma_pipeline_multisample_state = {};
-  swap_apply_gamma_pipeline_multisample_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  swap_apply_gamma_pipeline_multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-  VkPipelineColorBlendAttachmentState swap_apply_gamma_pipeline_color_blend_attachment_state = {};
-  swap_apply_gamma_pipeline_color_blend_attachment_state.colorWriteMask =
-      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-      VK_COLOR_COMPONENT_A_BIT;
-  VkPipelineColorBlendStateCreateInfo swap_apply_gamma_pipeline_color_blend_state = {};
-  swap_apply_gamma_pipeline_color_blend_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  swap_apply_gamma_pipeline_color_blend_state.attachmentCount = 1;
-  swap_apply_gamma_pipeline_color_blend_state.pAttachments =
-      &swap_apply_gamma_pipeline_color_blend_attachment_state;
-
-  static const VkDynamicState kSwapApplyGammaPipelineDynamicStates[] = {
-      VK_DYNAMIC_STATE_VIEWPORT,
-      VK_DYNAMIC_STATE_SCISSOR,
-  };
-  VkPipelineDynamicStateCreateInfo swap_apply_gamma_pipeline_dynamic_state;
-  swap_apply_gamma_pipeline_dynamic_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  swap_apply_gamma_pipeline_dynamic_state.pNext = nullptr;
-  swap_apply_gamma_pipeline_dynamic_state.flags = 0;
-  swap_apply_gamma_pipeline_dynamic_state.dynamicStateCount =
-      uint32_t(rex::countof(kSwapApplyGammaPipelineDynamicStates));
-  swap_apply_gamma_pipeline_dynamic_state.pDynamicStates = kSwapApplyGammaPipelineDynamicStates;
-
-  VkGraphicsPipelineCreateInfo swap_apply_gamma_pipeline_create_info;
-  swap_apply_gamma_pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  swap_apply_gamma_pipeline_create_info.pNext = nullptr;
-  swap_apply_gamma_pipeline_create_info.flags = 0;
-  swap_apply_gamma_pipeline_create_info.stageCount =
-      uint32_t(rex::countof(swap_apply_gamma_pipeline_stages));
-  swap_apply_gamma_pipeline_create_info.pStages = swap_apply_gamma_pipeline_stages;
-  swap_apply_gamma_pipeline_create_info.pVertexInputState =
-      &swap_apply_gamma_pipeline_vertex_input_state;
-  swap_apply_gamma_pipeline_create_info.pInputAssemblyState =
-      &swap_apply_gamma_pipeline_input_assembly_state;
-  swap_apply_gamma_pipeline_create_info.pTessellationState = nullptr;
-  swap_apply_gamma_pipeline_create_info.pViewportState = &swap_apply_gamma_pipeline_viewport_state;
-  swap_apply_gamma_pipeline_create_info.pRasterizationState =
-      &swap_apply_gamma_pipeline_rasterization_state;
-  swap_apply_gamma_pipeline_create_info.pMultisampleState =
-      &swap_apply_gamma_pipeline_multisample_state;
-  swap_apply_gamma_pipeline_create_info.pDepthStencilState = nullptr;
-  swap_apply_gamma_pipeline_create_info.pColorBlendState =
-      &swap_apply_gamma_pipeline_color_blend_state;
-  swap_apply_gamma_pipeline_create_info.pDynamicState = &swap_apply_gamma_pipeline_dynamic_state;
-  swap_apply_gamma_pipeline_create_info.layout = swap_apply_gamma_pipeline_layout_;
-  swap_apply_gamma_pipeline_create_info.renderPass = swap_apply_gamma_render_pass_;
-  swap_apply_gamma_pipeline_create_info.subpass = 0;
-  swap_apply_gamma_pipeline_create_info.basePipelineHandle = VK_NULL_HANDLE;
-  swap_apply_gamma_pipeline_create_info.basePipelineIndex = -1;
-  std::array<VkShaderModule, 4> swap_apply_gamma_pipeline_pixel_shaders = {
-      swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShader256EntryTable],
-      swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShaderPWL],
-      swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShader256EntryTableFxaaLuma],
-      swap_apply_gamma_pixel_shaders[kSwapApplyGammaPixelShaderPWLFxaaLuma],
-  };
-  std::array<VkPipeline*, 4> swap_apply_gamma_pipelines = {
-      &swap_apply_gamma_256_entry_table_pipeline_,
-      &swap_apply_gamma_pwl_pipeline_,
-      &swap_apply_gamma_256_entry_table_fxaa_luma_pipeline_,
-      &swap_apply_gamma_pwl_fxaa_luma_pipeline_,
-  };
-  std::array<VkResult, 4> swap_apply_gamma_pipeline_create_results;
-  for (size_t i = 0; i < swap_apply_gamma_pipelines.size(); ++i) {
-    swap_apply_gamma_pipeline_stages[1].module = swap_apply_gamma_pipeline_pixel_shaders[i];
-    swap_apply_gamma_pipeline_create_results[i] = dfn.vkCreateGraphicsPipelines(
-        device, VK_NULL_HANDLE, 1, &swap_apply_gamma_pipeline_create_info, nullptr,
-        swap_apply_gamma_pipelines[i]);
-  }
-  if (!vulkan_device->properties().imageViewFormatSwizzle) {
-    auto create_rb_swap_pipeline = [&](const char* source, VkPipeline& pipeline_out,
-                                       const char* pipeline_name) {
-      std::vector<uint32_t> pixel_spirv;
-      std::string compile_error;
-      if (!CompileGlslToSpirv(VK_SHADER_STAGE_FRAGMENT_BIT, source, pixel_spirv, compile_error)) {
-        REXGPU_WARN("Failed to compile {} shader to SPIR-V: {}", pipeline_name, compile_error);
-        return;
-      }
-      VkShaderModule pixel_shader_module = ui::vulkan::util::CreateShaderModule(
-          vulkan_device, pixel_spirv.data(), sizeof(uint32_t) * pixel_spirv.size());
-      if (pixel_shader_module == VK_NULL_HANDLE) {
-        REXGPU_WARN("Failed to create {} shader module", pipeline_name);
-        return;
-      }
-      swap_apply_gamma_pipeline_stages[1].module = pixel_shader_module;
-      if (dfn.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
-                                        &swap_apply_gamma_pipeline_create_info, nullptr,
-                                        &pipeline_out) != VK_SUCCESS) {
-        REXGPU_WARN("Failed to create {} pipeline", pipeline_name);
-        pipeline_out = VK_NULL_HANDLE;
-      }
-      dfn.vkDestroyShaderModule(device, pixel_shader_module, nullptr);
-    };
-    create_rb_swap_pipeline(GetSwapApplyGammaTablePixelRbSwapSource(),
-                            swap_apply_gamma_256_entry_table_rb_swap_pipeline_,
-                            "swap gamma table red/blue fallback");
-    create_rb_swap_pipeline(GetSwapApplyGammaPwlPixelRbSwapSource(),
-                            swap_apply_gamma_pwl_rb_swap_pipeline_,
-                            "swap gamma PWL red/blue fallback");
-  }
-  dfn.vkDestroyShaderModule(device, swap_apply_gamma_pipeline_stages[0].module, nullptr);
-  for (VkShaderModule swap_apply_gamma_pixel_shader : swap_apply_gamma_pixel_shaders) {
-    assert_true(swap_apply_gamma_pixel_shader != VK_NULL_HANDLE);
-    dfn.vkDestroyShaderModule(device, swap_apply_gamma_pixel_shader, nullptr);
-  }
-  if (std::any_of(swap_apply_gamma_pipeline_create_results.begin(),
-                  swap_apply_gamma_pipeline_create_results.end(),
-                  [](VkResult result) { return result != VK_SUCCESS; })) {
-    REXGPU_ERROR("Failed to create the gamma ramp application pipelines");
-    return false;
-  }
-
-  // Gamma ramp application compute pipelines.
-  swap_apply_gamma_compute_256_entry_table_pipeline_ = ui::vulkan::util::CreateComputePipeline(
-      vulkan_device, swap_apply_gamma_compute_pipeline_layout_, shaders::apply_gamma_table_cs,
-      sizeof(shaders::apply_gamma_table_cs));
-  if (swap_apply_gamma_compute_256_entry_table_pipeline_ == VK_NULL_HANDLE) {
-    REXGPU_WARN(
-        "Failed to create the 256-entry table gamma ramp application compute "
-        "pipeline, keeping graphics fallback");
-  }
-  swap_apply_gamma_compute_256_entry_table_fxaa_luma_pipeline_ =
-      ui::vulkan::util::CreateComputePipeline(
-          vulkan_device, swap_apply_gamma_compute_pipeline_layout_,
-          shaders::apply_gamma_table_fxaa_luma_cs, sizeof(shaders::apply_gamma_table_fxaa_luma_cs));
-  if (swap_apply_gamma_compute_256_entry_table_fxaa_luma_pipeline_ == VK_NULL_HANDLE) {
-    REXGPU_WARN(
-        "Failed to create the 256-entry table gamma ramp application compute "
-        "pipeline with luma output");
-  }
-  swap_apply_gamma_compute_pwl_pipeline_ = ui::vulkan::util::CreateComputePipeline(
-      vulkan_device, swap_apply_gamma_compute_pipeline_layout_, shaders::apply_gamma_pwl_cs,
-      sizeof(shaders::apply_gamma_pwl_cs));
-  if (swap_apply_gamma_compute_pwl_pipeline_ == VK_NULL_HANDLE) {
-    REXGPU_WARN("Failed to create the PWL gamma ramp application compute pipeline");
-  }
-  swap_apply_gamma_compute_pwl_fxaa_luma_pipeline_ = ui::vulkan::util::CreateComputePipeline(
-      vulkan_device, swap_apply_gamma_compute_pipeline_layout_,
-      shaders::apply_gamma_pwl_fxaa_luma_cs, sizeof(shaders::apply_gamma_pwl_fxaa_luma_cs));
-  if (swap_apply_gamma_compute_pwl_fxaa_luma_pipeline_ == VK_NULL_HANDLE) {
-    REXGPU_WARN(
-        "Failed to create the PWL gamma ramp application compute pipeline with "
-        "luma output");
-  }
-  if (!vulkan_device->properties().imageViewFormatSwizzle) {
-    auto create_rb_swap_compute_pipeline = [&](const char* source, VkPipeline& pipeline_out,
-                                               const char* pipeline_name) {
-      std::vector<uint32_t> compute_spirv;
-      std::string compile_error;
-      if (!CompileGlslToSpirv(VK_SHADER_STAGE_COMPUTE_BIT, source, compute_spirv, compile_error)) {
-        REXGPU_WARN("Failed to compile {} shader to SPIR-V: {}", pipeline_name, compile_error);
-        return;
-      }
-      pipeline_out = ui::vulkan::util::CreateComputePipeline(
-          vulkan_device, swap_apply_gamma_compute_pipeline_layout_, compute_spirv.data(),
-          sizeof(uint32_t) * compute_spirv.size());
-      if (pipeline_out == VK_NULL_HANDLE) {
-        REXGPU_WARN("Failed to create {} pipeline", pipeline_name);
-      }
-    };
-    create_rb_swap_compute_pipeline(GetSwapApplyGammaTableComputeRbSwapSource(),
-                                    swap_apply_gamma_compute_256_entry_table_rb_swap_pipeline_,
-                                    "swap gamma table compute red/blue fallback");
-    create_rb_swap_compute_pipeline(GetSwapApplyGammaPwlComputeRbSwapSource(),
-                                    swap_apply_gamma_compute_pwl_rb_swap_pipeline_,
-                                    "swap gamma PWL compute red/blue fallback");
-    create_rb_swap_compute_pipeline(
-        GetSwapApplyGammaTableFxaaLumaComputeRbSwapSource(),
-        swap_apply_gamma_compute_256_entry_table_fxaa_luma_rb_swap_pipeline_,
-        "swap gamma table FXAA-luma compute red/blue fallback");
-    create_rb_swap_compute_pipeline(GetSwapApplyGammaPwlFxaaLumaComputeRbSwapSource(),
-                                    swap_apply_gamma_compute_pwl_fxaa_luma_rb_swap_pipeline_,
-                                    "swap gamma PWL FXAA-luma compute red/blue fallback");
-  }
-
-  // FXAA compute pipelines, compiled to SPIR-V at runtime.
-  std::vector<uint32_t> swap_fxaa_spirv;
-  std::string swap_fxaa_compile_error;
-  if (!CompileGlslToSpirv(VK_SHADER_STAGE_COMPUTE_BIT, GetSwapFxaaComputeSource(false),
-                          swap_fxaa_spirv, swap_fxaa_compile_error)) {
-    REXGPU_WARN("Failed to compile FXAA compute shader to SPIR-V: {}", swap_fxaa_compile_error);
-  } else {
-    swap_fxaa_pipeline_ = ui::vulkan::util::CreateComputePipeline(
-        vulkan_device, swap_fxaa_pipeline_layout_, swap_fxaa_spirv.data(),
-        sizeof(uint32_t) * swap_fxaa_spirv.size());
-    if (swap_fxaa_pipeline_ == VK_NULL_HANDLE) {
-      REXGPU_WARN("Failed to create the FXAA compute pipeline");
-    }
-  }
-
-  std::vector<uint32_t> swap_fxaa_extreme_spirv;
-  std::string swap_fxaa_extreme_compile_error;
-  if (!CompileGlslToSpirv(VK_SHADER_STAGE_COMPUTE_BIT, GetSwapFxaaComputeSource(true),
-                          swap_fxaa_extreme_spirv, swap_fxaa_extreme_compile_error)) {
-    REXGPU_WARN("Failed to compile extreme FXAA compute shader to SPIR-V: {}",
-                swap_fxaa_extreme_compile_error);
-  } else {
-    swap_fxaa_extreme_pipeline_ = ui::vulkan::util::CreateComputePipeline(
-        vulkan_device, swap_fxaa_pipeline_layout_, swap_fxaa_extreme_spirv.data(),
-        sizeof(uint32_t) * swap_fxaa_extreme_spirv.size());
-    if (swap_fxaa_extreme_pipeline_ == VK_NULL_HANDLE) {
-      REXGPU_WARN("Failed to create the extreme-quality FXAA compute pipeline");
-    }
-  }
-
-  VkPipelineLayoutCreateInfo resolve_downscale_layout_create_info = {};
-  resolve_downscale_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  VkDescriptorSetLayout resolve_downscale_set_layout =
-      descriptor_set_layouts_single_transient_[size_t(
-          SingleTransientDescriptorLayout::kStorageBufferPairCompute)];
-  resolve_downscale_layout_create_info.setLayoutCount = 1;
-  resolve_downscale_layout_create_info.pSetLayouts = &resolve_downscale_set_layout;
-  VkPushConstantRange resolve_downscale_push_constant_range = {};
-  resolve_downscale_push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  resolve_downscale_push_constant_range.offset = 0;
-  resolve_downscale_push_constant_range.size = sizeof(ResolveDownscaleConstants);
-  resolve_downscale_layout_create_info.pushConstantRangeCount = 1;
-  resolve_downscale_layout_create_info.pPushConstantRanges = &resolve_downscale_push_constant_range;
-  if (dfn.vkCreatePipelineLayout(device, &resolve_downscale_layout_create_info, nullptr,
-                                 &resolve_downscale_pipeline_layout_) == VK_SUCCESS) {
-    resolve_downscale_pipeline_ = ui::vulkan::util::CreateComputePipeline(
-        vulkan_device, resolve_downscale_pipeline_layout_, shaders::resolve_downscale_cs,
-        sizeof(shaders::resolve_downscale_cs));
-    if (resolve_downscale_pipeline_ == VK_NULL_HANDLE) {
-      REXGPU_WARN("Failed to create Vulkan resolve-downscale readback pipeline");
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipelineLayout, device,
-                                             resolve_downscale_pipeline_layout_);
-    }
-  } else {
-    REXGPU_WARN("Failed to create Vulkan resolve-downscale pipeline layout");
-  }
-
-  occlusion_query_resources_available_ = InitializeOcclusionQueryResources();
-
-  // Just not to expose uninitialized memory.
-  std::memset(&system_constants_, 0, sizeof(system_constants_));
-
-  return true;
-}
-
-void VulkanCommandProcessor::ShutdownContext() {
-  AwaitAllQueueOperationsCompletion();
-  InvalidateAllVertexBufferResidency();
-  ShutdownOcclusionQueryResources();
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  DestroyScratchBuffer();
-
-  for (auto& readback_pair : readback_buffers_) {
-    ReadbackBuffer& readback = readback_pair.second;
-    for (uint32_t i = 0; i < 2; ++i) {
-      if (readback.mapped_data[i] && readback.memories[i] != VK_NULL_HANDLE) {
-        dfn.vkUnmapMemory(device, readback.memories[i]);
-      }
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device, readback.buffers[i]);
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device, readback.memories[i]);
-      readback.mapped_data[i] = nullptr;
-      readback.sizes[i] = 0;
-      readback.submission_written[i] = 0;
-      readback.written_size[i] = 0;
-    }
-  }
-  readback_buffers_.clear();
-  for (auto& readback_pair : memexport_readback_buffers_) {
-    ReadbackBuffer& readback = readback_pair.second;
-    for (uint32_t i = 0; i < 2; ++i) {
-      if (readback.mapped_data[i] && readback.memories[i] != VK_NULL_HANDLE) {
-        dfn.vkUnmapMemory(device, readback.memories[i]);
-      }
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device, readback.buffers[i]);
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device, readback.memories[i]);
-      readback.mapped_data[i] = nullptr;
-      readback.sizes[i] = 0;
-      readback.submission_written[i] = 0;
-      readback.written_size[i] = 0;
-    }
-  }
-  memexport_readback_buffers_.clear();
-
-  resolve_downscale_buffer_size_ = 0;
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device, resolve_downscale_buffer_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device,
-                                         resolve_downscale_buffer_memory_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         resolve_downscale_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipelineLayout, device,
-                                         resolve_downscale_pipeline_layout_);
-
-  for (SwapFramebuffer& swap_framebuffer : swap_framebuffers_) {
-    ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyFramebuffer, device,
-                                           swap_framebuffer.framebuffer);
-  }
-  DestroySwapFxaaSourceImage();
-
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_fxaa_extreme_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device, swap_fxaa_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_compute_pwl_fxaa_luma_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_compute_pwl_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_compute_pwl_fxaa_luma_rb_swap_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_compute_pwl_rb_swap_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(
-      dfn.vkDestroyPipeline, device, swap_apply_gamma_compute_256_entry_table_fxaa_luma_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(
-      dfn.vkDestroyPipeline, device,
-      swap_apply_gamma_compute_256_entry_table_fxaa_luma_rb_swap_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_compute_256_entry_table_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(
-      dfn.vkDestroyPipeline, device, swap_apply_gamma_compute_256_entry_table_rb_swap_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_pwl_rb_swap_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_256_entry_table_rb_swap_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_pwl_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_pwl_fxaa_luma_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_256_entry_table_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device,
-                                         swap_apply_gamma_256_entry_table_fxaa_luma_pipeline_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyRenderPass, device,
-                                         swap_apply_gamma_render_pass_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipelineLayout, device,
-                                         swap_fxaa_pipeline_layout_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipelineLayout, device,
-                                         swap_apply_gamma_compute_pipeline_layout_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyPipelineLayout, device,
-                                         swap_apply_gamma_pipeline_layout_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroySampler, device, swap_sampler_linear_clamp_);
-
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorPool, device,
-                                         swap_descriptor_pool_);
-
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         swap_descriptor_set_layout_uniform_texel_buffer_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         swap_descriptor_set_layout_storage_image_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         swap_descriptor_set_layout_combined_image_sampler_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         swap_descriptor_set_layout_sampled_image_);
-  for (VkBufferView& gamma_ramp_buffer_view : gamma_ramp_buffer_views_) {
-    ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBufferView, device, gamma_ramp_buffer_view);
-  }
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device, gamma_ramp_upload_buffer_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device,
-                                         gamma_ramp_upload_buffer_memory_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device, gamma_ramp_buffer_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device, gamma_ramp_buffer_memory_);
-
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorPool, device,
-                                         shared_memory_and_edram_descriptor_pool_);
-
-  texture_cache_.reset();
-
-  pipeline_cache_.reset();
-
-  render_target_cache_.reset();
-
-  primitive_processor_.reset();
-
-  shared_memory_.reset();
-
-  ClearTransientDescriptorPools();
-
-  for (const auto& pipeline_layout_pair : pipeline_layouts_) {
-    dfn.vkDestroyPipelineLayout(device, pipeline_layout_pair.second.GetPipelineLayout(), nullptr);
-  }
-  pipeline_layouts_.clear();
-  for (const auto& descriptor_set_layout_pair : descriptor_set_layouts_textures_) {
-    dfn.vkDestroyDescriptorSetLayout(device, descriptor_set_layout_pair.second, nullptr);
-  }
-  descriptor_set_layouts_textures_.clear();
-
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         descriptor_set_layout_shared_memory_and_edram_);
-  for (VkDescriptorSetLayout& descriptor_set_layout_single_transient :
-       descriptor_set_layouts_single_transient_) {
-    ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                           descriptor_set_layout_single_transient);
-  }
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         descriptor_set_layout_constants_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorSetLayout, device,
-                                         descriptor_set_layout_empty_);
-
-  uniform_buffer_pool_.reset();
-
-  sparse_bind_wait_stage_mask_ = 0;
-  sparse_buffer_binds_.clear();
-  sparse_memory_binds_.clear();
-
-  deferred_command_buffer_.Reset();
-  for (const auto& command_buffer_pair : command_buffers_submitted_) {
-    dfn.vkDestroyCommandPool(device, command_buffer_pair.second.pool, nullptr);
-  }
-  command_buffers_submitted_.clear();
-  for (const CommandBuffer& command_buffer : command_buffers_writable_) {
-    dfn.vkDestroyCommandPool(device, command_buffer.pool, nullptr);
-  }
-  command_buffers_writable_.clear();
-
-  for (const auto& destroy_pair : destroy_framebuffers_) {
-    dfn.vkDestroyFramebuffer(device, destroy_pair.second, nullptr);
-  }
-  destroy_framebuffers_.clear();
-  for (const auto& destroy_pair : destroy_image_views_) {
-    dfn.vkDestroyImageView(device, destroy_pair.second, nullptr);
-  }
-  destroy_image_views_.clear();
-  for (const auto& destroy_pair : destroy_buffers_) {
-    dfn.vkDestroyBuffer(device, destroy_pair.second, nullptr);
-  }
-  destroy_buffers_.clear();
-  for (const auto& destroy_pair : destroy_images_) {
-    dfn.vkDestroyImage(device, destroy_pair.second, nullptr);
-  }
-  destroy_images_.clear();
-  for (const auto& destroy_pair : destroy_memory_) {
-    dfn.vkFreeMemory(device, destroy_pair.second, nullptr);
-  }
-  destroy_memory_.clear();
-
-  std::memset(closed_frame_submissions_, 0, sizeof(closed_frame_submissions_));
-  frame_completed_ = 0;
-  frame_current_ = 1;
-  frame_open_ = false;
-
-  for (const auto& semaphore : submissions_in_flight_semaphores_) {
-    dfn.vkDestroySemaphore(device, semaphore.second, nullptr);
-  }
-  submissions_in_flight_semaphores_.clear();
-  for (VkFence& fence : submissions_in_flight_fences_) {
-    dfn.vkDestroyFence(device, fence, nullptr);
-  }
-  submissions_in_flight_fences_.clear();
-  current_submission_wait_stage_masks_.clear();
-  for (VkSemaphore semaphore : current_submission_wait_semaphores_) {
-    dfn.vkDestroySemaphore(device, semaphore, nullptr);
-  }
-  current_submission_wait_semaphores_.clear();
-  submission_completed_ = 0;
-  submission_open_ = false;
-
-  for (VkSemaphore semaphore : semaphores_free_) {
-    dfn.vkDestroySemaphore(device, semaphore, nullptr);
-  }
-  semaphores_free_.clear();
-  for (VkFence fence : fences_free_) {
-    dfn.vkDestroyFence(device, fence, nullptr);
-  }
-  fences_free_.clear();
-
-  device_lost_ = false;
-
-  CommandProcessor::ShutdownContext();
-}
-
-void VulkanCommandProcessor::WriteRegister(uint32_t index, uint32_t value) {
-  CommandProcessor::WriteRegister(index, value);
-
-  if (draw_census_ && draw_census_->IsRecording()) {
-    if (index >= XE_GPU_REG_SHADER_CONSTANT_000_X &&
-        index <= XE_GPU_REG_SHADER_CONSTANT_511_W) {
-      const uint32_t vector = (index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
-      draw_census_float_dirty_[vector >> 6] |= UINT64_C(1) << (vector & 63);
-    } else if (index >= XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031 &&
-               index <= XE_GPU_REG_SHADER_CONSTANT_LOOP_31) {
-      ++draw_census_boolloop_dirty_writes_;
-    } else if (index >= XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0 &&
-               index <= XE_GPU_REG_SHADER_CONSTANT_FETCH_31_5) {
-      const uint32_t dword = index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0;
-      draw_census_fetch_dirty_[dword >> 5] |= UINT32_C(1) << (dword & 31);
-    }
-  }
-
-  if (index >= XE_GPU_REG_SHADER_CONSTANT_000_X && index <= XE_GPU_REG_SHADER_CONSTANT_511_W) {
-    if (frame_open_) {
-      uint32_t float_constant_index = (index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
-      if (float_constant_index >= 256) {
-        float_constant_index -= 256;
-        if (current_float_constant_map_pixel_[float_constant_index >> 6] &
-            (1ull << (float_constant_index & 63))) {
-          current_constant_buffers_up_to_date_ &=
-              ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatPixel);
-        }
-      } else {
-        if (current_float_constant_map_vertex_[float_constant_index >> 6] &
-            (1ull << (float_constant_index & 63))) {
-          current_constant_buffers_up_to_date_ &=
-              ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatVertex);
-        }
-      }
-    }
-  } else if (index >= XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031 &&
-             index <= XE_GPU_REG_SHADER_CONSTANT_LOOP_31) {
-    current_constant_buffers_up_to_date_ &=
-        ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferBoolLoop);
-  } else if (index >= XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0 &&
-             index <= XE_GPU_REG_SHADER_CONSTANT_FETCH_31_5) {
-    current_constant_buffers_up_to_date_ &=
-        ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFetch);
-    if (texture_cache_) {
-      texture_cache_->TextureFetchConstantWritten((index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0) /
-                                                  6);
-    }
-    InvalidateVertexBufferResidency((index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0) / 2);
-  }
-}
-
-void VulkanCommandProcessor::WriteRegistersFromMem(uint32_t start_index, uint32_t* base,
-                                                   uint32_t num_registers) {
-  if (!num_registers) {
-    return;
-  }
-  uint32_t end_index = start_index + num_registers - 1;
-
-  auto range_has_any_constant_usage = [](const uint64_t* usage_map, uint32_t first_constant,
-                                         uint32_t last_constant) -> bool {
-    if (first_constant > last_constant) {
-      return false;
-    }
-    uint32_t first_word = first_constant >> 6;
-    uint32_t last_word = last_constant >> 6;
-    uint32_t first_bit = first_constant & 63;
-    uint32_t last_bit = last_constant & 63;
-    if (first_word == last_word) {
-      uint32_t bit_count = last_bit - first_bit + 1;
-      uint64_t mask = bit_count == 64 ? UINT64_MAX : ((UINT64_C(1) << bit_count) - 1) << first_bit;
-      return (usage_map[first_word] & mask) != 0;
-    }
-    if (usage_map[first_word] & (UINT64_MAX << first_bit)) {
-      return true;
-    }
-    for (uint32_t word = first_word + 1; word < last_word; ++word) {
-      if (usage_map[word]) {
-        return true;
-      }
-    }
-    uint64_t last_mask = last_bit == 63 ? UINT64_MAX : ((UINT64_C(1) << (last_bit + 1)) - 1);
-    return (usage_map[last_word] & last_mask) != 0;
-  };
-
-  if (start_index >= XE_GPU_REG_SHADER_CONSTANT_000_X &&
-      end_index <= XE_GPU_REG_SHADER_CONSTANT_511_W) {
-    memory::copy_and_swap(register_file_->values + start_index, base, num_registers);
-    if (draw_census_ && draw_census_->IsRecording()) {
-      const uint32_t first_vector = (start_index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
-      const uint32_t last_vector = (end_index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
-      for (uint32_t vector = first_vector; vector <= last_vector; ++vector) {
-        draw_census_float_dirty_[vector >> 6] |= UINT64_C(1) << (vector & 63);
-      }
-    }
-    if (frame_open_) {
-      uint32_t first_float_constant = (start_index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
-      uint32_t last_float_constant = (end_index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
-      if (first_float_constant < 256) {
-        uint32_t last_vertex_constant = std::min(last_float_constant, 255u);
-        if (range_has_any_constant_usage(current_float_constant_map_vertex_, first_float_constant,
-                                         last_vertex_constant)) {
-          current_constant_buffers_up_to_date_ &=
-              ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatVertex);
-        }
-      }
-      if (last_float_constant >= 256) {
-        uint32_t first_pixel_constant =
-            first_float_constant >= 256 ? first_float_constant - 256 : 0;
-        uint32_t last_pixel_constant = last_float_constant - 256;
-        if (range_has_any_constant_usage(current_float_constant_map_pixel_, first_pixel_constant,
-                                         last_pixel_constant)) {
-          current_constant_buffers_up_to_date_ &=
-              ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatPixel);
-        }
-      }
-    }
-    return;
-  }
-
-  if (start_index >= XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031 &&
-      end_index <= XE_GPU_REG_SHADER_CONSTANT_LOOP_31) {
-    memory::copy_and_swap(register_file_->values + start_index, base, num_registers);
-    if (draw_census_ && draw_census_->IsRecording()) {
-      draw_census_boolloop_dirty_writes_ += num_registers;
-    }
-    current_constant_buffers_up_to_date_ &=
-        ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferBoolLoop);
-    return;
-  }
-
-  if (start_index >= XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0 &&
-      end_index <= XE_GPU_REG_SHADER_CONSTANT_FETCH_31_5) {
-    memory::copy_and_swap(register_file_->values + start_index, base, num_registers);
-    current_constant_buffers_up_to_date_ &=
-        ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFetch);
-    uint32_t first_fetch_dword = start_index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0;
-    uint32_t last_fetch_dword = end_index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0;
-    if (draw_census_ && draw_census_->IsRecording()) {
-      for (uint32_t dword = first_fetch_dword; dword <= last_fetch_dword; ++dword) {
-        draw_census_fetch_dirty_[dword >> 5] |= UINT32_C(1) << (dword & 31);
-      }
-    }
-    if (texture_cache_) {
-      texture_cache_->TextureFetchConstantsWritten(first_fetch_dword / 6, last_fetch_dword / 6);
-    }
-    InvalidateVertexBufferResidencyRange(first_fetch_dword / 2, last_fetch_dword / 2);
-    return;
-  }
-
-  CommandProcessor::WriteRegistersFromMem(start_index, base, num_registers);
-}
-
-void VulkanCommandProcessor::SparseBindBuffer(VkBuffer buffer, uint32_t bind_count,
-                                              const VkSparseMemoryBind* binds,
-                                              VkPipelineStageFlags wait_stage_mask) {
-  if (!bind_count) {
-    return;
-  }
-  SparseBufferBind& buffer_bind = sparse_buffer_binds_.emplace_back();
-  buffer_bind.buffer = buffer;
-  buffer_bind.bind_offset = sparse_memory_binds_.size();
-  buffer_bind.bind_count = bind_count;
-  sparse_memory_binds_.reserve(sparse_memory_binds_.size() + bind_count);
-  sparse_memory_binds_.insert(sparse_memory_binds_.end(), binds, binds + bind_count);
-  sparse_bind_wait_stage_mask_ |= wait_stage_mask;
-}
-
-void VulkanCommandProcessor::OnGammaRamp256EntryTableValueWritten() {
-  gamma_ramp_256_entry_table_current_frame_ = UINT32_MAX;
-}
-
-void VulkanCommandProcessor::OnGammaRampPWLValueWritten() {
-  gamma_ramp_pwl_current_frame_ = UINT32_MAX;
-}
-
-void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
-                                       uint32_t frontbuffer_height) {
-  ++draw_census_swap_ordinal_;
-#if REX_PLATFORM_SWITCH
-  RexSwitchPerfCount(0);
-  // Confirm the buffer the guest actually presents, rather than inferring a
-  // render resolution from the configured video mode or the window size.
-  static uint32_t logged_swap_width = 0;
-  static uint32_t logged_swap_height = 0;
-  if (draw_census_swap_ordinal_ <= 4 || frontbuffer_width != logged_swap_width ||
-      frontbuffer_height != logged_swap_height) {
-    REXGPU_INFO("[gl-fsi-video] Actual guest swap {}x{} address={:08X} ordinal={}",
-                frontbuffer_width, frontbuffer_height, frontbuffer_ptr, draw_census_swap_ordinal_);
-    logged_swap_width = frontbuffer_width;
-    logged_swap_height = frontbuffer_height;
-  }
-  // Once per frame: pages the fault handler stopped watching because they were
-  // read over and over are checked for CPU writes (see xmemory.cpp).
-  memory_->SwitchCheckUnwatchedPages();
-#endif
-  SCOPE_profile_cpu_f("gpu");
-  vertex_buffers_in_sync_[0] = 0;
-  vertex_buffers_in_sync_[1] = 0;
-
-  // Frame boundary for the native residency path: tick the epoch and latch the
-  // cvars for the frame that is about to start. Done here, alongside the other
-  // per-frame reset above and ahead of everything the guest can observe, so
-  // that the swap tail itself is not touched and so that the mode still gets
-  // latched on the paths below that return early.
-  native_residency_->LatchFrameModeAtSwap();
-
-  if (draw_census::HasPendingRequest() ||
-      (draw_census_ && draw_census_->HasOpenCapture())) {
-    if (!draw_census_) {
-      draw_census_ = std::make_unique<draw_census::Recorder>();
-    }
-    uint32_t census_mode_flags = 0;
-    if (native_residency_->native_frame()) {
-      census_mode_flags |= draw_census::kModeNativeFrame;
-    }
-    if (REXCVAR_GET(gpu_native_index)) {
-      census_mode_flags |= draw_census::kModeNativeIndex;
-    }
-    if (REXCVAR_GET(gpu_native_vertex)) {
-      census_mode_flags |= draw_census::kModeNativeVertex;
-    }
-    if (REXCVAR_GET(gpu_cp_fastpath)) {
-      census_mode_flags |= draw_census::kModeCpFastpath;
-    }
-    if (REXCVAR_GET(gpu_sampler_set_reuse)) {
-      census_mode_flags |= draw_census::kModeSamplerSetReuse;
-    }
-    if (REXCVAR_GET(gpu_texture_request_reuse)) {
-      census_mode_flags |= draw_census::kModeTextureRequestReuse;
-    }
-    const bool census_started = draw_census_->OnSwap(
-        kernel_state_ ? kernel_state_->title_id() : 0, draw_census_swap_ordinal_, counter(),
-        GetCurrentFrame(), GetCurrentSubmission(), census_mode_flags,
-        rex::perf::GetSnapshotCounter(rex::perf::CounterId::kDrawCalls));
-    if (census_started) {
-      std::memset(draw_census_float_dirty_, 0, sizeof(draw_census_float_dirty_));
-      std::memset(draw_census_fetch_dirty_, 0, sizeof(draw_census_fetch_dirty_));
-      draw_census_boolloop_dirty_writes_ = 0;
-    }
-  }
-
-  if (!graphics_system_)
-    return;
-  ui::Presenter* presenter = graphics_system_->presenter();
-  if (!presenter) {
-    REXGPU_ERROR("XELOG_GPU PRESENT: NO PRESENTER");
-    return;
-  }
-
-  // In case the swap command is the only one in the frame.
-  if (!BeginSubmission(true)) {
-    REXGPU_ERROR("XELOG_GPU PRESENT: BeginSubmission FAILED");
-    return;
-  }
-  native_residency_->PrefetchFrame(*memory_, *shared_memory_);
-
-  bool skip_present_due_async_placeholder = REXCVAR_GET(async_shader_compilation) &&
-                                            REXCVAR_GET(vulkan_async_skip_incomplete_frames) &&
-                                            frame_used_async_placeholder_pipeline_;
-  if (skip_present_due_async_placeholder) {
-    // Instrumentation, 2026-08-20. This path drops a whole frame's
-    // presentation, and the guest never learns: it keeps swapping, so the
-    // per-frame CSV records a perfect frame time while the display holds the
-    // previous image. A once-per-process warning cannot distinguish "twice
-    // during a level load" from "constantly, and that is the stutter". Report
-    // a rate instead: one line per second while it is happening, and nothing
-    // at all when it is not.
-    static std::atomic<uint64_t> skipped_frames{0};
-    static std::atomic<uint64_t> skipped_frames_reported{0};
-    static std::atomic<int64_t> skip_report_deadline_ns{0};
-    uint64_t total = skipped_frames.fetch_add(1, std::memory_order_relaxed) + 1;
-    auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                      std::chrono::steady_clock::now().time_since_epoch())
-                      .count();
-    int64_t deadline = skip_report_deadline_ns.load(std::memory_order_relaxed);
-    if (now_ns >= deadline &&
-        skip_report_deadline_ns.compare_exchange_strong(deadline, now_ns + 1000000000,
-                                                        std::memory_order_relaxed)) {
-      uint64_t since = total - skipped_frames_reported.exchange(total, std::memory_order_relaxed);
-      REXGPU_WARN(
-          "Skipped {} Vulkan frame presentations in the last second ({} total) - a draw "
-          "used an async placeholder pipeline, so the whole frame was dropped and the "
-          "display is showing a stale image",
-          since, total);
-    }
-    EndSubmission(true);
-    return;
-  }
-
-  SwapPostEffect swap_post_effect = GetActualSwapPostEffect();
-
-  // Obtain the actual swap source texture size (resolution-scaled if it's a
-  // resolve destination, or not otherwise).
-  uint32_t frontbuffer_width_scaled, frontbuffer_height_scaled;
-  uint32_t frontbuffer_width_unscaled = 0, frontbuffer_height_unscaled = 0;
-  xenos::TextureFormat frontbuffer_format;
-  bool swap_source_needs_rb_swap = false;
-  VkImageView swap_texture_view = texture_cache_->RequestSwapTexture(
-      frontbuffer_width_scaled, frontbuffer_height_scaled, frontbuffer_format,
-      &frontbuffer_width_unscaled, &frontbuffer_height_unscaled, &swap_source_needs_rb_swap);
-  if (swap_texture_view == VK_NULL_HANDLE) {
-    REXGPU_ERROR("XELOG_GPU PRESENT: swap_texture_view=NULL");
-    return;
-  }
-  // The swap gamma / FXAA pass samples source texels by pixel index, but swap
-  // textures may be allocation-padded. Prefer the active frontbuffer region
-  // from the swap packet, scaled proportionally to the actual source texture.
-  auto get_active_swap_dimension = [](uint32_t packet_unscaled, uint32_t source_unscaled,
-                                      uint32_t source_scaled) -> uint32_t {
-    if (!source_scaled) {
-      return 0;
-    }
-    uint32_t active_unscaled = packet_unscaled ? packet_unscaled : source_unscaled;
-    if (!active_unscaled) {
-      return source_scaled;
-    }
-    if (source_unscaled) {
-      active_unscaled = std::min(active_unscaled, source_unscaled);
-      uint64_t active_scaled =
-          (uint64_t(active_unscaled) * source_scaled + (source_unscaled >> 1)) / source_unscaled;
-      return uint32_t(std::clamp<uint64_t>(active_scaled, 1, source_scaled));
-    }
-    return std::min(active_unscaled, source_scaled);
-  };
-  uint32_t guest_output_width = get_active_swap_dimension(
-      frontbuffer_width, frontbuffer_width_unscaled, frontbuffer_width_scaled);
-  uint32_t guest_output_height = get_active_swap_dimension(
-      frontbuffer_height, frontbuffer_height_unscaled, frontbuffer_height_scaled);
-  if (!guest_output_width) {
-    guest_output_width = frontbuffer_width_scaled
-                             ? frontbuffer_width_scaled
-                             : (frontbuffer_width ? frontbuffer_width : frontbuffer_width_unscaled);
-  }
-  if (!guest_output_height) {
-    guest_output_height =
-        frontbuffer_height_scaled
-            ? frontbuffer_height_scaled
-            : (frontbuffer_height ? frontbuffer_height : frontbuffer_height_unscaled);
-  }
-  bool swap_source_scaled = frontbuffer_width_unscaled && frontbuffer_height_unscaled &&
-                            (frontbuffer_width_scaled != frontbuffer_width_unscaled ||
-                             frontbuffer_height_scaled != frontbuffer_height_unscaled);
-  if (texture_cache_->IsDrawResolutionScaled()) {
-    static bool draw_scale_cache_mismatch_logged = false;
-    uint32_t texture_scale_x = texture_cache_->draw_resolution_scale_x();
-    uint32_t texture_scale_y = texture_cache_->draw_resolution_scale_y();
-    uint32_t rt_scale_x =
-        render_target_cache_ ? render_target_cache_->draw_resolution_scale_x() : texture_scale_x;
-    uint32_t rt_scale_y =
-        render_target_cache_ ? render_target_cache_->draw_resolution_scale_y() : texture_scale_y;
-    if (!draw_scale_cache_mismatch_logged &&
-        (texture_scale_x != rt_scale_x || texture_scale_y != rt_scale_y)) {
-      draw_scale_cache_mismatch_logged = true;
-      REXGPU_WARN(
-          "Vulkan draw-scale mismatch: texture cache is {}x{}, render target "
-          "cache is {}x{}",
-          texture_scale_x, texture_scale_y, rt_scale_x, rt_scale_y);
-    }
-    static bool draw_scale_swap_sizes_logged = false;
-    if (!draw_scale_swap_sizes_logged) {
-      draw_scale_swap_sizes_logged = true;
-      REXGPU_WARN(
-          "Vulkan draw-scale swap sizing: packet={}x{}, src_scaled={}x{}, "
-          "src_unscaled={}x{}, active={}x{}",
-          frontbuffer_width, frontbuffer_height, frontbuffer_width_scaled,
-          frontbuffer_height_scaled, frontbuffer_width_unscaled, frontbuffer_height_unscaled,
-          guest_output_width, guest_output_height);
-    }
-  }
-  if (texture_cache_->IsDrawResolutionScaled() && !swap_source_scaled) {
-    static bool draw_scale_swap_unscaled_logged = false;
-    if (!draw_scale_swap_unscaled_logged) {
-      draw_scale_swap_unscaled_logged = true;
-      REXGPU_WARN(
-          "Vulkan draw resolution scaling is enabled, but the swap source is "
-          "unscaled ({}x{}). This title may be presenting from an unscaled "
-          "resolve path.",
-          frontbuffer_width_scaled, frontbuffer_height_scaled);
-    }
-  }
-  REXGPU_DEBUG(
-      "XELOG_GPU PRESENT: swap_texture_view={:p} packet_size={}x{} src_size={}x{} "
-      "src_unscaled={}x{} guest_output_size={}x{} format={}",
-      static_cast<void*>(swap_texture_view), frontbuffer_width, frontbuffer_height,
-      frontbuffer_width_scaled, frontbuffer_height_scaled, frontbuffer_width_unscaled,
-      frontbuffer_height_unscaled, guest_output_width, guest_output_height,
-      static_cast<uint32_t>(frontbuffer_format));
-
-  system::X_VIDEO_MODE video_mode;
-  kernel::xboxkrnl::VdQueryVideoMode(&video_mode);
-  uint32_t display_width = std::max(uint32_t(1), uint32_t(video_mode.display_width));
-  uint32_t display_height = std::max(uint32_t(1), uint32_t(video_mode.display_height));
-
-  presenter->RefreshGuestOutput(
-      guest_output_width, guest_output_height, display_width, display_height,
-      [this, guest_output_width, guest_output_height, frontbuffer_format, swap_texture_view,
-       swap_post_effect,
-       swap_source_needs_rb_swap](ui::Presenter::GuestOutputRefreshContext& context) -> bool {
-        // In case the swap command is the only one in the frame.
-        if (!BeginSubmission(true)) {
-          return false;
-        }
-
-        auto& vulkan_context =
-            static_cast<ui::vulkan::VulkanPresenter::VulkanGuestOutputRefreshContext&>(context);
-        uint64_t guest_output_image_version = vulkan_context.image_version();
-
-        const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-        const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-        const VkDevice device = vulkan_device->device();
-
-        uint32_t swap_frame_index = uint32_t(frame_current_ % kMaxFramesInFlight);
-        bool use_fxaa = swap_post_effect == SwapPostEffect::kFxaa ||
-                        swap_post_effect == SwapPostEffect::kFxaaExtreme;
-
-        // This is according to D3D::InitializePresentationParameters from a
-        // game executable, which initializes the 256-entry table gamma ramp for
-        // 8_8_8_8 output and the PWL gamma ramp for 2_10_10_10.
-        // TODO(Triang3l): Choose between the table and PWL based on
-        // DC_LUTA_CONTROL, support both for all formats (and also different
-        // increments for PWL).
-        bool use_pwl_gamma_ramp =
-            frontbuffer_format == xenos::TextureFormat::k_2_10_10_10 ||
-            frontbuffer_format == xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16;
-        bool swap_source_requires_compute_rb_swap =
-            !vulkan_device->properties().imageViewFormatSwizzle && swap_source_needs_rb_swap;
-        auto select_swap_apply_gamma_compute_pipeline = [&](bool use_pwl,
-                                                            bool use_fxaa_luma) -> VkPipeline {
-          if (use_pwl) {
-            if (use_fxaa_luma) {
-              return swap_source_requires_compute_rb_swap
-                         ? swap_apply_gamma_compute_pwl_fxaa_luma_rb_swap_pipeline_
-                         : swap_apply_gamma_compute_pwl_fxaa_luma_pipeline_;
-            }
-            return swap_source_requires_compute_rb_swap
-                       ? swap_apply_gamma_compute_pwl_rb_swap_pipeline_
-                       : swap_apply_gamma_compute_pwl_pipeline_;
-          }
-          if (use_fxaa_luma) {
-            return swap_source_requires_compute_rb_swap
-                       ? swap_apply_gamma_compute_256_entry_table_fxaa_luma_rb_swap_pipeline_
-                       : swap_apply_gamma_compute_256_entry_table_fxaa_luma_pipeline_;
-          }
-          return swap_source_requires_compute_rb_swap
-                     ? swap_apply_gamma_compute_256_entry_table_rb_swap_pipeline_
-                     : swap_apply_gamma_compute_256_entry_table_pipeline_;
-        };
-        VkPipeline swap_apply_gamma_compute_pipeline =
-            select_swap_apply_gamma_compute_pipeline(use_pwl_gamma_ramp, use_fxaa);
-
-        if (use_fxaa) {
-          if (swap_apply_gamma_compute_pipeline == VK_NULL_HANDLE ||
-              swap_fxaa_pipeline_ == VK_NULL_HANDLE ||
-              swap_fxaa_extreme_pipeline_ == VK_NULL_HANDLE) {
-            static bool fxaa_pipelines_unavailable_logged = false;
-            if (!fxaa_pipelines_unavailable_logged) {
-              if (swap_source_requires_compute_rb_swap) {
-                REXGPU_WARN(
-                    "Vulkan FXAA swap effect requested but FXAA compute "
-                    "pipelines (including RB-swap fallback) are unavailable, "
-                    "falling back to gamma only");
-              } else {
-                REXGPU_WARN(
-                    "Vulkan FXAA swap effect requested but FXAA compute "
-                    "pipelines are unavailable, falling back to gamma only");
-              }
-              fxaa_pipelines_unavailable_logged = true;
-            }
-            use_fxaa = false;
-          } else if (!EnsureSwapFxaaSourceImage(guest_output_width, guest_output_height)) {
-            static bool fxaa_source_image_failed_logged = false;
-            if (!fxaa_source_image_failed_logged) {
-              REXGPU_WARN(
-                  "Failed to create the Vulkan FXAA source image, falling "
-                  "back to gamma-only presentation");
-              fxaa_source_image_failed_logged = true;
-            }
-            use_fxaa = false;
-          }
-        }
-        if (!use_fxaa) {
-          swap_apply_gamma_compute_pipeline =
-              select_swap_apply_gamma_compute_pipeline(use_pwl_gamma_ramp, false);
-        }
-        if (swap_source_requires_compute_rb_swap &&
-            swap_apply_gamma_compute_pipeline == VK_NULL_HANDLE) {
-          static bool compute_rb_swap_fallback_missing_logged = false;
-          if (!compute_rb_swap_fallback_missing_logged) {
-            compute_rb_swap_fallback_missing_logged = true;
-            REXGPU_WARN(
-                "Vulkan imageViewFormatSwizzle is unavailable and the swap "
-                "source needs red/blue swizzle, but the compute fallback "
-                "pipeline is unavailable; falling back to graphics "
-                "presentation path");
-          }
-        }
-        bool use_compute_gamma = swap_apply_gamma_compute_pipeline != VK_NULL_HANDLE;
-
-        // TODO(Triang3l): FXAA can result in more than 8 bits of precision.
-        context.SetIs8bpc(!use_pwl_gamma_ramp && !use_fxaa);
-
-        // Update the gamma ramp if it's out of date.
-        uint32_t& gamma_ramp_frame_index_ref = use_pwl_gamma_ramp
-                                                   ? gamma_ramp_pwl_current_frame_
-                                                   : gamma_ramp_256_entry_table_current_frame_;
-        if (gamma_ramp_frame_index_ref == UINT32_MAX) {
-          constexpr uint32_t kGammaRampSize256EntryTable = sizeof(uint32_t) * 256;
-          constexpr uint32_t kGammaRampSizePWL = sizeof(uint16_t) * 2 * 3 * 128;
-          constexpr uint32_t kGammaRampSize = kGammaRampSize256EntryTable + kGammaRampSizePWL;
-          uint32_t gamma_ramp_offset_in_frame =
-              use_pwl_gamma_ramp ? kGammaRampSize256EntryTable : 0;
-          uint32_t gamma_ramp_upload_offset =
-              kGammaRampSize * swap_frame_index + gamma_ramp_offset_in_frame;
-          uint32_t gamma_ramp_size =
-              use_pwl_gamma_ramp ? kGammaRampSizePWL : kGammaRampSize256EntryTable;
-          void* gamma_ramp_frame_upload =
-              reinterpret_cast<uint8_t*>(gamma_ramp_upload_mapping_) + gamma_ramp_upload_offset;
-          if (std::endian::native != std::endian::little && use_pwl_gamma_ramp) {
-            // R16G16 is first R16, where the shader expects the base, and
-            // second G16, where the delta should be, but gamma_ramp_pwl_rgb()
-            // is an array of 32-bit DC_LUT_PWL_DATA registers - swap 16 bits in
-            // each 32.
-            auto gamma_ramp_pwl_upload =
-                reinterpret_cast<reg::DC_LUT_PWL_DATA*>(gamma_ramp_frame_upload);
-            const reg::DC_LUT_PWL_DATA* gamma_ramp_pwl = gamma_ramp_pwl_rgb();
-            for (size_t i = 0; i < 128 * 3; ++i) {
-              reg::DC_LUT_PWL_DATA& gamma_ramp_pwl_upload_entry = gamma_ramp_pwl_upload[i];
-              reg::DC_LUT_PWL_DATA gamma_ramp_pwl_entry = gamma_ramp_pwl[i];
-              gamma_ramp_pwl_upload_entry.base = gamma_ramp_pwl_entry.delta;
-              gamma_ramp_pwl_upload_entry.delta = gamma_ramp_pwl_entry.base;
-            }
-          } else {
-            std::memcpy(gamma_ramp_frame_upload,
-                        use_pwl_gamma_ramp ? static_cast<const void*>(gamma_ramp_pwl_rgb())
-                                           : static_cast<const void*>(gamma_ramp_256_entry_table()),
-                        gamma_ramp_size);
-          }
-          bool gamma_ramp_has_upload_buffer = gamma_ramp_upload_buffer_memory_ != VK_NULL_HANDLE;
-          VkPipelineStageFlags gamma_ramp_read_stage_mask =
-              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-          ui::vulkan::util::FlushMappedMemoryRange(
-              vulkan_device,
-              gamma_ramp_has_upload_buffer ? gamma_ramp_upload_buffer_memory_
-                                           : gamma_ramp_buffer_memory_,
-              gamma_ramp_upload_memory_type_, gamma_ramp_upload_offset,
-              gamma_ramp_upload_memory_size_, gamma_ramp_size);
-          if (gamma_ramp_has_upload_buffer) {
-            // Copy from the host-visible buffer to the device-local one.
-            PushBufferMemoryBarrier(gamma_ramp_buffer_, gamma_ramp_offset_in_frame, gamma_ramp_size,
-                                    gamma_ramp_read_stage_mask, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                    VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, false);
-            SubmitBarriers(true);
-            VkBufferCopy gamma_ramp_buffer_copy;
-            gamma_ramp_buffer_copy.srcOffset = gamma_ramp_upload_offset;
-            gamma_ramp_buffer_copy.dstOffset = gamma_ramp_offset_in_frame;
-            gamma_ramp_buffer_copy.size = gamma_ramp_size;
-            deferred_command_buffer_.CmdVkCopyBuffer(gamma_ramp_upload_buffer_, gamma_ramp_buffer_,
-                                                     1, &gamma_ramp_buffer_copy);
-            PushBufferMemoryBarrier(gamma_ramp_buffer_, gamma_ramp_offset_in_frame, gamma_ramp_size,
-                                    VK_PIPELINE_STAGE_TRANSFER_BIT, gamma_ramp_read_stage_mask,
-                                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, false);
-          }
-          // The device-local, but not host-visible, gamma ramp buffer doesn't
-          // have per-frame sets of gamma ramps.
-          gamma_ramp_frame_index_ref = gamma_ramp_has_upload_buffer ? 0 : swap_frame_index;
-        }
-
-        VkDescriptorSet swap_descriptor_source = swap_descriptors_source_[swap_frame_index];
-        VkDescriptorImageInfo swap_descriptor_source_image_info;
-        swap_descriptor_source_image_info.sampler = VK_NULL_HANDLE;
-        swap_descriptor_source_image_info.imageView = swap_texture_view;
-        swap_descriptor_source_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        VkWriteDescriptorSet swap_descriptor_source_write;
-        swap_descriptor_source_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        swap_descriptor_source_write.pNext = nullptr;
-        swap_descriptor_source_write.dstSet = swap_descriptor_source;
-        swap_descriptor_source_write.dstBinding = 0;
-        swap_descriptor_source_write.dstArrayElement = 0;
-        swap_descriptor_source_write.descriptorCount = 1;
-        swap_descriptor_source_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        swap_descriptor_source_write.pImageInfo = &swap_descriptor_source_image_info;
-        swap_descriptor_source_write.pBufferInfo = nullptr;
-        swap_descriptor_source_write.pTexelBufferView = nullptr;
-        dfn.vkUpdateDescriptorSets(device, 1, &swap_descriptor_source_write, 0, nullptr);
-
-        VkImageSubresourceRange guest_output_subresource_range =
-            ui::vulkan::util::InitializeSubresourceRange();
-        if (use_compute_gamma) {
-          // Transition the destination image for compute writes. Contents are
-          // fully overwritten, so old layout can always be UNDEFINED.
-          PushImageMemoryBarrier(vulkan_context.image(), guest_output_subresource_range,
-                                 vulkan_context.image_ever_written_previously()
-                                     ? ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask
-                                     : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                 vulkan_context.image_ever_written_previously()
-                                     ? ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask
-                                     : 0,
-                                 VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-          if (use_fxaa) {
-            PushImageMemoryBarrier(swap_fxaa_source_image_, guest_output_subresource_range,
-                                   swap_fxaa_source_stage_mask_ ? swap_fxaa_source_stage_mask_
-                                                                : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                   swap_fxaa_source_access_mask_, VK_ACCESS_SHADER_WRITE_BIT,
-                                   swap_fxaa_source_layout_, VK_IMAGE_LAYOUT_GENERAL);
-          }
-          SubmitBarriers(true);
-
-          if (use_fxaa) {
-            swap_fxaa_source_stage_mask_ = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            swap_fxaa_source_access_mask_ = VK_ACCESS_SHADER_WRITE_BIT;
-            swap_fxaa_source_layout_ = VK_IMAGE_LAYOUT_GENERAL;
-            swap_fxaa_source_image_submission_ = GetCurrentSubmission();
-          }
-
-          VkDescriptorSet swap_descriptor_destination_storage =
-              swap_descriptors_destination_storage_[swap_frame_index];
-          VkDescriptorImageInfo swap_descriptor_destination_storage_image_info;
-          swap_descriptor_destination_storage_image_info.sampler = VK_NULL_HANDLE;
-          swap_descriptor_destination_storage_image_info.imageView =
-              use_fxaa ? swap_fxaa_source_image_view_ : vulkan_context.image_view();
-          swap_descriptor_destination_storage_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-          VkWriteDescriptorSet swap_descriptor_destination_storage_write;
-          swap_descriptor_destination_storage_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-          swap_descriptor_destination_storage_write.pNext = nullptr;
-          swap_descriptor_destination_storage_write.dstSet = swap_descriptor_destination_storage;
-          swap_descriptor_destination_storage_write.dstBinding = 0;
-          swap_descriptor_destination_storage_write.dstArrayElement = 0;
-          swap_descriptor_destination_storage_write.descriptorCount = 1;
-          swap_descriptor_destination_storage_write.descriptorType =
-              VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-          swap_descriptor_destination_storage_write.pImageInfo =
-              &swap_descriptor_destination_storage_image_info;
-          swap_descriptor_destination_storage_write.pBufferInfo = nullptr;
-          swap_descriptor_destination_storage_write.pTexelBufferView = nullptr;
-          dfn.vkUpdateDescriptorSets(device, 1, &swap_descriptor_destination_storage_write, 0,
-                                     nullptr);
-
-          std::array<VkDescriptorSet, kSwapApplyGammaComputeDescriptorSetCount>
-              swap_apply_gamma_compute_descriptor_sets{};
-          swap_apply_gamma_compute_descriptor_sets[kSwapApplyGammaComputeDescriptorSetRamp] =
-              swap_descriptors_gamma_ramp_[2 * gamma_ramp_frame_index_ref +
-                                           uint32_t(use_pwl_gamma_ramp)];
-          swap_apply_gamma_compute_descriptor_sets[kSwapApplyGammaComputeDescriptorSetSource] =
-              swap_descriptor_source;
-          swap_apply_gamma_compute_descriptor_sets[kSwapApplyGammaComputeDescriptorSetDestination] =
-              swap_descriptor_destination_storage;
-          deferred_command_buffer_.CmdVkBindDescriptorSets(
-              VK_PIPELINE_BIND_POINT_COMPUTE, swap_apply_gamma_compute_pipeline_layout_, 0,
-              uint32_t(swap_apply_gamma_compute_descriptor_sets.size()),
-              swap_apply_gamma_compute_descriptor_sets.data(), 0, nullptr);
-          SwapApplyGammaConstants swap_apply_gamma_constants = {
-              {guest_output_width, guest_output_height}};
-          deferred_command_buffer_.CmdVkPushConstants(
-              swap_apply_gamma_compute_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-              sizeof(swap_apply_gamma_constants), &swap_apply_gamma_constants);
-          BindExternalComputePipeline(swap_apply_gamma_compute_pipeline);
-          uint32_t group_count_x = (guest_output_width + 15) / 16;
-          uint32_t group_count_y = (guest_output_height + 7) / 8;
-#if REX_PLATFORM_SWITCH
-          if (!RexSwitchPerfSkip(16))
-#endif
-          deferred_command_buffer_.CmdVkDispatch(group_count_x, group_count_y, 1);
-
-          if (use_fxaa) {
-            // Make the FXAA source image readable and bind a separate
-            // destination storage descriptor targeting the guest output image.
-            PushImageMemoryBarrier(swap_fxaa_source_image_, guest_output_subresource_range,
-                                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-                                   VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
-                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            SubmitBarriers(true);
-            swap_fxaa_source_stage_mask_ = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            swap_fxaa_source_access_mask_ = VK_ACCESS_SHADER_READ_BIT;
-            swap_fxaa_source_layout_ = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            swap_fxaa_source_image_submission_ = GetCurrentSubmission();
-
-            VkDescriptorSet swap_descriptor_fxaa_source =
-                swap_descriptors_fxaa_source_[swap_frame_index];
-            VkDescriptorImageInfo swap_descriptor_fxaa_source_image_info;
-            swap_descriptor_fxaa_source_image_info.sampler = swap_sampler_linear_clamp_;
-            swap_descriptor_fxaa_source_image_info.imageView = swap_fxaa_source_image_view_;
-            swap_descriptor_fxaa_source_image_info.imageLayout =
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            VkWriteDescriptorSet swap_descriptor_fxaa_source_write;
-            swap_descriptor_fxaa_source_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            swap_descriptor_fxaa_source_write.pNext = nullptr;
-            swap_descriptor_fxaa_source_write.dstSet = swap_descriptor_fxaa_source;
-            swap_descriptor_fxaa_source_write.dstBinding = 0;
-            swap_descriptor_fxaa_source_write.dstArrayElement = 0;
-            swap_descriptor_fxaa_source_write.descriptorCount = 1;
-            swap_descriptor_fxaa_source_write.descriptorType =
-                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            swap_descriptor_fxaa_source_write.pImageInfo = &swap_descriptor_fxaa_source_image_info;
-            swap_descriptor_fxaa_source_write.pBufferInfo = nullptr;
-            swap_descriptor_fxaa_source_write.pTexelBufferView = nullptr;
-            dfn.vkUpdateDescriptorSets(device, 1, &swap_descriptor_fxaa_source_write, 0, nullptr);
-
-            VkDescriptorSet swap_descriptor_fxaa_destination_storage =
-                swap_descriptors_fxaa_destination_storage_[swap_frame_index];
-            VkDescriptorImageInfo swap_descriptor_fxaa_destination_storage_image_info;
-            swap_descriptor_fxaa_destination_storage_image_info.sampler = VK_NULL_HANDLE;
-            swap_descriptor_fxaa_destination_storage_image_info.imageView =
-                vulkan_context.image_view();
-            swap_descriptor_fxaa_destination_storage_image_info.imageLayout =
-                VK_IMAGE_LAYOUT_GENERAL;
-            VkWriteDescriptorSet swap_descriptor_fxaa_destination_storage_write =
-                swap_descriptor_destination_storage_write;
-            swap_descriptor_fxaa_destination_storage_write.dstSet =
-                swap_descriptor_fxaa_destination_storage;
-            swap_descriptor_fxaa_destination_storage_write.pImageInfo =
-                &swap_descriptor_fxaa_destination_storage_image_info;
-            dfn.vkUpdateDescriptorSets(device, 1, &swap_descriptor_fxaa_destination_storage_write,
-                                       0, nullptr);
-
-            std::array<VkDescriptorSet, kSwapFxaaDescriptorSetCount> swap_fxaa_descriptor_sets{};
-            swap_fxaa_descriptor_sets[kSwapFxaaDescriptorSetSource] = swap_descriptor_fxaa_source;
-            swap_fxaa_descriptor_sets[kSwapFxaaDescriptorSetDestination] =
-                swap_descriptor_fxaa_destination_storage;
-            deferred_command_buffer_.CmdVkBindDescriptorSets(
-                VK_PIPELINE_BIND_POINT_COMPUTE, swap_fxaa_pipeline_layout_, 0,
-                uint32_t(swap_fxaa_descriptor_sets.size()), swap_fxaa_descriptor_sets.data(), 0,
-                nullptr);
-            SwapFxaaConstants swap_fxaa_constants = {
-                {guest_output_width, guest_output_height},
-                {1.0f / float(guest_output_width), 1.0f / float(guest_output_height)}};
-            deferred_command_buffer_.CmdVkPushConstants(
-                swap_fxaa_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                sizeof(swap_fxaa_constants), &swap_fxaa_constants);
-            BindExternalComputePipeline(swap_post_effect == SwapPostEffect::kFxaaExtreme
-                                            ? swap_fxaa_extreme_pipeline_
-                                            : swap_fxaa_pipeline_);
-#if REX_PLATFORM_SWITCH
-            if (!RexSwitchPerfSkip(16))
-#endif
-            deferred_command_buffer_.CmdVkDispatch(group_count_x, group_count_y, 1);
-          }
-
-          // Insert the release barrier.
-          PushImageMemoryBarrier(vulkan_context.image(), guest_output_subresource_range,
-                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                 ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
-                                 VK_ACCESS_SHADER_WRITE_BIT,
-                                 ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
-                                 VK_IMAGE_LAYOUT_GENERAL,
-                                 ui::vulkan::VulkanPresenter::kGuestOutputInternalLayout);
-        } else {
-          // Make sure a framebuffer is available for the current guest output
-          // image version.
-          size_t swap_framebuffer_index = SIZE_MAX;
-          size_t swap_framebuffer_new_index = SIZE_MAX;
-          // Try to find the existing framebuffer for the current guest output
-          // image version, or an unused (without an existing framebuffer, or
-          // with one, but that has never actually been used dynamically) slot.
-          for (size_t i = 0; i < swap_framebuffers_.size(); ++i) {
-            const SwapFramebuffer& existing_swap_framebuffer = swap_framebuffers_[i];
-            if (existing_swap_framebuffer.framebuffer != VK_NULL_HANDLE &&
-                existing_swap_framebuffer.version == guest_output_image_version) {
-              swap_framebuffer_index = i;
-              break;
-            }
-            if (existing_swap_framebuffer.framebuffer == VK_NULL_HANDLE ||
-                !existing_swap_framebuffer.last_submission) {
-              swap_framebuffer_new_index = i;
-            }
-          }
-          if (swap_framebuffer_index == SIZE_MAX) {
-            if (swap_framebuffer_new_index == SIZE_MAX) {
-              // Replace the earliest used framebuffer.
-              swap_framebuffer_new_index = 0;
-              for (size_t i = 1; i < swap_framebuffers_.size(); ++i) {
-                if (swap_framebuffers_[i].last_submission <
-                    swap_framebuffers_[swap_framebuffer_new_index].last_submission) {
-                  swap_framebuffer_new_index = i;
-                }
-              }
-            }
-            swap_framebuffer_index = swap_framebuffer_new_index;
-            SwapFramebuffer& new_swap_framebuffer = swap_framebuffers_[swap_framebuffer_new_index];
-            if (new_swap_framebuffer.framebuffer != VK_NULL_HANDLE) {
-              if (submission_completed_ >= new_swap_framebuffer.last_submission) {
-                dfn.vkDestroyFramebuffer(device, new_swap_framebuffer.framebuffer, nullptr);
-              } else {
-                destroy_framebuffers_.emplace_back(new_swap_framebuffer.last_submission,
-                                                   new_swap_framebuffer.framebuffer);
-              }
-              new_swap_framebuffer.framebuffer = VK_NULL_HANDLE;
-            }
-            VkImageView guest_output_image_view = vulkan_context.image_view();
-            VkFramebufferCreateInfo swap_framebuffer_create_info;
-            swap_framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            swap_framebuffer_create_info.pNext = nullptr;
-            swap_framebuffer_create_info.flags = 0;
-            swap_framebuffer_create_info.renderPass = swap_apply_gamma_render_pass_;
-            swap_framebuffer_create_info.attachmentCount = 1;
-            swap_framebuffer_create_info.pAttachments = &guest_output_image_view;
-            swap_framebuffer_create_info.width = guest_output_width;
-            swap_framebuffer_create_info.height = guest_output_height;
-            swap_framebuffer_create_info.layers = 1;
-            if (dfn.vkCreateFramebuffer(device, &swap_framebuffer_create_info, nullptr,
-                                        &new_swap_framebuffer.framebuffer) != VK_SUCCESS) {
-              REXGPU_ERROR("Failed to create the Vulkan framebuffer for presentation");
-              return false;
-            }
-            new_swap_framebuffer.version = guest_output_image_version;
-            // The actual submission index will be set if the framebuffer is
-            // actually used, not dropped due to some error.
-            new_swap_framebuffer.last_submission = 0;
-          }
-
-          if (vulkan_context.image_ever_written_previously()) {
-            // Insert a barrier after the last presenter's usage of the guest
-            // output image. Will be overwriting all the contents, so oldLayout
-            // layout is UNDEFINED. The render pass will do the layout
-            // transition, but newLayout must not be UNDEFINED.
-            PushImageMemoryBarrier(vulkan_context.image(), guest_output_subresource_range,
-                                   ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
-                                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                   ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
-                                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-          }
-
-          // End the current render pass before inserting barriers and starting
-          // a new one, and insert the barrier.
-          SubmitBarriers(true);
-
-          SwapFramebuffer& swap_framebuffer = swap_framebuffers_[swap_framebuffer_index];
-          swap_framebuffer.last_submission = GetCurrentSubmission();
-
-          VkRenderPassBeginInfo render_pass_begin_info;
-          render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-          render_pass_begin_info.pNext = nullptr;
-          render_pass_begin_info.renderPass = swap_apply_gamma_render_pass_;
-          render_pass_begin_info.framebuffer = swap_framebuffer.framebuffer;
-          render_pass_begin_info.renderArea.offset.x = 0;
-          render_pass_begin_info.renderArea.offset.y = 0;
-          render_pass_begin_info.renderArea.extent.width = guest_output_width;
-          render_pass_begin_info.renderArea.extent.height = guest_output_height;
-          render_pass_begin_info.clearValueCount = 0;
-          render_pass_begin_info.pClearValues = nullptr;
-          deferred_command_buffer_.CmdVkBeginRenderPass(&render_pass_begin_info,
-                                                        VK_SUBPASS_CONTENTS_INLINE);
-
-          VkViewport viewport;
-          viewport.x = 0.0f;
-          viewport.y = 0.0f;
-          viewport.width = float(guest_output_width);
-          viewport.height = float(guest_output_height);
-          viewport.minDepth = 0.0f;
-          viewport.maxDepth = 1.0f;
-          SetViewport(viewport);
-          VkRect2D scissor;
-          scissor.offset.x = 0;
-          scissor.offset.y = 0;
-          scissor.extent.width = guest_output_width;
-          scissor.extent.height = guest_output_height;
-          SetScissor(scissor);
-
-          VkPipeline swap_apply_gamma_pipeline = use_pwl_gamma_ramp
-                                                     ? swap_apply_gamma_pwl_pipeline_
-                                                     : swap_apply_gamma_256_entry_table_pipeline_;
-          if (!vulkan_device->properties().imageViewFormatSwizzle && swap_source_needs_rb_swap) {
-            VkPipeline swap_apply_gamma_rb_swap_pipeline =
-                use_pwl_gamma_ramp ? swap_apply_gamma_pwl_rb_swap_pipeline_
-                                   : swap_apply_gamma_256_entry_table_rb_swap_pipeline_;
-            if (swap_apply_gamma_rb_swap_pipeline != VK_NULL_HANDLE) {
-              swap_apply_gamma_pipeline = swap_apply_gamma_rb_swap_pipeline;
-            } else {
-              static bool swap_rb_swap_fallback_missing_logged = false;
-              if (!swap_rb_swap_fallback_missing_logged) {
-                swap_rb_swap_fallback_missing_logged = true;
-                REXGPU_WARN(
-                    "Vulkan imageViewFormatSwizzle is unavailable and the "
-                    "swap source needs red/blue swizzle, but the graphics "
-                    "fallback RB-swap shader pipeline is unavailable");
-              }
-            }
-          }
-          BindExternalGraphicsPipeline(swap_apply_gamma_pipeline);
-
-          std::array<VkDescriptorSet, kSwapApplyGammaDescriptorSetCount> swap_descriptor_sets{};
-          swap_descriptor_sets[kSwapApplyGammaDescriptorSetRamp] =
-              swap_descriptors_gamma_ramp_[2 * gamma_ramp_frame_index_ref +
-                                           uint32_t(use_pwl_gamma_ramp)];
-          swap_descriptor_sets[kSwapApplyGammaDescriptorSetSource] = swap_descriptor_source;
-          deferred_command_buffer_.CmdVkBindDescriptorSets(
-              VK_PIPELINE_BIND_POINT_GRAPHICS, swap_apply_gamma_pipeline_layout_, 0,
-              uint32_t(swap_descriptor_sets.size()), swap_descriptor_sets.data(), 0, nullptr);
-
-#if REX_PLATFORM_SWITCH
-          if (!RexSwitchPerfSkip(16))
-#endif
-          deferred_command_buffer_.CmdVkDraw(3, 1, 0, 0);
-          deferred_command_buffer_.CmdVkEndRenderPass();
-
-          // Insert the release barrier.
-          PushImageMemoryBarrier(vulkan_context.image(), guest_output_subresource_range,
-                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                 ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
-                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                                 ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
-                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                 ui::vulkan::VulkanPresenter::kGuestOutputInternalLayout);
-        }
-
-        // Need to submit all the commands before giving the image back to the
-        // presenter so it can submit its own commands for displaying it to the
-        // queue, and also need to submit the release barrier.
-        EndSubmission(true);
-        return true;
-      });
-
-  // End the frame even if did not present for any reason (the image refresher
-  // was not called), to prevent leaking per-frame resources.
-  EndSubmission(true);
-}
-
-bool VulkanCommandProcessor::PushBufferMemoryBarrier(
-    VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkPipelineStageFlags src_stage_mask,
-    VkPipelineStageFlags dst_stage_mask, VkAccessFlags src_access_mask,
-    VkAccessFlags dst_access_mask, uint32_t src_queue_family_index, uint32_t dst_queue_family_index,
-    bool skip_if_equal) {
-  if (skip_if_equal && src_stage_mask == dst_stage_mask && src_access_mask == dst_access_mask &&
-      src_queue_family_index == dst_queue_family_index) {
-    return false;
-  }
-
-  // Separate different barriers for overlapping buffer ranges into different
-  // pipeline barrier commands.
-  for (const VkBufferMemoryBarrier& other_buffer_memory_barrier :
-       pending_barriers_buffer_memory_barriers_) {
-    if (other_buffer_memory_barrier.buffer != buffer ||
-        (size != VK_WHOLE_SIZE && offset + size <= other_buffer_memory_barrier.offset) ||
-        (other_buffer_memory_barrier.size != VK_WHOLE_SIZE &&
-         other_buffer_memory_barrier.offset + other_buffer_memory_barrier.size <= offset)) {
-      continue;
-    }
-    if (other_buffer_memory_barrier.offset == offset && other_buffer_memory_barrier.size == size &&
-        other_buffer_memory_barrier.srcAccessMask == src_access_mask &&
-        other_buffer_memory_barrier.dstAccessMask == dst_access_mask &&
-        other_buffer_memory_barrier.srcQueueFamilyIndex == src_queue_family_index &&
-        other_buffer_memory_barrier.dstQueueFamilyIndex == dst_queue_family_index) {
-      // The barrier is already pending.
-      current_pending_barrier_.src_stage_mask |= src_stage_mask;
-      current_pending_barrier_.dst_stage_mask |= dst_stage_mask;
-      return true;
-    }
-    SplitPendingBarrier();
-    break;
-  }
-
-  current_pending_barrier_.src_stage_mask |= src_stage_mask;
-  current_pending_barrier_.dst_stage_mask |= dst_stage_mask;
-  VkBufferMemoryBarrier& buffer_memory_barrier =
-      pending_barriers_buffer_memory_barriers_.emplace_back();
-  buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-  buffer_memory_barrier.pNext = nullptr;
-  buffer_memory_barrier.srcAccessMask = src_access_mask;
-  buffer_memory_barrier.dstAccessMask = dst_access_mask;
-  buffer_memory_barrier.srcQueueFamilyIndex = src_queue_family_index;
-  buffer_memory_barrier.dstQueueFamilyIndex = dst_queue_family_index;
-  buffer_memory_barrier.buffer = buffer;
-  buffer_memory_barrier.offset = offset;
-  buffer_memory_barrier.size = size;
-  return true;
-}
-
-bool VulkanCommandProcessor::PushImageMemoryBarrier(
-    VkImage image, const VkImageSubresourceRange& subresource_range,
-    VkPipelineStageFlags src_stage_mask, VkPipelineStageFlags dst_stage_mask,
-    VkAccessFlags src_access_mask, VkAccessFlags dst_access_mask, VkImageLayout old_layout,
-    VkImageLayout new_layout, uint32_t src_queue_family_index, uint32_t dst_queue_family_index,
-    bool skip_if_equal) {
-  if (skip_if_equal && src_stage_mask == dst_stage_mask && src_access_mask == dst_access_mask &&
-      old_layout == new_layout && src_queue_family_index == dst_queue_family_index) {
-    return false;
-  }
-
-  // Separate different barriers for overlapping image subresource ranges into
-  // different pipeline barrier commands.
-  for (const VkImageMemoryBarrier& other_image_memory_barrier :
-       pending_barriers_image_memory_barriers_) {
-    if (other_image_memory_barrier.image != image ||
-        !(other_image_memory_barrier.subresourceRange.aspectMask & subresource_range.aspectMask) ||
-        (subresource_range.levelCount != VK_REMAINING_MIP_LEVELS &&
-         subresource_range.baseMipLevel + subresource_range.levelCount <=
-             other_image_memory_barrier.subresourceRange.baseMipLevel) ||
-        (other_image_memory_barrier.subresourceRange.levelCount != VK_REMAINING_MIP_LEVELS &&
-         other_image_memory_barrier.subresourceRange.baseMipLevel +
-                 other_image_memory_barrier.subresourceRange.levelCount <=
-             subresource_range.baseMipLevel) ||
-        (subresource_range.layerCount != VK_REMAINING_ARRAY_LAYERS &&
-         subresource_range.baseArrayLayer + subresource_range.layerCount <=
-             other_image_memory_barrier.subresourceRange.baseArrayLayer) ||
-        (other_image_memory_barrier.subresourceRange.layerCount != VK_REMAINING_ARRAY_LAYERS &&
-         other_image_memory_barrier.subresourceRange.baseArrayLayer +
-                 other_image_memory_barrier.subresourceRange.layerCount <=
-             subresource_range.baseArrayLayer)) {
-      continue;
-    }
-    if (other_image_memory_barrier.subresourceRange.aspectMask == subresource_range.aspectMask &&
-        other_image_memory_barrier.subresourceRange.baseMipLevel ==
-            subresource_range.baseMipLevel &&
-        other_image_memory_barrier.subresourceRange.levelCount == subresource_range.levelCount &&
-        other_image_memory_barrier.subresourceRange.baseArrayLayer ==
-            subresource_range.baseArrayLayer &&
-        other_image_memory_barrier.subresourceRange.layerCount == subresource_range.layerCount &&
-        other_image_memory_barrier.srcAccessMask == src_access_mask &&
-        other_image_memory_barrier.dstAccessMask == dst_access_mask &&
-        other_image_memory_barrier.oldLayout == old_layout &&
-        other_image_memory_barrier.newLayout == new_layout &&
-        other_image_memory_barrier.srcQueueFamilyIndex == src_queue_family_index &&
-        other_image_memory_barrier.dstQueueFamilyIndex == dst_queue_family_index) {
-      // The barrier is already pending.
-      current_pending_barrier_.src_stage_mask |= src_stage_mask;
-      current_pending_barrier_.dst_stage_mask |= dst_stage_mask;
-      return true;
-    }
-    SplitPendingBarrier();
-    break;
-  }
-
-  current_pending_barrier_.src_stage_mask |= src_stage_mask;
-  current_pending_barrier_.dst_stage_mask |= dst_stage_mask;
-  VkImageMemoryBarrier& image_memory_barrier =
-      pending_barriers_image_memory_barriers_.emplace_back();
-  image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  image_memory_barrier.pNext = nullptr;
-  image_memory_barrier.srcAccessMask = src_access_mask;
-  image_memory_barrier.dstAccessMask = dst_access_mask;
-  image_memory_barrier.oldLayout = old_layout;
-  image_memory_barrier.newLayout = new_layout;
-  image_memory_barrier.srcQueueFamilyIndex = src_queue_family_index;
-  image_memory_barrier.dstQueueFamilyIndex = dst_queue_family_index;
-  image_memory_barrier.image = image;
-  image_memory_barrier.subresourceRange = subresource_range;
-  return true;
-}
-
-bool VulkanCommandProcessor::SubmitBarriers(bool force_end_render_pass) {
-  assert_true(submission_open_);
-  SplitPendingBarrier();
-  if (pending_barriers_.empty()) {
-    if (force_end_render_pass) {
-      EndRenderPass();
-    }
-    return false;
-  }
-  EndRenderPass();
-  for (auto it = pending_barriers_.cbegin(); it != pending_barriers_.cend(); ++it) {
-    auto it_next = std::next(it);
-    bool is_last = it_next == pending_barriers_.cend();
-    // .data() + offset, not &[offset], for buffer and image barriers, because
-    // if there are no buffer or image memory barriers in the last pipeline
-    // barriers, the offsets may be equal to the sizes of the vectors.
-    rex::perf::IncrementCounter(rex::perf::CounterId::kVkPipelineBarriers);
-    deferred_command_buffer_.CmdVkPipelineBarrier(
-        it->src_stage_mask ? it->src_stage_mask : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        it->dst_stage_mask ? it->dst_stage_mask : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
-        nullptr,
-        uint32_t((is_last ? pending_barriers_buffer_memory_barriers_.size()
-                          : it_next->buffer_memory_barriers_offset) -
-                 it->buffer_memory_barriers_offset),
-        pending_barriers_buffer_memory_barriers_.data() + it->buffer_memory_barriers_offset,
-        uint32_t((is_last ? pending_barriers_image_memory_barriers_.size()
-                          : it_next->image_memory_barriers_offset) -
-                 it->image_memory_barriers_offset),
-        pending_barriers_image_memory_barriers_.data() + it->image_memory_barriers_offset);
-  }
-  pending_barriers_.clear();
-  pending_barriers_buffer_memory_barriers_.clear();
-  pending_barriers_image_memory_barriers_.clear();
-  current_pending_barrier_.buffer_memory_barriers_offset = 0;
-  current_pending_barrier_.image_memory_barriers_offset = 0;
-  return true;
-}
-
-void VulkanCommandProcessor::SubmitBarriersAndEnterRenderTargetCacheRenderPass(
-    VkRenderPass render_pass, const VulkanRenderTargetCache::Framebuffer* framebuffer) {
-  SubmitBarriers(false);
-  const ui::vulkan::VulkanDevice* vulkan_device = GetVulkanDevice();
-  bool use_dynamic_rendering =
-      REXCVAR_GET(vulkan_dynamic_rendering) && vulkan_device->properties().dynamicRendering;
-
-  if (use_dynamic_rendering) {
-    if (in_render_pass_ && current_framebuffer_ == framebuffer &&
-        current_render_pass_ == VK_NULL_HANDLE) {
-      return;
-    }
-  } else {
-    if (current_render_pass_ == render_pass && current_framebuffer_ == framebuffer) {
-      return;
-    }
-  }
-
-  if (in_render_pass_) {
-    if (use_dynamic_rendering) {
-      deferred_command_buffer_.CmdVkEndRendering();
-    } else {
-      deferred_command_buffer_.CmdVkEndRenderPass();
-    }
-    in_render_pass_ = false;
-  }
-
-  current_render_pass_ = use_dynamic_rendering ? VK_NULL_HANDLE : render_pass;
-  current_framebuffer_ = framebuffer;
-
-  if (use_dynamic_rendering) {
-    VkRenderingAttachmentInfo color_attachments[xenos::kMaxColorRenderTargets];
-    VkRenderingAttachmentInfo depth_attachment;
-    VkRenderingAttachmentInfo stencil_attachment;
-    uint32_t color_attachment_count = 0;
-    render_target_cache_->GetLastUpdateRenderingAttachments(
-        color_attachments, &color_attachment_count, &depth_attachment, &stencil_attachment);
-    bool has_depth = depth_attachment.sType == VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    bool has_stencil = stencil_attachment.sType == VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-
-    VkRenderingInfo rendering_info = {};
-    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering_info.pNext = nullptr;
-    rendering_info.flags = 0;
-    rendering_info.renderArea.offset.x = 0;
-    rendering_info.renderArea.offset.y = 0;
-    rendering_info.renderArea.extent = framebuffer->host_extent;
-    rendering_info.layerCount = 1;
-    rendering_info.viewMask = 0;
-    rendering_info.colorAttachmentCount = color_attachment_count;
-    rendering_info.pColorAttachments = color_attachment_count ? color_attachments : nullptr;
-    rendering_info.pDepthAttachment = has_depth ? &depth_attachment : nullptr;
-    rendering_info.pStencilAttachment = has_stencil ? &stencil_attachment : nullptr;
-    deferred_command_buffer_.CmdVkBeginRendering(&rendering_info);
-  } else {
-    VkRenderPassBeginInfo render_pass_begin_info;
-    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    render_pass_begin_info.pNext = nullptr;
-    render_pass_begin_info.renderPass = render_pass;
-    render_pass_begin_info.framebuffer = framebuffer->framebuffer;
-    render_pass_begin_info.renderArea.offset.x = 0;
-    render_pass_begin_info.renderArea.offset.y = 0;
-    // TODO(Triang3l): Actual dirty width / height in the deferred command
-    // buffer.
-    render_pass_begin_info.renderArea.extent = framebuffer->host_extent;
-    render_pass_begin_info.clearValueCount = 0;
-    render_pass_begin_info.pClearValues = nullptr;
-    deferred_command_buffer_.CmdVkBeginRenderPass(&render_pass_begin_info,
-                                                  VK_SUBPASS_CONTENTS_INLINE);
-  }
-  rex::perf::IncrementCounter(rex::perf::CounterId::kRenderPassBegins);
-  in_render_pass_ = true;
-}
-
-void VulkanCommandProcessor::SubmitBarriersAndEnterRenderTargetCacheRenderPass(
-    VkRenderPass render_pass, const VulkanRenderTargetCache::Framebuffer* framebuffer,
-    VkImageView transfer_dest_view, bool transfer_dest_is_depth) {
-  SubmitBarriers(false);
-  const ui::vulkan::VulkanDevice* vulkan_device = GetVulkanDevice();
-  bool use_dynamic_rendering =
-      REXCVAR_GET(vulkan_dynamic_rendering) && vulkan_device->properties().dynamicRendering;
-
-  if (use_dynamic_rendering) {
-    if (in_render_pass_ && current_framebuffer_ == framebuffer &&
-        current_render_pass_ == VK_NULL_HANDLE) {
-      return;
-    }
-  } else {
-    if (current_render_pass_ == render_pass && current_framebuffer_ == framebuffer) {
-      return;
-    }
-  }
-
-  if (in_render_pass_) {
-    if (use_dynamic_rendering) {
-      deferred_command_buffer_.CmdVkEndRendering();
-    } else {
-      deferred_command_buffer_.CmdVkEndRenderPass();
-    }
-    in_render_pass_ = false;
-  }
-
-  current_render_pass_ = use_dynamic_rendering ? VK_NULL_HANDLE : render_pass;
-  current_framebuffer_ = framebuffer;
-
-  if (use_dynamic_rendering) {
-    VkRenderingAttachmentInfo color_attachment = {};
-    VkRenderingAttachmentInfo depth_attachment = {};
-    VkRenderingAttachmentInfo stencil_attachment = {};
-
-    if (transfer_dest_is_depth) {
-      depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-      depth_attachment.pNext = nullptr;
-      depth_attachment.imageView = transfer_dest_view;
-      depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-      depth_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
-      depth_attachment.resolveImageView = VK_NULL_HANDLE;
-      depth_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-      depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      depth_attachment.clearValue = {};
-      stencil_attachment = depth_attachment;
-    } else {
-      color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-      color_attachment.pNext = nullptr;
-      color_attachment.imageView = transfer_dest_view;
-      color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-      color_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
-      color_attachment.resolveImageView = VK_NULL_HANDLE;
-      color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-      color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      color_attachment.clearValue = {};
-    }
-
-    VkRenderingInfo rendering_info = {};
-    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering_info.pNext = nullptr;
-    rendering_info.flags = 0;
-    rendering_info.renderArea.offset.x = 0;
-    rendering_info.renderArea.offset.y = 0;
-    rendering_info.renderArea.extent = framebuffer->host_extent;
-    rendering_info.layerCount = 1;
-    rendering_info.viewMask = 0;
-    rendering_info.colorAttachmentCount = transfer_dest_is_depth ? 0 : 1;
-    rendering_info.pColorAttachments = transfer_dest_is_depth ? nullptr : &color_attachment;
-    rendering_info.pDepthAttachment = transfer_dest_is_depth ? &depth_attachment : nullptr;
-    rendering_info.pStencilAttachment = transfer_dest_is_depth ? &stencil_attachment : nullptr;
-    deferred_command_buffer_.CmdVkBeginRendering(&rendering_info);
-  } else {
-    VkRenderPassBeginInfo render_pass_begin_info;
-    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    render_pass_begin_info.pNext = nullptr;
-    render_pass_begin_info.renderPass = render_pass;
-    render_pass_begin_info.framebuffer = framebuffer->framebuffer;
-    render_pass_begin_info.renderArea.offset.x = 0;
-    render_pass_begin_info.renderArea.offset.y = 0;
-    render_pass_begin_info.renderArea.extent = framebuffer->host_extent;
-    render_pass_begin_info.clearValueCount = 0;
-    render_pass_begin_info.pClearValues = nullptr;
-    deferred_command_buffer_.CmdVkBeginRenderPass(&render_pass_begin_info,
-                                                  VK_SUBPASS_CONTENTS_INLINE);
-  }
-  rex::perf::IncrementCounter(rex::perf::CounterId::kRenderPassBegins);
-  in_render_pass_ = true;
-}
-
-void VulkanCommandProcessor::EndRenderPass() {
-  assert_true(submission_open_);
-  if (!in_render_pass_) {
-    return;
-  }
-  if (current_render_pass_ == VK_NULL_HANDLE) {
-    deferred_command_buffer_.CmdVkEndRendering();
-  } else {
-    deferred_command_buffer_.CmdVkEndRenderPass();
-  }
-  current_render_pass_ = VK_NULL_HANDLE;
-  current_framebuffer_ = nullptr;
-  in_render_pass_ = false;
-}
-
-VkDescriptorSet VulkanCommandProcessor::AllocateSingleTransientDescriptor(
-    SingleTransientDescriptorLayout transient_descriptor_layout) {
-  assert_true(frame_open_);
-  VkDescriptorSet descriptor_set;
-  std::vector<VkDescriptorSet>& transient_descriptors_free =
-      single_transient_descriptors_free_[size_t(transient_descriptor_layout)];
-  if (!transient_descriptors_free.empty()) {
-    descriptor_set = transient_descriptors_free.back();
-    transient_descriptors_free.pop_back();
-  } else {
-    const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-    [[maybe_unused]] const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-    [[maybe_unused]] const VkDevice device = vulkan_device->device();
-    bool is_storage_buffer =
-        transient_descriptor_layout == SingleTransientDescriptorLayout::kStorageBufferCompute ||
-        transient_descriptor_layout == SingleTransientDescriptorLayout::kStorageBufferPairCompute;
-    ui::vulkan::LinkedTypeDescriptorSetAllocator& transient_descriptor_allocator =
-        is_storage_buffer ? transient_descriptor_allocator_storage_buffer_
-                          : transient_descriptor_allocator_uniform_buffer_;
-    VkDescriptorPoolSize descriptor_count;
-    descriptor_count.type =
-        is_storage_buffer ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptor_count.descriptorCount =
-        transient_descriptor_layout == SingleTransientDescriptorLayout::kStorageBufferPairCompute
-            ? 2
-            : 1;
-    descriptor_set = transient_descriptor_allocator.Allocate(
-        GetSingleTransientDescriptorLayout(transient_descriptor_layout), &descriptor_count, 1);
-    if (descriptor_set == VK_NULL_HANDLE) {
-      return VK_NULL_HANDLE;
-    }
-  }
-  UsedSingleTransientDescriptor used_descriptor;
-  used_descriptor.frame = frame_current_;
-  used_descriptor.layout = transient_descriptor_layout;
-  used_descriptor.set = descriptor_set;
-  single_transient_descriptors_used_.emplace_back(used_descriptor);
-  return descriptor_set;
-}
-
-VkDescriptorSetLayout VulkanCommandProcessor::GetTextureDescriptorSetLayout(bool is_vertex,
-                                                                            size_t texture_count,
-                                                                            size_t sampler_count) {
-  size_t binding_count = texture_count + sampler_count;
-  if (!binding_count) {
-    return descriptor_set_layout_empty_;
-  }
-
-  TextureDescriptorSetLayoutKey texture_descriptor_set_layout_key;
-  texture_descriptor_set_layout_key.texture_count = uint32_t(texture_count);
-  texture_descriptor_set_layout_key.sampler_count = uint32_t(sampler_count);
-  texture_descriptor_set_layout_key.is_vertex = uint32_t(is_vertex);
-  auto it_existing = descriptor_set_layouts_textures_.find(texture_descriptor_set_layout_key);
-  if (it_existing != descriptor_set_layouts_textures_.end()) {
-    return it_existing->second;
-  }
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  descriptor_set_layout_bindings_.clear();
-  descriptor_set_layout_bindings_.reserve(binding_count);
-  VkShaderStageFlags stage_flags =
-      is_vertex ? guest_shader_vertex_stages_ : VK_SHADER_STAGE_FRAGMENT_BIT;
-  for (size_t i = 0; i < texture_count; ++i) {
-    VkDescriptorSetLayoutBinding& descriptor_set_layout_binding =
-        descriptor_set_layout_bindings_.emplace_back();
-    descriptor_set_layout_binding.binding = uint32_t(i);
-    descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    descriptor_set_layout_binding.descriptorCount = 1;
-    descriptor_set_layout_binding.stageFlags = stage_flags;
-  }
-  for (size_t i = 0; i < sampler_count; ++i) {
-    VkDescriptorSetLayoutBinding& descriptor_set_layout_binding =
-        descriptor_set_layout_bindings_.emplace_back();
-    descriptor_set_layout_binding.binding = uint32_t(texture_count + i);
-    descriptor_set_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-    descriptor_set_layout_binding.descriptorCount = 1;
-    descriptor_set_layout_binding.stageFlags = stage_flags;
-  }
-  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info;
-  descriptor_set_layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  descriptor_set_layout_create_info.pNext = nullptr;
-  descriptor_set_layout_create_info.flags = 0;
-  descriptor_set_layout_create_info.bindingCount = uint32_t(binding_count);
-  descriptor_set_layout_create_info.pBindings = descriptor_set_layout_bindings_.data();
-  VkDescriptorSetLayout texture_descriptor_set_layout;
-  if (dfn.vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, nullptr,
-                                      &texture_descriptor_set_layout) != VK_SUCCESS) {
-    return VK_NULL_HANDLE;
-  }
-  descriptor_set_layouts_textures_.emplace(texture_descriptor_set_layout_key,
-                                           texture_descriptor_set_layout);
-  return texture_descriptor_set_layout;
-}
-
-const VulkanPipelineCache::PipelineLayoutProvider* VulkanCommandProcessor::GetPipelineLayout(
-    size_t texture_count_pixel, size_t sampler_count_pixel, size_t texture_count_vertex,
-    size_t sampler_count_vertex) {
-  PipelineLayoutKey pipeline_layout_key;
-  pipeline_layout_key.texture_count_pixel = uint16_t(texture_count_pixel);
-  pipeline_layout_key.sampler_count_pixel = uint16_t(sampler_count_pixel);
-  pipeline_layout_key.texture_count_vertex = uint16_t(texture_count_vertex);
-  pipeline_layout_key.sampler_count_vertex = uint16_t(sampler_count_vertex);
-  {
-    auto it = pipeline_layouts_.find(pipeline_layout_key);
-    if (it != pipeline_layouts_.end()) {
-      return &it->second;
-    }
-  }
-
-  VkDescriptorSetLayout descriptor_set_layout_textures_vertex =
-      GetTextureDescriptorSetLayout(true, texture_count_vertex, sampler_count_vertex);
-  if (descriptor_set_layout_textures_vertex == VK_NULL_HANDLE) {
-    REXGPU_ERROR(
-        "Failed to obtain a Vulkan descriptor set layout for {} sampled images "
-        "and {} samplers for guest vertex shaders",
-        texture_count_vertex, sampler_count_vertex);
-    return nullptr;
-  }
-  VkDescriptorSetLayout descriptor_set_layout_textures_pixel =
-      GetTextureDescriptorSetLayout(false, texture_count_pixel, sampler_count_pixel);
-  if (descriptor_set_layout_textures_pixel == VK_NULL_HANDLE) {
-    REXGPU_ERROR(
-        "Failed to obtain a Vulkan descriptor set layout for {} sampled images "
-        "and {} samplers for guest pixel shaders",
-        texture_count_pixel, sampler_count_pixel);
-    return nullptr;
-  }
-
-  VkDescriptorSetLayout descriptor_set_layouts[SpirvShaderTranslator::kDescriptorSetCount];
-  // Immutable layouts.
-  descriptor_set_layouts[SpirvShaderTranslator::kDescriptorSetSharedMemoryAndEdram] =
-      descriptor_set_layout_shared_memory_and_edram_;
-  descriptor_set_layouts[SpirvShaderTranslator::kDescriptorSetConstants] =
-      descriptor_set_layout_constants_;
-  // Mutable layouts.
-  descriptor_set_layouts[SpirvShaderTranslator::kDescriptorSetTexturesVertex] =
-      descriptor_set_layout_textures_vertex;
-  descriptor_set_layouts[SpirvShaderTranslator::kDescriptorSetTexturesPixel] =
-      descriptor_set_layout_textures_pixel;
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  VkPipelineLayoutCreateInfo pipeline_layout_create_info;
-  pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipeline_layout_create_info.pNext = nullptr;
-  pipeline_layout_create_info.flags = 0;
-  pipeline_layout_create_info.setLayoutCount = uint32_t(rex::countof(descriptor_set_layouts));
-  pipeline_layout_create_info.pSetLayouts = descriptor_set_layouts;
-  pipeline_layout_create_info.pushConstantRangeCount = 0;
-  pipeline_layout_create_info.pPushConstantRanges = nullptr;
-  VkPipelineLayout pipeline_layout;
-  if (dfn.vkCreatePipelineLayout(device, &pipeline_layout_create_info, nullptr, &pipeline_layout) !=
-      VK_SUCCESS) {
-    REXGPU_ERROR(
-        "Failed to create a Vulkan pipeline layout for guest drawing with {} "
-        "pixel shader and {} vertex shader textures",
-        texture_count_pixel, texture_count_vertex);
-    return nullptr;
-  }
-  auto emplaced_pair = pipeline_layouts_.emplace(
-      std::piecewise_construct, std::forward_as_tuple(pipeline_layout_key),
-      std::forward_as_tuple(pipeline_layout, descriptor_set_layout_textures_vertex,
-                            descriptor_set_layout_textures_pixel));
-  // unordered_map insertion doesn't invalidate element references.
-  return &emplaced_pair.first->second;
-}
-
-VulkanCommandProcessor::ScratchBufferAcquisition VulkanCommandProcessor::AcquireScratchGpuBuffer(
-    VkDeviceSize size, VkPipelineStageFlags initial_stage_mask, VkAccessFlags initial_access_mask) {
-  assert_true(submission_open_);
-  assert_false(scratch_buffer_used_);
-  if (!submission_open_ || scratch_buffer_used_ || !size) {
-    return ScratchBufferAcquisition();
-  }
-
-  uint64_t submission_current = GetCurrentSubmission();
-
-  if (scratch_buffer_ != VK_NULL_HANDLE && size <= scratch_buffer_size_) {
-    // Already used previously - transition.
-    PushBufferMemoryBarrier(scratch_buffer_, 0, VK_WHOLE_SIZE, scratch_buffer_last_stage_mask_,
-                            initial_stage_mask, scratch_buffer_last_access_mask_,
-                            initial_access_mask);
-    scratch_buffer_last_stage_mask_ = initial_stage_mask;
-    scratch_buffer_last_access_mask_ = initial_access_mask;
-    scratch_buffer_last_usage_submission_ = submission_current;
-    scratch_buffer_used_ = true;
-    return ScratchBufferAcquisition(*this, scratch_buffer_, initial_stage_mask,
-                                    initial_access_mask);
-  }
-
-  size = rex::align(size, kScratchBufferSizeIncrement);
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-
-  VkDeviceMemory new_scratch_buffer_memory;
-  VkBuffer new_scratch_buffer;
-  // VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT for
-  // texture loading.
-  if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-          vulkan_device, size,
-          VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-          ui::vulkan::util::MemoryPurpose::kDeviceLocal, new_scratch_buffer,
-          new_scratch_buffer_memory)) {
-    REXGPU_ERROR("VulkanCommandProcessor: Failed to create a {} MB scratch GPU buffer", size >> 20);
-    return ScratchBufferAcquisition();
-  }
-
-  if (submission_completed_ >= scratch_buffer_last_usage_submission_) {
-    const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-    const VkDevice device = vulkan_device->device();
-    if (scratch_buffer_ != VK_NULL_HANDLE) {
-      dfn.vkDestroyBuffer(device, scratch_buffer_, nullptr);
-    }
-    if (scratch_buffer_memory_ != VK_NULL_HANDLE) {
-      dfn.vkFreeMemory(device, scratch_buffer_memory_, nullptr);
-    }
-  } else {
-    if (scratch_buffer_ != VK_NULL_HANDLE) {
-      destroy_buffers_.emplace_back(scratch_buffer_last_usage_submission_, scratch_buffer_);
-    }
-    if (scratch_buffer_memory_ != VK_NULL_HANDLE) {
-      destroy_memory_.emplace_back(scratch_buffer_last_usage_submission_, scratch_buffer_memory_);
-    }
-  }
-
-  scratch_buffer_memory_ = new_scratch_buffer_memory;
-  scratch_buffer_ = new_scratch_buffer;
-  scratch_buffer_size_ = size;
-  // Not used yet, no need for a barrier.
-  scratch_buffer_last_stage_mask_ = initial_access_mask;
-  scratch_buffer_last_access_mask_ = initial_stage_mask;
-  scratch_buffer_last_usage_submission_ = submission_current;
-  scratch_buffer_used_ = true;
-  return ScratchBufferAcquisition(*this, new_scratch_buffer, initial_stage_mask,
-                                  initial_access_mask);
-}
-
-void VulkanCommandProcessor::BindExternalGraphicsPipeline(VkPipeline pipeline,
-                                                          bool keep_dynamic_depth_bias,
-                                                          bool keep_dynamic_blend_constants,
-                                                          bool keep_dynamic_stencil_mask_ref) {
-  if (!keep_dynamic_depth_bias) {
-    dynamic_depth_bias_update_needed_ = true;
-  }
-  if (!keep_dynamic_blend_constants) {
-    dynamic_blend_constants_update_needed_ = true;
-  }
-  if (!keep_dynamic_stencil_mask_ref) {
-    dynamic_stencil_compare_mask_front_update_needed_ = true;
-    dynamic_stencil_compare_mask_back_update_needed_ = true;
-    dynamic_stencil_write_mask_front_update_needed_ = true;
-    dynamic_stencil_write_mask_back_update_needed_ = true;
-    dynamic_stencil_reference_front_update_needed_ = true;
-    dynamic_stencil_reference_back_update_needed_ = true;
-  }
-  if (current_external_graphics_pipeline_ == pipeline) {
-    return;
-  }
-  deferred_command_buffer_.CmdVkBindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-  current_external_graphics_pipeline_ = pipeline;
-  current_guest_graphics_pipeline_ = VK_NULL_HANDLE;
-  current_guest_graphics_pipeline_layout_ = VK_NULL_HANDLE;
-}
-
-void VulkanCommandProcessor::BindExternalComputePipeline(VkPipeline pipeline) {
-  if (current_external_compute_pipeline_ == pipeline) {
-    return;
-  }
-  deferred_command_buffer_.CmdVkBindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-  current_external_compute_pipeline_ = pipeline;
-}
-
-void VulkanCommandProcessor::SetViewport(const VkViewport& viewport) {
-  if (!dynamic_viewport_update_needed_) {
-    dynamic_viewport_update_needed_ |= dynamic_viewport_.x != viewport.x;
-    dynamic_viewport_update_needed_ |= dynamic_viewport_.y != viewport.y;
-    dynamic_viewport_update_needed_ |= dynamic_viewport_.width != viewport.width;
-    dynamic_viewport_update_needed_ |= dynamic_viewport_.height != viewport.height;
-    dynamic_viewport_update_needed_ |= dynamic_viewport_.minDepth != viewport.minDepth;
-    dynamic_viewport_update_needed_ |= dynamic_viewport_.maxDepth != viewport.maxDepth;
-  }
-  if (dynamic_viewport_update_needed_) {
-    dynamic_viewport_ = viewport;
-    deferred_command_buffer_.CmdVkSetViewport(0, 1, &dynamic_viewport_);
-    dynamic_viewport_update_needed_ = false;
-  }
-}
-
-void VulkanCommandProcessor::SetScissor(const VkRect2D& scissor) {
-  if (!dynamic_scissor_update_needed_) {
-    dynamic_scissor_update_needed_ |= dynamic_scissor_.offset.x != scissor.offset.x;
-    dynamic_scissor_update_needed_ |= dynamic_scissor_.offset.y != scissor.offset.y;
-    dynamic_scissor_update_needed_ |= dynamic_scissor_.extent.width != scissor.extent.width;
-    dynamic_scissor_update_needed_ |= dynamic_scissor_.extent.height != scissor.extent.height;
-  }
-  if (dynamic_scissor_update_needed_) {
-    dynamic_scissor_ = scissor;
-    deferred_command_buffer_.CmdVkSetScissor(0, 1, &dynamic_scissor_);
-    dynamic_scissor_update_needed_ = false;
-  }
-}
-
-void VulkanCommandProcessor::OnPrimaryBufferEnd() {
-  if (REXCVAR_GET(vulkan_submit_on_primary_buffer_end) && submission_open_ &&
-      CanEndSubmissionImmediately()) {
-    EndSubmission(false);
-  }
-}
-
-Shader* VulkanCommandProcessor::LoadShader(xenos::ShaderType shader_type, uint32_t guest_address,
-                                           const uint32_t* host_address, uint32_t dword_count) {
-  return pipeline_cache_->LoadShader(shader_type, host_address, dword_count);
-}
-
-bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type, uint32_t index_count,
-                                       IndexBufferInfo* index_buffer_info,
-                                       bool major_mode_explicit) {
-#if REX_PLATFORM_SWITCH
-  switch_timing::Scope timing(switch_timing::kDrawCpuUs);
-#endif
-#if XE_GPU_FINE_GRAINED_DRAW_SCOPES
-  SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
-
-  const RegisterFile& regs = *register_file_;
-  (void)index_buffer_info;
-  auto draw_fail = [&](const char* stage) {
-    auto vgt_draw_initiator = regs.Get<reg::VGT_DRAW_INITIATOR>();
-    REXGPU_ERROR(
-        "Vulkan IssueDraw failed at {} "
-        "(prim_type={}, index_count={}, source_select={}, major_mode={}, explicit_major={}, "
-        "path_select={}, tess_mode={}, edram_mode={})",
-        stage, uint32_t(prim_type), index_count, uint32_t(vgt_draw_initiator.source_select),
-        uint32_t(vgt_draw_initiator.major_mode), uint32_t(major_mode_explicit),
-        uint32_t(regs.Get<reg::VGT_OUTPUT_PATH_CNTL>().path_select),
-        uint32_t(regs.Get<reg::VGT_HOS_CNTL>().tess_mode),
-        uint32_t(regs.Get<reg::RB_MODECONTROL>().edram_mode));
-    return false;
-  };
-
-  xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
-  if (edram_mode == xenos::EdramMode::kCopy) {
-    // Special copy handling.
-    return IssueCopy();
-  }
-
-  draw_census::Recorder* census =
-      draw_census_ && draw_census_->IsRecording() ? draw_census_.get() : nullptr;
-  CensusDrawAttempt census_attempt(census);
-  draw_census::DrawRecord census_draw{};
-  uint32_t census_vertex_bindings_seen = 0;
-  if (census) {
-    census_draw.vk_submission = GetCurrentSubmission();
-    census_draw.flags = draw_census::kDrawVizQueryStateUnavailable;
-    census_draw.edram_mode = uint8_t(edram_mode);
-    census_draw.msaa_samples = uint8_t(regs.Get<reg::RB_SURFACE_INFO>().msaa_samples);
-  }
-
-  // Suppression oracle. Diagnostic only, never a rendering mode: dropping the
-  // draw here skips the primitive processor, every shared memory request and
-  // the whole Vulkan issue path, which measures the frame rate ceiling of any
-  // approach that keeps the command processor in the loop. Resolves above are
-  // deliberately left running so the presenter still has a swap source and the
-  // run stays a comparable frame rate measurement; the image is garbage.
-  if (NativeSuppressDrawsActive()) {
-    return true;
-  }
-
-  bool surface_pitch_is_zero = regs.Get<reg::RB_SURFACE_INFO>().surface_pitch == 0;
-
-  const ui::vulkan::VulkanDevice::Properties& device_properties = GetVulkanDevice()->properties();
-
-  memexport_ranges_.clear();
-
-  // Vertex shader analysis.
-  auto vertex_shader = static_cast<VulkanShader*>(active_vertex_shader());
-  if (!vertex_shader) {
-    // Always need a vertex shader.
-    return draw_fail("missing_vertex_shader");
-  }
-  pipeline_cache_->AnalyzeShaderUcode(*vertex_shader);
-  bool memexport_used_vertex = vertex_shader->memexport_eM_written() != 0;
-  if (census && memexport_used_vertex) {
-    census_draw.flags |= draw_census::kDrawMemexportVertex;
-  }
-  if (memexport_used_vertex) {
-    if (!device_properties.vertexPipelineStoresAndAtomics) {
-      REXGPU_ERROR(
-          "Vertex shader memexport draw encountered without "
-          "vertexPipelineStoresAndAtomics support");
-      return false;
-    }
-    draw_util::AddMemExportRanges(regs, *vertex_shader, memexport_ranges_);
-  }
-
-  // Pixel shader analysis.
-  bool primitive_polygonal = draw_util::IsPrimitivePolygonal(regs);
-  bool is_rasterization_done = draw_util::IsRasterizationPotentiallyDone(regs, primitive_polygonal);
-  if (surface_pitch_is_zero && is_rasterization_done) {
-    // Doesn't actually draw.
-    // Unlikely that zero would even really be legal though.
-    return true;
-  }
-  VulkanShader* pixel_shader = nullptr;
-  if (is_rasterization_done) {
-    // See xenos::EdramMode for explanation why the pixel shader is only used
-    // when it's kColorDepth here.
-    if (edram_mode == xenos::EdramMode::kColorDepth) {
-      pixel_shader = static_cast<VulkanShader*>(active_pixel_shader());
-      if (pixel_shader) {
-        pipeline_cache_->AnalyzeShaderUcode(*pixel_shader);
-        if (!draw_util::IsPixelShaderNeededWithRasterization(*pixel_shader, regs)) {
-          pixel_shader = nullptr;
-        }
-      }
-    }
-  } else {
-    // Disabling pixel shader for this case is also required by the pipeline
-    // cache.
-    if (!memexport_used_vertex) {
-      // This draw has no effect.
-      return true;
-    }
-  }
-  bool memexport_used_pixel = pixel_shader && (pixel_shader->memexport_eM_written() != 0);
-  if (census) {
-    if (memexport_used_pixel) {
-      census_draw.flags |= draw_census::kDrawMemexportPixel;
-    }
-    if (is_rasterization_done) {
-      census_draw.flags |= draw_census::kDrawRasterizationDone;
-    }
-    if (pixel_shader) {
-      census_draw.flags |= draw_census::kDrawPixelShaderNeeded;
-    }
-  }
-  if (memexport_used_pixel) {
-    if (!device_properties.fragmentStoresAndAtomics) {
-      REXGPU_ERROR(
-          "Pixel shader memexport draw encountered without "
-          "fragmentStoresAndAtomics support");
-      return false;
-    }
-    draw_util::AddMemExportRanges(regs, *pixel_shader, memexport_ranges_);
-  }
-  reg::RB_DEPTHCONTROL normalized_depth_control = draw_util::GetNormalizedDepthControl(regs);
-
-  uint32_t ps_param_gen_pos = UINT32_MAX;
-  uint32_t interpolator_mask =
-      pixel_shader ? (vertex_shader->writes_interpolators() &
-                      pixel_shader->GetInterpolatorInputMask(regs.Get<reg::SQ_PROGRAM_CNTL>(),
-                                                             regs.Get<reg::SQ_CONTEXT_MISC>(),
-                                                             ps_param_gen_pos))
-                   : 0;
-
-  PrimitiveProcessor::ProcessingResult primitive_processing_result;
-  SpirvShaderTranslator::Modification vertex_shader_modification;
-  SpirvShaderTranslator::Modification pixel_shader_modification;
-  VulkanShader::VulkanTranslation* vertex_shader_translation;
-  VulkanShader::VulkanTranslation* pixel_shader_translation;
-  bool memexport_writes_possible = memexport_used_vertex || memexport_used_pixel;
-
-  // Arm (or disarm) the native residency path for this draw. Memory export
-  // draws are excluded unconditionally: their shaders read the index buffer
-  // out of the shared memory buffer themselves, and the emulated path also
-  // snapshots guest DMA indices for them to avoid aliasing through it.
-  if (memexport_writes_possible) {
-    rex::perf::IncrementCounter(rex::perf::CounterId::kMemexportDraws);
-  }
-  native_residency_->BeginDraw(!memexport_writes_possible);
-
-  // Two iterations because a submission (even the current one - in which case
-  // it needs to be ended, and a new one must be started) may need to be awaited
-  // in case of a sampler count overflow, and if that happens, all subsystem
-  // updates done previously must be performed again because the updates done
-  // before the awaiting may be referencing objects destroyed by
-  // CompletedSubmissionUpdated.
-  for (uint32_t i = 0; i < 2; ++i) {
-    if (!BeginSubmission(true)) {
-      return draw_fail("begin_submission");
-    }
-
-    // Process primitives.
-    if (!primitive_processor_->Process(primitive_processing_result)) {
-      return draw_fail("primitive_processing");
-    }
-    if (!primitive_processing_result.host_draw_vertex_count) {
-      // Nothing to draw.
-      return true;
-    }
-    if (census) {
-      census_draw.guest_prim_type = uint8_t(primitive_processing_result.guest_primitive_type);
-      census_draw.host_prim_type = uint8_t(primitive_processing_result.host_primitive_type);
-      census_draw.host_vs_type = uint8_t(primitive_processing_result.host_vertex_shader_type);
-      census_draw.index_buffer_type = uint8_t(primitive_processing_result.index_buffer_type);
-      census_draw.index_format = uint8_t(primitive_processing_result.host_index_format);
-      census_draw.index_endian = uint8_t(primitive_processing_result.host_shader_index_endian);
-      census_draw.guest_vertex_count = primitive_processing_result.guest_draw_vertex_count;
-      census_draw.host_vertex_count = primitive_processing_result.host_draw_vertex_count;
-      census_draw.guest_index_base = primitive_processing_result.guest_index_base;
-      census_draw.guest_index_bytes =
-          index_buffer_info
-              ? uint32_t(std::min<size_t>(index_buffer_info->length, UINT32_MAX))
-              : 0;
-      if (primitive_processing_result.index_buffer_type !=
-              PrimitiveProcessor::ProcessedIndexBufferType::kNone &&
-          primitive_processing_result.index_buffer_type !=
-              PrimitiveProcessor::ProcessedIndexBufferType::kHostBuiltinForAuto) {
-        census_draw.flags |= draw_census::kDrawIndexed;
-      }
-      if (primitive_processing_result.host_primitive_reset_enabled) {
-        census_draw.flags |= draw_census::kDrawPrimitiveReset;
-      }
-      if (native_residency_->WasIndexNativeForDraw()) {
-        census_draw.flags |= draw_census::kDrawIndexNative;
-      }
-      if ((census_draw.flags & draw_census::kDrawIndexed) &&
-          !native_residency_->LastRequestedRangeHash(
-              census_draw.guest_index_base, census_draw.guest_index_bytes,
-              &census_draw.index_content_hash)) {
-        census_draw.flags |= draw_census::kDrawIndexHashUnavailable;
-      }
-    }
-    if (primitive_processing_result.host_primitive_type == xenos::PrimitiveType::kTriangleFan) {
-      // Vulkan uses the same fan-to-list conversion policy as D3D12.
-      REXGPU_ERROR(
-          "PrimitiveProcessor returned triangle fan for Vulkan draw; expected "
-          "triangle list conversion for D3D12 parity");
-      assert_always();
-      return false;
-    }
-    // Tessellation and rectangle expansion variants for rasterization are
-    // produced by the primitive processor and are handled by the Vulkan
-    // pipeline cache.
-    Shader::HostVertexShaderType host_vertex_shader_type =
-        primitive_processing_result.host_vertex_shader_type;
-    if (host_vertex_shader_type != Shader::HostVertexShaderType::kVertex &&
-        host_vertex_shader_type != Shader::HostVertexShaderType::kPointListAsTriangleStrip &&
-        host_vertex_shader_type != Shader::HostVertexShaderType::kRectangleListAsTriangleStrip &&
-        !Shader::IsHostVertexShaderTypeDomain(host_vertex_shader_type)) {
-      REXGPU_ERROR("Unsupported Vulkan host vertex shader type {}",
-                   uint32_t(host_vertex_shader_type));
-      return false;
-    }
-
-    // Shader modifications.
-    vertex_shader_modification = pipeline_cache_->GetCurrentVertexShaderModification(
-        *vertex_shader, primitive_processing_result.host_vertex_shader_type, interpolator_mask,
-        ps_param_gen_pos != UINT32_MAX);
-    pixel_shader_modification = pixel_shader ? pipeline_cache_->GetCurrentPixelShaderModification(
-                                                   *pixel_shader, interpolator_mask,
-                                                   ps_param_gen_pos, normalized_depth_control)
-                                             : SpirvShaderTranslator::Modification(0);
-
-    // Translate the shaders now to obtain the sampler bindings.
-    vertex_shader_translation = static_cast<VulkanShader::VulkanTranslation*>(
-        vertex_shader->GetOrCreateTranslation(vertex_shader_modification.value));
-    pixel_shader_translation =
-        pixel_shader ? static_cast<VulkanShader::VulkanTranslation*>(
-                           pixel_shader->GetOrCreateTranslation(pixel_shader_modification.value))
-                     : nullptr;
-    if (!pipeline_cache_->EnsureShadersTranslated(vertex_shader_translation,
-                                                  pixel_shader_translation)) {
-      return draw_fail("shader_translation");
-    }
-    if (census) {
-      census_draw.vs_hash = vertex_shader->ucode_data_hash();
-      census_draw.vs_mod = vertex_shader_modification.value;
-      census_draw.ps_hash = pixel_shader ? pixel_shader->ucode_data_hash() : 0;
-      census_draw.ps_mod = pixel_shader ? pixel_shader_modification.value : 0;
-      census->RecordShader(MakeCensusShaderRecord(*vertex_shader));
-      if (pixel_shader) {
-        census->RecordShader(MakeCensusShaderRecord(*pixel_shader));
-      }
-    }
-
-    // Obtain the samplers. Note that the bindings don't depend on the shader
-    // modification, so if on the second iteration of this loop it becomes
-    // different for some reason (like a race condition with the guest in index
-    // buffer processing in the primitive processor resulting in different host
-    // vertex shader types), the bindings will stay the same.
-    const bool sampler_set_reuse = REXCVAR_GET(gpu_sampler_set_reuse);
-    uint32_t samplers_overflowed_count = 0;
-    for (uint32_t j = 0; j < 2; ++j) {
-      std::vector<std::pair<VulkanTextureCache::SamplerParameters, VkSampler>>& shader_samplers =
-          j ? current_samplers_pixel_ : current_samplers_vertex_;
-      if (!i && !sampler_set_reuse) {
-        shader_samplers.clear();
-      }
-      const VulkanShader* shader = j ? pixel_shader : vertex_shader;
-      if (!shader) {
-        if (!i) {
-          shader_samplers.clear();
-        }
-        continue;
-      }
-      const std::vector<VulkanShader::SamplerBinding>& shader_sampler_bindings =
-          shader->GetSamplerBindingsAfterTranslation();
-      if (!i) {
-        bool reuse_shader_samplers =
-            sampler_set_reuse && current_samplers_submission_ == GetCurrentSubmission() &&
-            shader_samplers.size() == shader_sampler_bindings.size();
-        if (sampler_set_reuse) {
-          shader_samplers.resize(shader_sampler_bindings.size());
-          for (size_t sampler_index = 0; sampler_index < shader_sampler_bindings.size();
-               ++sampler_index) {
-            VulkanTextureCache::SamplerParameters parameters =
-                texture_cache_->GetSamplerParameters(shader_sampler_bindings[sampler_index]);
-            reuse_shader_samplers &=
-                shader_samplers[sampler_index].first == parameters;
-            shader_samplers[sampler_index].first = parameters;
-          }
-          if (reuse_shader_samplers) {
-            continue;
-          }
-        } else {
-          shader_samplers.reserve(shader_sampler_bindings.size());
-          for (const VulkanShader::SamplerBinding& shader_sampler_binding :
-               shader_sampler_bindings) {
-            shader_samplers.emplace_back(
-                texture_cache_->GetSamplerParameters(shader_sampler_binding),
-                VK_NULL_HANDLE);
-          }
-        }
-      }
-      for (std::pair<VulkanTextureCache::SamplerParameters, VkSampler>& shader_sampler_pair :
-           shader_samplers) {
-        // UseSampler calls are needed even on the second iteration in case the
-        // submission was broken (and thus the last usage submission indices for
-        // the used samplers need to be updated) due to an overflow within one
-        // submission. Though sampler overflow is a very rare situation overall.
-        bool sampler_overflowed;
-        VkSampler shader_sampler =
-            texture_cache_->UseSampler(shader_sampler_pair.first, sampler_overflowed);
-        shader_sampler_pair.second = shader_sampler;
-        if (shader_sampler == VK_NULL_HANDLE) {
-          if (!sampler_overflowed || i) {
-            // If !sampler_overflowed, just failed to create a sampler for some
-            // reason.
-            // If i == 1, an overflow has happened twice, can't recover from it
-            // anymore (would enter an infinite loop otherwise if the number of
-            // attempts was not limited to 2). Possibly too many unique samplers
-            // in one draw, or failed to await submission completion.
-            return draw_fail("sampler_acquisition");
-          }
-          ++samplers_overflowed_count;
-        }
-      }
-    }
-    if (!samplers_overflowed_count) {
-      current_samplers_submission_ = GetCurrentSubmission();
-      break;
-    }
-    assert_zero(i);
-    // Free space for as many samplers as how many haven't been allocated
-    // successfully - obtain the submission index that needs to be awaited to
-    // reuse `samplers_overflowed_count` slots. This must be done after all the
-    // UseSampler calls, not inside the loop calling UseSampler, because earlier
-    // UseSampler calls may "mark for deletion" some samplers that later
-    // UseSampler calls in the loop may actually demand.
-    uint64_t sampler_overflow_await_submission =
-        texture_cache_->GetSubmissionToAwaitOnSamplerOverflow(samplers_overflowed_count);
-    assert_true(sampler_overflow_await_submission <= GetCurrentSubmission());
-#if REX_PLATFORM_SWITCH
-    RexSwitchPerfCount(19);  // hard stop: no free sampler slot without waiting for the GPU
-#endif
-    CheckSubmissionFenceAndDeviceLoss(sampler_overflow_await_submission);
-  }
-
-  if (census) {
-    const auto& sampler_bindings_vs = vertex_shader->GetSamplerBindingsAfterTranslation();
-    const size_t sampler_count_vs = sampler_bindings_vs.size();
-    const size_t sampler_count_ps =
-        pixel_shader ? pixel_shader->GetSamplerBindingsAfterTranslation().size() : 0;
-    census_draw.sampler_count_vs = uint8_t(std::min<size_t>(sampler_count_vs, UINT8_MAX));
-    census_draw.sampler_count_ps = uint8_t(std::min<size_t>(sampler_count_ps, UINT8_MAX));
-    size_t census_sampler_index = 0;
-    auto record_samplers = [&](const VulkanShader* shader,
-                               const std::vector<std::pair<VulkanTextureCache::SamplerParameters,
-                                                           VkSampler>>& samplers,
-                               uint8_t stage) {
-      if (!shader) {
-        return;
-      }
-      const auto& bindings = shader->GetSamplerBindingsAfterTranslation();
-      for (size_t i = 0; i < bindings.size() && i < samplers.size(); ++i) {
-        if (census_sampler_index < rex::countof(census_draw.samplers)) {
-          draw_census::SamplerRecord& sampler = census_draw.samplers[census_sampler_index];
-          sampler.fetch_constant = uint8_t(bindings[i].fetch_constant);
-          sampler.stage = stage;
-          sampler.parameters = samplers[i].first.value;
-        }
-        ++census_sampler_index;
-      }
-    };
-    record_samplers(vertex_shader, current_samplers_vertex_, 0);
-    record_samplers(pixel_shader, current_samplers_pixel_, 1);
-    if (census_sampler_index > rex::countof(census_draw.samplers)) {
-      census_draw.flags |= draw_census::kDrawSamplerOverflow;
-    }
-  }
-
-  uint32_t normalized_color_mask =
-      pixel_shader ? draw_util::GetNormalizedColorMask(regs, pixel_shader->writes_color_targets())
-                   : 0;
-
-  // Update the textures before most other work in the submission because
-  // samplers depend on this (and in case of sampler overflow in a submission,
-  // submissions must be split) - may perform dispatches and copying.
-  uint32_t used_texture_mask =
-      vertex_shader->GetUsedTextureMaskAfterTranslation() |
-      (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
-  texture_cache_->RequestTextures(used_texture_mask);
-  if (census) {
-    census_draw.used_texture_mask = used_texture_mask;
-    census_draw.texture_count = uint8_t(std::min<uint32_t>(std::popcount(used_texture_mask),
-                                                           UINT8_MAX));
-    uint32_t texture_bits = used_texture_mask;
-    uint32_t census_texture_index = 0;
-    uint32_t fetch_constant;
-    while (rex::bit_scan_forward(texture_bits, &fetch_constant)) {
-      texture_bits &= ~(UINT32_C(1) << fetch_constant);
-      if (census_texture_index < rex::countof(census_draw.textures)) {
-        draw_census::TextureRecord& texture = census_draw.textures[census_texture_index];
-        texture.fetch_constant = uint8_t(fetch_constant);
-        texture.swizzled_signs =
-            texture_cache_->GetActiveTextureSwizzledSigns(fetch_constant);
-        texture.host_swizzle = texture_cache_->GetActiveTextureHostSwizzle(fetch_constant);
-        texture_cache_->GetActiveTextureCensusKey(fetch_constant, texture.key);
-      }
-      ++census_texture_index;
-    }
-    if (census_texture_index > rex::countof(census_draw.textures)) {
-      census_draw.flags |= draw_census::kDrawTextureOverflow;
-    }
-  }
-
-  const VulkanPipelineCache::PipelineLayoutProvider* pipeline_layout_provider;
-  // Set up the render targets - this may perform dispatches and draws.
-  if (!render_target_cache_->Update(is_rasterization_done, normalized_depth_control,
-                                    normalized_color_mask, *vertex_shader)) {
-    return draw_fail("render_target_update");
-  }
-
-  // Create the pipeline (for this, need the render pass from the render target
-  // cache), translating the shaders - doing this now to obtain the used
-  // textures.
-  VkPipeline pipeline;
-  void* pipeline_handle = nullptr;
-  if (!pipeline_cache_->ConfigurePipeline(vertex_shader_translation, pixel_shader_translation,
-                                          primitive_processing_result, normalized_depth_control,
-                                          normalized_color_mask,
-                                          render_target_cache_->last_update_render_pass_key(),
-                                          pipeline, pipeline_layout_provider, &pipeline_handle)) {
-    return draw_fail("configure_pipeline");
-  }
-  if (census) {
-    census_draw.pipeline_desc_hash = pipeline_cache_->last_pipeline_description_hash();
-    census_draw.render_pass_key = render_target_cache_->last_update_render_pass_key().key;
-  }
-  bool pipeline_is_placeholder = false;
-  // Reload the current handle state to observe async hot-swap completions that
-  // may happen between pipeline configuration and binding.
-  pipeline_cache_->GetPipelineAndLayoutByHandle(pipeline_handle, pipeline, pipeline_layout_provider,
-                                                &pipeline_is_placeholder);
-  if (REXCVAR_GET(async_shader_compilation) && pipeline_is_placeholder) {
-    frame_used_async_placeholder_pipeline_ = true;
-    return true;
-  }
-  if (pipeline == VK_NULL_HANDLE || pipeline_layout_provider == nullptr) {
-    return draw_fail("pipeline_lookup");
-  }
-  if (current_guest_graphics_pipeline_ != pipeline) {
-    deferred_command_buffer_.CmdVkBindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    current_guest_graphics_pipeline_ = pipeline;
-    current_external_graphics_pipeline_ = VK_NULL_HANDLE;
-  }
-
-  // Update the graphics pipeline, and if the new graphics pipeline has a
-  // different layout, invalidate incompatible descriptor sets before updating
-  // current_guest_graphics_pipeline_layout_.
-  auto pipeline_layout = static_cast<const PipelineLayout*>(pipeline_layout_provider);
-  if (current_guest_graphics_pipeline_layout_ != pipeline_layout) {
-    if (current_guest_graphics_pipeline_layout_) {
-      // Keep descriptor set layouts for which the new pipeline layout is
-      // compatible with the previous one (pipeline layouts are compatible for
-      // set N if set layouts 0 through N are compatible).
-      uint32_t descriptor_sets_kept = uint32_t(SpirvShaderTranslator::kDescriptorSetCount);
-      if (current_guest_graphics_pipeline_layout_->descriptor_set_layout_textures_vertex_ref() !=
-          pipeline_layout->descriptor_set_layout_textures_vertex_ref()) {
-        descriptor_sets_kept = std::min(
-            descriptor_sets_kept, uint32_t(SpirvShaderTranslator::kDescriptorSetTexturesVertex));
-      }
-      if (current_guest_graphics_pipeline_layout_->descriptor_set_layout_textures_pixel_ref() !=
-          pipeline_layout->descriptor_set_layout_textures_pixel_ref()) {
-        descriptor_sets_kept = std::min(
-            descriptor_sets_kept, uint32_t(SpirvShaderTranslator::kDescriptorSetTexturesPixel));
-      }
-    } else {
-      // No or unknown pipeline layout previously bound - all bindings are in an
-      // indeterminate state.
-      current_graphics_descriptor_sets_bound_up_to_date_ = 0;
-    }
-    current_guest_graphics_pipeline_layout_ = pipeline_layout;
-  }
-
-  bool host_render_targets_used =
-      render_target_cache_->GetPath() == RenderTargetCache::Path::kHostRenderTargets;
-  uint32_t draw_resolution_scale_x = texture_cache_->draw_resolution_scale_x();
-  uint32_t draw_resolution_scale_y = texture_cache_->draw_resolution_scale_y();
-
-  // Get dynamic rasterizer state.
-  draw_util::ViewportInfo viewport_info;
-  // Just handling maxViewportDimensions is enough - viewportBoundsRange[1] must
-  // be at least 2 * max(maxViewportDimensions[0...1]) - 1, and
-  // maxViewportDimensions must be greater than or equal to the size of the
-  // largest possible framebuffer attachment (if the viewport has positive
-  // offset and is between maxViewportDimensions and viewportBoundsRange[1],
-  // GetHostViewportInfo will adjust ndc_scale/ndc_offset to clamp it, and the
-  // clamped range will be outside the largest possible framebuffer anyway.
-  // FIXME(Triang3l): Possibly handle maxViewportDimensions and
-  // viewportBoundsRange separately because when using fragment shader
-  // interlocks, framebuffers are not used, while the range may be wider than
-  // dimensions? Though viewport bigger than 4096 - the smallest possible
-  // maximum dimension (which is below the 8192 texture size limit on the Xbox
-  // 360) - and with offset, is probably a situation that never happens in real
-  // life. Or even disregard the viewport bounds range in the fragment shader
-  // interlocks case completely - apply the viewport and the scissor offset
-  // directly to pixel address and to things like ps_param_gen.
-  draw_util::GetHostViewportInfo(
-      regs, draw_resolution_scale_x, draw_resolution_scale_y, false,
-      device_properties.maxViewportDimensions[0], device_properties.maxViewportDimensions[1], true,
-      normalized_depth_control,
-      host_render_targets_used && render_target_cache_->depth_float24_convert_in_pixel_shader(),
-      host_render_targets_used, pixel_shader && pixel_shader->writes_depth(), viewport_info);
-
-  // Update dynamic graphics pipeline state.
-  UpdateDynamicState(viewport_info, primitive_polygonal, normalized_depth_control);
-
-  auto vgt_draw_initiator = regs.Get<reg::VGT_DRAW_INITIATOR>();
-
-  // Whether to load the guest 32-bit (usually big-endian) vertex index
-  // indirectly in the vertex shader if full 32-bit indices are not supported by
-  // the host.
-  bool shader_32bit_index_dma =
-      !device_properties.fullDrawIndexUint32 &&
-      primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kGuestDMA &&
-      vgt_draw_initiator.index_size == xenos::IndexFormat::kInt32 &&
-      primitive_processing_result.host_vertex_shader_type == Shader::HostVertexShaderType::kVertex;
-  if (!device_properties.fullDrawIndexUint32 &&
-      primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kGuestDMA &&
-      vgt_draw_initiator.index_size == xenos::IndexFormat::kInt32 &&
-      primitive_processing_result.host_vertex_shader_type !=
-          Shader::HostVertexShaderType::kVertex) {
-    // PrimitiveProcessor is expected to pre-convert this case to
-    // ProcessedIndexBufferType::kHostConverted with host-endian 24-bit
-    // indices. Keep drawing, but report if that pre-conversion didn't happen.
-    static bool non_vertex_32bit_guest_dma_no_full_uint32_logged = false;
-    if (!non_vertex_32bit_guest_dma_no_full_uint32_logged) {
-      REXGPU_WARN(
-          "Vulkan draw has host vertex shader type {} with guest DMA 32-bit "
-          "indices on a device without fullDrawIndexUint32; expected "
-          "PrimitiveProcessor to return host-converted indices",
-          uint32_t(primitive_processing_result.host_vertex_shader_type));
-      non_vertex_32bit_guest_dma_no_full_uint32_logged = true;
-    }
-  }
-
-  // Update system constants before uploading them.
-  UpdateSystemConstantValues(primitive_polygonal, primitive_processing_result,
-                             shader_32bit_index_dma, 0, viewport_info, used_texture_mask,
-                             normalized_depth_control, normalized_color_mask);
-
-  if (pixel_shader) {
-    CaptureDrawComparison(regs,
-                          render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock
-                              ? "vulkan-fsi" : "vulkan-host",
-                          vertex_shader->ucode_data_hash(), pixel_shader->ucode_data_hash(),
-                          index_count, system_constants_);
-  }
-
-  // Update uniform buffers and descriptor sets after binding the pipeline with
-  // the new layout.
-  if (!UpdateBindings(vertex_shader, pixel_shader)) {
-    return draw_fail("update_bindings");
-  }
-
-  // Ensure vertex buffers are resident.
-  const Shader::ConstantRegisterMap& constant_map_vertex = vertex_shader->constant_register_map();
-  for (uint32_t i = 0; i < rex::countof(constant_map_vertex.vertex_fetch_bitmap); ++i) {
-    uint32_t vfetch_bits_remaining = constant_map_vertex.vertex_fetch_bitmap[i];
-    uint32_t j;
-    while (rex::bit_scan_forward(vfetch_bits_remaining, &j)) {
-      vfetch_bits_remaining &= ~(uint32_t(1) << j);
-      uint32_t vfetch_index = i * 32 + j;
-      uint64_t vfetch_bit = uint64_t(1) << (vfetch_index & 63);
-      bool vfetch_cached = (vertex_buffers_in_sync_[vfetch_index >> 6] & vfetch_bit) != 0;
-      if (!census && vfetch_cached && !native_residency_->VerifyBypassesCallerCache()) {
-        continue;
-      }
-      xenos::xe_gpu_vertex_fetch_t vfetch_constant = regs.GetVertexFetch(vfetch_index);
-      switch (vfetch_constant.type) {
-        case xenos::FetchConstantType::kVertex:
-          break;
-        case xenos::FetchConstantType::kInvalidVertex:
-          if (REXCVAR_GET(gpu_allow_invalid_fetch_constants)) {
-            break;
-          }
-          REXGPU_WARN(
-              "Vertex fetch constant {} ({:08X} {:08X}) has \"invalid\" type! "
-              "This "
-              "is incorrect behavior, but you can try bypassing this by "
-              "launching Xenia with --gpu_allow_invalid_fetch_constants=true.",
-              vfetch_index, vfetch_constant.dword_0, vfetch_constant.dword_1);
-          return false;
-        default:
-          REXGPU_WARN("Vertex fetch constant {} ({:08X} {:08X}) is completely invalid!",
-                      vfetch_index, vfetch_constant.dword_0, vfetch_constant.dword_1);
-          return false;
-      }
-      uint32_t vfetch_address_bytes = vfetch_constant.address << 2;
-      uint32_t vfetch_size_bytes = vfetch_constant.size << 2;
-      draw_census::VertexBindingRecord* census_binding = nullptr;
-      if (census) {
-        if (census_vertex_bindings_seen < rex::countof(census_draw.vertex_bindings)) {
-          census_binding = &census_draw.vertex_bindings[census_vertex_bindings_seen];
-          census_binding->fetch_constant = uint8_t(vfetch_index);
-          census_binding->endian = uint8_t(vfetch_constant.endian);
-          census_binding->address_bytes = vfetch_address_bytes;
-          census_binding->size_bytes = vfetch_size_bytes;
-          for (const Shader::VertexBinding& binding : vertex_shader->vertex_bindings()) {
-            if (binding.fetch_constant == vfetch_index) {
-              census_binding->stride_words = binding.stride_words;
-              break;
-            }
-          }
-          census_binding->hash_valid = native_residency_->LastRequestedRangeHash(
-              vfetch_address_bytes, vfetch_size_bytes, &census_binding->content_hash);
-        }
-        ++census_vertex_bindings_seen;
-      }
-      if (vfetch_cached && !native_residency_->VerifyBypassesCallerCache()) {
-        continue;
-      }
-      if (REXCVAR_GET(gpu_native_stats)) {
-        native_telemetry::NoteVertexRange(vfetch_address_bytes, vfetch_size_bytes);
-      }
-      VertexBufferState& state = vertex_buffer_states_[vfetch_index];
-      vfetch_cached |=
-          state.address == vfetch_constant.address && state.size == vfetch_constant.size;
-      if (native_residency_->IsVertexResidencyAllowedForDraw()) {
-        NativeResidency::VertexRangeResult result = native_residency_->RequestVertexRange(
-            *memory_, *shared_memory_, vfetch_address_bytes, vfetch_size_bytes, vfetch_cached);
-        if (census_binding) {
-          census_binding->residency_result = uint8_t(result);
-          census_binding->hash_valid = native_residency_->LastRequestedRangeHash(
-              vfetch_address_bytes, vfetch_size_bytes, &census_binding->content_hash);
-        }
-        if (result == NativeResidency::VertexRangeResult::kCallerCacheHit) {
-          // The fetch constant has not moved since this buffer was last made
-          // resident, so neither path has anything to do. RequestVertexRange
-          // still records it for next frame before returning this result.
-          vertex_buffers_in_sync_[vfetch_index >> 6] |= vfetch_bit;
-          continue;
-        }
-        if (result == NativeResidency::VertexRangeResult::kNative) {
-          native_residency_->NoteDrawNativeUsed();
-          state.address = vfetch_constant.address;
-          state.size = vfetch_constant.size;
-          vertex_buffers_in_sync_[vfetch_index >> 6] |= vfetch_bit;
-          continue;
-        }
-        // Refused - oversized, resolve-written or unstageable. The emulated
-        // path below handles it, with its watch, exactly as it always has.
-        native_residency_->NoteDrawFallback();
-      } else if (vfetch_cached && !native_residency_->VerifyBypassesCallerCache()) {
-        vertex_buffers_in_sync_[vfetch_index >> 6] |= vfetch_bit;
-        continue;
-      }
-      if (census_binding) {
-        census_binding->residency_result =
-            uint8_t(NativeResidency::VertexRangeResult::kFallback);
-      }
-      PERF_counter_add(kRequestRangeVertexBytes, vfetch_size_bytes);
-      if (!shared_memory_->RequestRange(vfetch_address_bytes, vfetch_size_bytes)) {
-        REXGPU_ERROR(
-            "Failed to request vertex buffer at 0x{:08X} (size {}) in the shared "
-            "memory",
-            vfetch_address_bytes, vfetch_size_bytes);
-        return false;
-      }
-      state.address = vfetch_constant.address;
-      state.size = vfetch_constant.size;
-      vertex_buffers_in_sync_[vfetch_index >> 6] |= vfetch_bit;
-    }
-  }
-  if (census) {
-    census_draw.vertex_binding_count =
-        uint8_t(std::min<uint32_t>(census_vertex_bindings_seen, UINT8_MAX));
-    if (census_vertex_bindings_seen > rex::countof(census_draw.vertex_bindings)) {
-      census_draw.flags |= draw_census::kDrawVertexBindingOverflow;
-    }
-  }
-
-  // Every residency decision for this draw has been made by now - the index
-  // buffer inside PrimitiveProcessor::Process above, the vertex buffers in the
-  // loop just above - so this is where the draw is counted, once, as native or
-  // as a fallback.
-  native_residency_->EndDraw();
-
-  // Synchronize the memory pages backing memory scatter export streams, and
-  // calculate the range that includes the streams for the buffer barrier.
-  uint32_t memexport_extent_start = UINT32_MAX, memexport_extent_end = 0;
-  for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-    uint32_t memexport_range_base_bytes = memexport_range.base_address_dwords << 2;
-    if (!shared_memory_->RequestRange(memexport_range_base_bytes, memexport_range.size_bytes)) {
-      REXGPU_ERROR(
-          "Failed to request memexport stream at 0x{:08X} (size {}) in the "
-          "shared memory",
-          memexport_range_base_bytes, memexport_range.size_bytes);
-      return false;
-    }
-    memexport_extent_start = std::min(memexport_extent_start, memexport_range_base_bytes);
-    memexport_extent_end =
-        std::max(memexport_extent_end, memexport_range_base_bytes + memexport_range.size_bytes);
-  }
-  if (memexport_writes_possible && memexport_ranges_.empty()) {
-    rex::perf::IncrementCounter(rex::perf::CounterId::kMemexportUnresolved);
-    if (!shared_memory_->RequestRange(0, SharedMemory::kBufferSize)) {
-      REXGPU_ERROR(
-          "Failed to request full shared memory residency for unresolved "
-          "memexport destinations");
-      return false;
-    }
-  }
-
-  ScratchBufferAcquisition guest_dma_index_scratch_buffer;
-  if (primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kGuestDMA &&
-      !shader_32bit_index_dma && memexport_writes_possible) {
-    // Align with D3D12 behavior where memexporting draws using guest DMA indices
-    // read a snapshot of indices to avoid read/write aliasing through shared
-    // memory.
-    VkDeviceSize guest_dma_index_size =
-        VkDeviceSize(primitive_processing_result.host_draw_vertex_count) *
-        (primitive_processing_result.host_index_format == xenos::IndexFormat::kInt16
-             ? sizeof(uint16_t)
-             : sizeof(uint32_t));
-    if (guest_dma_index_size) {
-      guest_dma_index_scratch_buffer = AcquireScratchGpuBuffer(
-          guest_dma_index_size, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
-      if (guest_dma_index_scratch_buffer.buffer() == VK_NULL_HANDLE) {
-        return draw_fail("guest_dma_index_scratch_buffer");
-      }
-
-      shared_memory_->Use(VulkanSharedMemory::Usage::kRead);
-      SubmitBarriers(true);
-
-      VkBufferCopy guest_dma_index_copy_region = {};
-      guest_dma_index_copy_region.srcOffset = primitive_processing_result.guest_index_base;
-      guest_dma_index_copy_region.dstOffset = 0;
-      guest_dma_index_copy_region.size = guest_dma_index_size;
-      deferred_command_buffer_.CmdVkCopyBuffer(shared_memory_->buffer(),
-                                               guest_dma_index_scratch_buffer.buffer(), 1,
-                                               &guest_dma_index_copy_region);
-      PushBufferMemoryBarrier(
-          guest_dma_index_scratch_buffer.buffer(), 0, guest_dma_index_size,
-          guest_dma_index_scratch_buffer.GetStageMask(), VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-          guest_dma_index_scratch_buffer.GetAccessMask(), VK_ACCESS_INDEX_READ_BIT);
-      guest_dma_index_scratch_buffer.SetStageMask(VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
-      guest_dma_index_scratch_buffer.SetAccessMask(VK_ACCESS_INDEX_READ_BIT);
-    }
-  }
-
-  // Insert the shared memory barrier if needed.
-  // TODO(Triang3l): Find some PM4 command that can be used for indication of
-  // when memexports should be awaited instead of inserting the barrier in Use
-  // every time if memory export was done in the previous draw?
-  if (memexport_extent_start < memexport_extent_end) {
-    shared_memory_->Use(
-        VulkanSharedMemory::Usage::kGuestDrawReadWrite,
-        std::make_pair(memexport_extent_start, memexport_extent_end - memexport_extent_start));
-  } else if (memexport_writes_possible) {
-    // Stream constants can be invalid or dynamic, making the exact destination
-    // unknown. Keep synchronization conservative similarly to D3D12 UAV
-    // handling for memexport-capable draws.
-    shared_memory_->Use(VulkanSharedMemory::Usage::kGuestDrawReadWrite,
-                        std::make_pair(0u, SharedMemory::kBufferSize));
-  } else {
-    shared_memory_->Use(VulkanSharedMemory::Usage::kRead);
-  }
-
-  // After all commands that may dispatch, copy or insert barriers, submit
-  // the barriers (may end the render pass), and (re)enter the render pass
-  // before drawing.
-  SubmitBarriersAndEnterRenderTargetCacheRenderPass(
-      render_target_cache_->last_update_render_pass(),
-      render_target_cache_->last_update_framebuffer());
-
-  auto commit_census_draw = [&]() {
-    if (!census) {
-      return;
-    }
-    census_draw.vk_submission = GetCurrentSubmission();
-    census_draw.rb_surface_info = regs[XE_GPU_REG_RB_SURFACE_INFO];
-    census_draw.rb_modecontrol = regs[XE_GPU_REG_RB_MODECONTROL];
-    census_draw.rb_colorcontrol = regs[XE_GPU_REG_RB_COLORCONTROL];
-    census_draw.rb_depthcontrol_normalized = normalized_depth_control.value;
-    census_draw.rb_color_mask_normalized = normalized_color_mask;
-    for (uint32_t i = 0; i < 4; ++i) {
-      census_draw.rb_color_info[i] = regs[reg::RB_COLOR_INFO::rt_register_indices[i]];
-      census_draw.rb_blendcontrol[i] = regs[reg::RB_BLENDCONTROL::rt_register_indices[i]];
-    }
-    census_draw.rb_depth_info = regs[XE_GPU_REG_RB_DEPTH_INFO];
-    census_draw.rb_stencilrefmask = regs[XE_GPU_REG_RB_STENCILREFMASK];
-    census_draw.rb_stencilrefmask_bf = regs[XE_GPU_REG_RB_STENCILREFMASK_BF];
-    census_draw.rb_alpha_ref_bits = regs[XE_GPU_REG_RB_ALPHA_REF];
-    census_draw.pa_su_sc_mode_cntl = regs[XE_GPU_REG_PA_SU_SC_MODE_CNTL];
-    census_draw.pa_cl_vte_cntl = regs[XE_GPU_REG_PA_CL_VTE_CNTL];
-    census_draw.pa_sc_window_scissor_tl = regs[XE_GPU_REG_PA_SC_WINDOW_SCISSOR_TL];
-    census_draw.pa_sc_window_scissor_br = regs[XE_GPU_REG_PA_SC_WINDOW_SCISSOR_BR];
-    census_draw.sq_program_cntl = regs[XE_GPU_REG_SQ_PROGRAM_CNTL];
-    census_draw.sq_context_misc = regs[XE_GPU_REG_SQ_CONTEXT_MISC];
-    for (uint32_t i = 0; i < 2; ++i) {
-      census_draw.vp_xy_offset[i] = float(viewport_info.xy_offset[i]);
-      census_draw.vp_xy_extent[i] = float(viewport_info.xy_extent[i]);
-    }
-    census_draw.vp_z_min = viewport_info.z_min;
-    census_draw.vp_z_max = viewport_info.z_max;
-    draw_util::Scissor census_scissor;
-    draw_util::GetScissor(regs, census_scissor);
-    std::memcpy(census_draw.sc_offset, census_scissor.offset, sizeof(census_draw.sc_offset));
-    std::memcpy(census_draw.sc_extent, census_scissor.extent, sizeof(census_draw.sc_extent));
-    std::memcpy(census_draw.float_dirty, draw_census_float_dirty_,
-                sizeof(census_draw.float_dirty));
-    std::memcpy(census_draw.fetch_dirty, draw_census_fetch_dirty_,
-                sizeof(census_draw.fetch_dirty));
-    census_draw.boolloop_dirty_writes = draw_census_boolloop_dirty_writes_;
-
-    const uint32_t* vs_constants = &regs[XE_GPU_REG_SHADER_CONSTANT_000_X];
-    const uint32_t* ps_constants = &regs[XE_GPU_REG_SHADER_CONSTANT_256_X];
-    constexpr size_t kConstantBlockBytes = 256 * 4 * sizeof(uint32_t);
-    census_draw.vs_const_block_hash = XXH3_64bits(vs_constants, kConstantBlockBytes);
-    census_draw.ps_const_block_hash = XXH3_64bits(ps_constants, kConstantBlockBytes);
-    const Shader::ConstantRegisterMap& vs_map = vertex_shader->constant_register_map();
-    const Shader::ConstantRegisterMap* ps_map =
-        pixel_shader ? &pixel_shader->constant_register_map() : nullptr;
-    for (uint32_t i = 0; i < 256; ++i) {
-      if (vs_map.float_bitmap[i >> 6] & (UINT64_C(1) << (i & 63))) {
-        census_draw.vs_reg_hash[i] = uint32_t(XXH3_64bits(vs_constants + i * 4, 16));
-      }
-      if (ps_map && (ps_map->float_bitmap[i >> 6] & (UINT64_C(1) << (i & 63)))) {
-        census_draw.ps_reg_hash[i] = uint32_t(XXH3_64bits(ps_constants + i * 4, 16));
-      }
-    }
-
-    const bool recorded = census->RecordDraw(census_draw);
-    census_attempt.Commit();
-    if (recorded) {
-      std::memset(draw_census_float_dirty_, 0, sizeof(draw_census_float_dirty_));
-      std::memset(draw_census_fetch_dirty_, 0, sizeof(draw_census_fetch_dirty_));
-      draw_census_boolloop_dirty_writes_ = 0;
-    }
-  };
-
-  // Draw.
-#if REX_PLATFORM_SWITCH
-  RexSwitchPerfCount(5);
-  RexSwitchPerfAdd(6, uint64_t(dynamic_scissor_.extent.width) * dynamic_scissor_.extent.height);
-  {
-    // Draws per surface width (RB_SURFACE_INFO::surface_pitch): splits the work
-    // among the game's passes by the size of their render target (1600 shadows,
-    // 1280 scene and post-processing, 640 reflection, 256 car cubemap). Counters
-    // 28..32 of switch_perf.cpp.
-    const uint32_t ancho_superficie = regs.Get<reg::RB_SURFACE_INFO>().surface_pitch;
-    RexSwitchPerfCount(ancho_superficie >= 1600   ? 28u
-                       : ancho_superficie >= 1280 ? 29u
-                       : ancho_superficie >= 640  ? 30u
-                       : ancho_superficie >= 256  ? 31u
-                                                  : 32u);
-  }
-#endif
-  if (primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kNone ||
-      shader_32bit_index_dma) {
-    // kDrawCalls / kVerticesProcessed are the backend-agnostic draw counters
-    // the debug overlay reads, and until now only the D3D12 backend
-    // incremented them - the overlay showed "Draw: 0" for every Vulkan run.
-    // Mirrors d3d12/command_processor.cpp exactly, at the same point in the
-    // sequence (after the barriers, on the instruction that issues the draw).
-    commit_census_draw();
-    PROFILE_DRAW_CALL();
-    PROFILE_VERTICES(primitive_processing_result.host_draw_vertex_count);
-#if REX_PLATFORM_SWITCH
-    if (!RexSwitchPerfSkip(1))
-#endif
-    deferred_command_buffer_.CmdVkDraw(primitive_processing_result.host_draw_vertex_count, 1, 0, 0);
-  } else {
-    std::pair<VkBuffer, VkDeviceSize> index_buffer;
-    switch (primitive_processing_result.index_buffer_type) {
-      case PrimitiveProcessor::ProcessedIndexBufferType::kGuestDMA:
-        if (guest_dma_index_scratch_buffer.buffer() != VK_NULL_HANDLE) {
-          index_buffer.first = guest_dma_index_scratch_buffer.buffer();
-          index_buffer.second = 0;
-        } else {
-          index_buffer.first = shared_memory_->buffer();
-          index_buffer.second = primitive_processing_result.guest_index_base;
-        }
-        break;
-      case PrimitiveProcessor::ProcessedIndexBufferType::kHostConverted:
-        index_buffer = primitive_processor_->GetConvertedIndexBuffer(
-            primitive_processing_result.host_index_buffer_handle);
-        break;
-      case PrimitiveProcessor::ProcessedIndexBufferType::kHostBuiltinForAuto:
-      case PrimitiveProcessor::ProcessedIndexBufferType::kHostBuiltinForDMA:
-        index_buffer = primitive_processor_->GetBuiltinIndexBuffer(
-            primitive_processing_result.host_index_buffer_handle);
-        break;
-      default:
-        assert_unhandled_case(primitive_processing_result.index_buffer_type);
-        return draw_fail("unexpected_index_buffer_type");
-    }
-    deferred_command_buffer_.CmdVkBindIndexBuffer(
-        index_buffer.first, index_buffer.second,
-        primitive_processing_result.host_index_format == xenos::IndexFormat::kInt16
-            ? VK_INDEX_TYPE_UINT16
-            : VK_INDEX_TYPE_UINT32);
-    commit_census_draw();
-    PROFILE_DRAW_CALL();
-    PROFILE_VERTICES(primitive_processing_result.host_draw_vertex_count);
-#if REX_PLATFORM_SWITCH
-    if (!RexSwitchPerfSkip(1))
-#endif
-    deferred_command_buffer_.CmdVkDrawIndexed(primitive_processing_result.host_draw_vertex_count, 1,
-                                              0, 0, 0);
-  }
-
-  // Invalidate textures in memexported memory and watch for changes.
-  if (!memexport_ranges_.empty()) {
-    for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-      shared_memory_->RangeWrittenByGpu(memexport_range.base_address_dwords << 2,
-                                        memexport_range.size_bytes);
-    }
-  } else if (memexport_writes_possible) {
-    // Stream constants can be invalid or dynamic, so exact destinations may be
-    // unknown. Keep invalidation conservative in this case.
-    shared_memory_->RangeWrittenByGpu(0, SharedMemory::kBufferSize);
-  }
-
-  if (IsReadbackMemexportEnabled(REXCVAR_GET(vulkan_readback_memexport)) &&
-      !memexport_ranges_.empty()) {
-    uint32_t memexport_total_size = 0;
-    for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-      memexport_total_size += memexport_range.size_bytes;
-    }
-    if (memexport_total_size) {
-      if (REXCVAR_GET(readback_memexport_fast)) {
-        IssueDraw_MemexportReadbackFastPath(memexport_total_size);
-      } else {
-        IssueDraw_MemexportReadbackFullPath(memexport_total_size);
-      }
-    }
-  }
-
-  return true;
-}
-
-bool VulkanCommandProcessor::IssueDraw_MemexportReadbackFullPath(uint32_t total_size) {
-  if (!total_size || memexport_ranges_.empty()) {
-    return true;
-  }
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  VkBuffer readback_buffer = VK_NULL_HANDLE;
-  VkDeviceMemory readback_memory = VK_NULL_HANDLE;
-  uint32_t readback_memory_type = UINT32_MAX;
-  VkDeviceSize readback_memory_size = 0;
-  if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-          vulkan_device, total_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-          ui::vulkan::util::MemoryPurpose::kReadback, readback_buffer, readback_memory,
-          &readback_memory_type, &readback_memory_size)) {
-    REXGPU_ERROR("Failed to create a Vulkan memexport readback buffer");
-    return true;
-  }
-
-  shared_memory_->Use(VulkanSharedMemory::Usage::kRead);
-  SubmitBarriers(true);
-
-  uint32_t readback_offset = 0;
-  for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-    VkBufferCopy readback_region = {};
-    readback_region.srcOffset = memexport_range.base_address_dwords << 2;
-    readback_region.dstOffset = readback_offset;
-    readback_region.size = memexport_range.size_bytes;
-    deferred_command_buffer_.CmdVkCopyBuffer(shared_memory_->buffer(), readback_buffer, 1,
-                                             &readback_region);
-    readback_offset += memexport_range.size_bytes;
-  }
-  PushBufferMemoryBarrier(readback_buffer, 0, total_size, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                          VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                          VK_ACCESS_HOST_READ_BIT);
-
-  if (!AwaitAllQueueOperationsCompletion()) {
-    REXGPU_ERROR("Failed to await completion of Vulkan memexport readback");
-    dfn.vkDestroyBuffer(device, readback_buffer, nullptr);
-    dfn.vkFreeMemory(device, readback_memory, nullptr);
-    return true;
-  }
-
-  void* readback_mapping = nullptr;
-  if (dfn.vkMapMemory(device, readback_memory, 0, VK_WHOLE_SIZE, 0, &readback_mapping) !=
-      VK_SUCCESS) {
-    REXGPU_ERROR("Failed to map a Vulkan memexport readback buffer");
-    dfn.vkDestroyBuffer(device, readback_buffer, nullptr);
-    dfn.vkFreeMemory(device, readback_memory, nullptr);
-    return true;
-  }
-
-  if (!(vulkan_device->memory_types().host_coherent & (uint32_t(1) << readback_memory_type))) {
-    VkMappedMemoryRange readback_memory_range = {};
-    readback_memory_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    readback_memory_range.memory = readback_memory;
-    readback_memory_range.offset = 0;
-    readback_memory_range.size = std::min(
-        rex::round_up(VkDeviceSize(total_size), vulkan_device->properties().nonCoherentAtomSize),
-        readback_memory_size);
-    dfn.vkInvalidateMappedMemoryRanges(device, 1, &readback_memory_range);
-  }
-
-  const uint8_t* readback_bytes = reinterpret_cast<const uint8_t*>(readback_mapping);
-  for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-    std::memcpy(memory_->TranslatePhysical(memexport_range.base_address_dwords << 2),
-                readback_bytes, memexport_range.size_bytes);
-    readback_bytes += memexport_range.size_bytes;
-  }
-  dfn.vkUnmapMemory(device, readback_memory);
-  dfn.vkDestroyBuffer(device, readback_buffer, nullptr);
-  dfn.vkFreeMemory(device, readback_memory, nullptr);
-  return true;
-}
-
-bool VulkanCommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_size) {
-  if (!total_size || memexport_ranges_.empty()) {
-    return true;
-  }
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  const uint64_t readback_key =
-      MakeMemexportReadbackKey(memexport_ranges_.front().base_address_dwords, total_size);
-  ReadbackBuffer& readback = memexport_readback_buffers_[readback_key];
-  readback.last_used_frame = frame_current_;
-
-  auto ensure_readback_slot = [&](uint32_t index, uint32_t size) -> bool {
-    if (readback.buffers[index] != VK_NULL_HANDLE && readback.memories[index] != VK_NULL_HANDLE &&
-        readback.mapped_data[index] != nullptr && size <= readback.sizes[index]) {
-      return true;
-    }
-
-    VkBuffer new_buffer = VK_NULL_HANDLE;
-    VkDeviceMemory new_memory = VK_NULL_HANDLE;
-    if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-            vulkan_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            ui::vulkan::util::MemoryPurpose::kReadback, new_buffer, new_memory)) {
-      return false;
-    }
-
-    void* new_mapping = nullptr;
-    if (dfn.vkMapMemory(device, new_memory, 0, VK_WHOLE_SIZE, 0, &new_mapping) != VK_SUCCESS) {
-      dfn.vkDestroyBuffer(device, new_buffer, nullptr);
-      dfn.vkFreeMemory(device, new_memory, nullptr);
-      return false;
-    }
-
-    if (readback.buffers[index] != VK_NULL_HANDLE || readback.memories[index] != VK_NULL_HANDLE) {
-      if (!AwaitAllQueueOperationsCompletion()) {
-        dfn.vkUnmapMemory(device, new_memory);
-        dfn.vkDestroyBuffer(device, new_buffer, nullptr);
-        dfn.vkFreeMemory(device, new_memory, nullptr);
-        return false;
-      }
-      if (readback.mapped_data[index] != nullptr && readback.memories[index] != VK_NULL_HANDLE) {
-        dfn.vkUnmapMemory(device, readback.memories[index]);
-      }
-      if (readback.buffers[index] != VK_NULL_HANDLE) {
-        dfn.vkDestroyBuffer(device, readback.buffers[index], nullptr);
-      }
-      if (readback.memories[index] != VK_NULL_HANDLE) {
-        dfn.vkFreeMemory(device, readback.memories[index], nullptr);
-      }
-    }
-
-    readback.buffers[index] = new_buffer;
-    readback.memories[index] = new_memory;
-    readback.mapped_data[index] = new_mapping;
-    readback.sizes[index] = size;
-    readback.submission_written[index] = 0;
-    readback.written_size[index] = 0;
-    return true;
-  };
-
-  const uint32_t write_index = readback.current_index;
-  const uint32_t read_index = 1 - write_index;
-  const uint32_t readback_size = AlignReadbackBufferSize(total_size);
-  if (!ensure_readback_slot(write_index, readback_size)) {
-    return IssueDraw_MemexportReadbackFullPath(total_size);
-  }
-
-  shared_memory_->Use(VulkanSharedMemory::Usage::kRead);
-  SubmitBarriers(true);
-
-  uint32_t readback_offset = 0;
-  for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-    VkBufferCopy readback_region = {};
-    readback_region.srcOffset = memexport_range.base_address_dwords << 2;
-    readback_region.dstOffset = readback_offset;
-    readback_region.size = memexport_range.size_bytes;
-    deferred_command_buffer_.CmdVkCopyBuffer(shared_memory_->buffer(),
-                                             readback.buffers[write_index], 1, &readback_region);
-    readback_offset += memexport_range.size_bytes;
-  }
-  PushBufferMemoryBarrier(readback.buffers[write_index], 0, total_size,
-                          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
-                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-  readback.submission_written[write_index] = GetCurrentSubmission();
-  readback.written_size[write_index] = total_size;
-
-  CheckSubmissionFenceAndDeviceLoss(0);
-  bool previous_slot_ready =
-      readback.buffers[read_index] != VK_NULL_HANDLE &&
-      readback.memories[read_index] != VK_NULL_HANDLE &&
-      readback.mapped_data[read_index] != nullptr && total_size <= readback.sizes[read_index] &&
-      total_size <= readback.written_size[read_index] && readback.submission_written[read_index] &&
-      readback.submission_written[read_index] <= submission_completed_;
-  if (!previous_slot_ready) {
-    IssueDraw_MemexportReadbackFullPath(total_size);
-    readback.current_index = read_index;
-    return true;
-  }
-
-  VkMappedMemoryRange readback_memory_range = {};
-  readback_memory_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-  readback_memory_range.memory = readback.memories[read_index];
-  readback_memory_range.offset = 0;
-  readback_memory_range.size = VK_WHOLE_SIZE;
-  dfn.vkInvalidateMappedMemoryRanges(device, 1, &readback_memory_range);
-
-  const uint8_t* readback_bytes =
-      reinterpret_cast<const uint8_t*>(readback.mapped_data[read_index]);
-  for (const draw_util::MemExportRange& memexport_range : memexport_ranges_) {
-    std::memcpy(memory_->TranslatePhysical(memexport_range.base_address_dwords << 2),
-                readback_bytes, memexport_range.size_bytes);
-    readback_bytes += memexport_range.size_bytes;
-  }
-
-  readback.current_index = read_index;
-  return true;
-}
-
-void VulkanCommandProcessor::RecordDrawCensusCopy(uint32_t written_address,
-                                                  uint32_t written_length,
-                                                  bool readback_path) {
-  if (!draw_census_ || !draw_census_->IsRecording()) {
-    return;
-  }
-  const RegisterFile& regs = *register_file_;
-  draw_census::CopyRecord record{};
-  record.rb_copy_control = regs[XE_GPU_REG_RB_COPY_CONTROL];
-  record.rb_copy_dest_info = regs[XE_GPU_REG_RB_COPY_DEST_INFO];
-  record.rb_copy_dest_base = regs[XE_GPU_REG_RB_COPY_DEST_BASE];
-  record.rb_copy_dest_pitch = regs[XE_GPU_REG_RB_COPY_DEST_PITCH];
-  record.written_address = written_address;
-  record.written_length = written_length;
-  record.rb_surface_info = regs[XE_GPU_REG_RB_SURFACE_INFO];
-  record.rb_color_info0 = regs[XE_GPU_REG_RB_COLOR_INFO];
-  record.rb_depth_info = regs[XE_GPU_REG_RB_DEPTH_INFO];
-  record.rb_modecontrol = regs[XE_GPU_REG_RB_MODECONTROL];
-  record.readback_path = readback_path;
-  draw_census_->RecordCopy(record);
-}
-
-bool VulkanCommandProcessor::IssueCopy() {
-#if REX_PLATFORM_SWITCH
-  switch_timing::Scope timing(switch_timing::kResolveCpuUs);
-#endif
-#if XE_GPU_FINE_GRAINED_DRAW_SCOPES
-  SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
-
-  if (!BeginSubmission(true)) {
-    return false;
-  }
-
-  ReadbackResolveMode readback_mode = GetReadbackResolveMode(REXCVAR_GET(vulkan_readback_resolve));
-  if (readback_mode == ReadbackResolveMode::kDisabled &&
-      REXCVAR_GET(gpu_compare_resolve_address).empty()) {
-    uint32_t written_address, written_length;
-    bool resolved = render_target_cache_->Resolve(*memory_, *shared_memory_, *texture_cache_,
-                                                  written_address, written_length);
-    if (resolved) {
-      RecordDrawCensusCopy(written_address, written_length, false);
-      // Unconditionally, so that the exclusion set is already complete if the
-      // native path is switched on later in the run.
-      native_residency_->NoteResolveDestination(written_address, written_length);
-      if (REXCVAR_GET(gpu_native_stats)) {
-        native_telemetry::NoteResolveDestination(written_address, written_length);
-      }
-    }
-    return resolved;
-  }
-
-  return IssueCopy_ReadbackResolvePath();
-}
-
-bool VulkanCommandProcessor::IssueCopy_ReadbackResolvePath() {
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  uint32_t written_address, written_length;
-  if (!render_target_cache_->Resolve(*memory_, *shared_memory_, *texture_cache_, written_address,
-                                     written_length)) {
-    return false;
-  }
-  native_residency_->NoteResolveDestination(written_address, written_length);
-  RecordDrawCensusCopy(written_address, written_length, true);
-  if (REXCVAR_GET(gpu_native_stats)) {
-    native_telemetry::NoteResolveDestination(written_address, written_length);
-  }
-
-  if (!written_length) {
-    return true;
-  }
-
-  if (!memory_->TranslatePhysical(written_address)) {
-    return true;
-  }
-
-  ReadbackResolveMode readback_mode = GetReadbackResolveMode(REXCVAR_GET(vulkan_readback_resolve));
-  const bool compare_pixels = WantsResolveComparison(written_address, written_length);
-  if (readback_mode == ReadbackResolveMode::kDisabled && !compare_pixels) {
-    return true;
-  }
-
-  auto ensure_readback_slot = [&](ReadbackBuffer& readback, uint32_t index, uint32_t size) -> bool {
-    if (readback.buffers[index] != VK_NULL_HANDLE && size <= readback.sizes[index] &&
-        readback.mapped_data[index] != nullptr) {
-      return true;
-    }
-
-    VkBuffer new_buffer = VK_NULL_HANDLE;
-    VkDeviceMemory new_memory = VK_NULL_HANDLE;
-    if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-            vulkan_device, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            ui::vulkan::util::MemoryPurpose::kReadback, new_buffer, new_memory)) {
-      REXGPU_ERROR("Failed to create a {} MB Vulkan resolve readback buffer", size >> 20);
-      return false;
-    }
-
-    void* new_mapping = nullptr;
-    if (dfn.vkMapMemory(device, new_memory, 0, VK_WHOLE_SIZE, 0, &new_mapping) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to map a Vulkan resolve readback buffer");
-      dfn.vkDestroyBuffer(device, new_buffer, nullptr);
-      dfn.vkFreeMemory(device, new_memory, nullptr);
-      return false;
-    }
-
-    if (readback.buffers[index] != VK_NULL_HANDLE || readback.memories[index] != VK_NULL_HANDLE) {
-      if (!AwaitAllQueueOperationsCompletion()) {
-        dfn.vkUnmapMemory(device, new_memory);
-        dfn.vkDestroyBuffer(device, new_buffer, nullptr);
-        dfn.vkFreeMemory(device, new_memory, nullptr);
-        return false;
-      }
-      if (readback.mapped_data[index] != nullptr && readback.memories[index] != VK_NULL_HANDLE) {
-        dfn.vkUnmapMemory(device, readback.memories[index]);
-      }
-      if (readback.buffers[index] != VK_NULL_HANDLE) {
-        dfn.vkDestroyBuffer(device, readback.buffers[index], nullptr);
-      }
-      if (readback.memories[index] != VK_NULL_HANDLE) {
-        dfn.vkFreeMemory(device, readback.memories[index], nullptr);
-      }
-    }
-
-    readback.buffers[index] = new_buffer;
-    readback.memories[index] = new_memory;
-    readback.mapped_data[index] = new_mapping;
-    readback.sizes[index] = size;
-    return true;
-  };
-
-  bool is_scaled = texture_cache_->IsDrawResolutionScaled();
-  uint64_t resolve_key = MakeReadbackResolveKey(written_address, written_length);
-  ReadbackBuffer& readback = readback_buffers_[resolve_key];
-  readback.last_used_frame = frame_current_;
-  uint32_t write_index = readback.current_index;
-  uint32_t readback_size = AlignReadbackBufferSize(written_length);
-  if (!ensure_readback_slot(readback, write_index, readback_size)) {
-    return true;
-  }
-
-  if (is_scaled) {
-    if (!resolve_downscale_pipeline_ || !resolve_downscale_pipeline_layout_) {
-      return true;
-    }
-
-    reg::RB_COPY_DEST_INFO copy_dest_info = register_file_->Get<reg::RB_COPY_DEST_INFO>();
-    const FormatInfo* format_info = FormatInfo::Get(uint32_t(copy_dest_info.copy_dest_format));
-    uint32_t bits_per_pixel = format_info->bits_per_pixel;
-    if (bits_per_pixel != 8 && bits_per_pixel != 16 && bits_per_pixel != 32 &&
-        bits_per_pixel != 64) {
-      return true;
-    }
-
-    uint32_t pixel_size_log2;
-    if (!rex::bit_scan_forward(bits_per_pixel >> 3, &pixel_size_log2)) {
-      return true;
-    }
-    uint32_t tile_size_1x = 32 * 32 * (uint32_t(1) << pixel_size_log2);
-    uint32_t tile_count = written_length / tile_size_1x;
-    if (!tile_count) {
-      return true;
-    }
-
-    uint64_t scaled_start = 0, scaled_length = 0;
-    if (!texture_cache_->GetScaledResolveRange(written_address, written_length, 0, scaled_start,
-                                               scaled_length)) {
-      return true;
-    }
-    if (!scaled_length) {
-      return true;
-    }
-
-    VkBuffer scaled_resolve_buffer = texture_cache_->scaled_resolve_buffer();
-    if (scaled_resolve_buffer == VK_NULL_HANDLE || scaled_start > uint64_t(UINT32_MAX)) {
-      return true;
-    }
-
-    uint32_t downscale_buffer_size = AlignReadbackBufferSize(written_length);
-    if (downscale_buffer_size > resolve_downscale_buffer_size_) {
-      VkBuffer new_buffer = VK_NULL_HANDLE;
-      VkDeviceMemory new_memory = VK_NULL_HANDLE;
-      if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-              vulkan_device, downscale_buffer_size,
-              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-              ui::vulkan::util::MemoryPurpose::kDeviceLocal, new_buffer, new_memory)) {
-        REXGPU_ERROR("Failed to create a {} MB Vulkan resolve downscale buffer",
-                     downscale_buffer_size >> 20);
-        return true;
-      }
-      if (resolve_downscale_buffer_ != VK_NULL_HANDLE ||
-          resolve_downscale_buffer_memory_ != VK_NULL_HANDLE) {
-        if (!AwaitAllQueueOperationsCompletion()) {
-          dfn.vkDestroyBuffer(device, new_buffer, nullptr);
-          dfn.vkFreeMemory(device, new_memory, nullptr);
-          return true;
-        }
-        if (resolve_downscale_buffer_ != VK_NULL_HANDLE) {
-          dfn.vkDestroyBuffer(device, resolve_downscale_buffer_, nullptr);
-        }
-        if (resolve_downscale_buffer_memory_ != VK_NULL_HANDLE) {
-          dfn.vkFreeMemory(device, resolve_downscale_buffer_memory_, nullptr);
-        }
-      }
-      resolve_downscale_buffer_ = new_buffer;
-      resolve_downscale_buffer_memory_ = new_memory;
-      resolve_downscale_buffer_size_ = downscale_buffer_size;
-    }
-    if (resolve_downscale_buffer_ == VK_NULL_HANDLE) {
-      return true;
-    }
-
-    VkDescriptorSet descriptor_set = AllocateSingleTransientDescriptor(
-        SingleTransientDescriptorLayout::kStorageBufferPairCompute);
-    if (descriptor_set == VK_NULL_HANDLE) {
-      return true;
-    }
-
-    VkDescriptorBufferInfo buffer_infos[2] = {};
-    buffer_infos[0].buffer = scaled_resolve_buffer;
-    buffer_infos[0].offset = 0;
-    buffer_infos[0].range = VK_WHOLE_SIZE;
-    buffer_infos[1].buffer = resolve_downscale_buffer_;
-    buffer_infos[1].offset = 0;
-    buffer_infos[1].range = written_length;
-
-    VkWriteDescriptorSet descriptor_writes[2] = {};
-    for (uint32_t i = 0; i < 2; ++i) {
-      descriptor_writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      descriptor_writes[i].dstSet = descriptor_set;
-      descriptor_writes[i].dstBinding = i;
-      descriptor_writes[i].descriptorCount = 1;
-      descriptor_writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-      descriptor_writes[i].pBufferInfo = &buffer_infos[i];
-    }
-    dfn.vkUpdateDescriptorSets(device, 2, descriptor_writes, 0, nullptr);
-
-    texture_cache_->UseScaledResolveBufferForRead();
-    SubmitBarriers(true);
-
-    VkBufferMemoryBarrier pre_barrier = {};
-    pre_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    pre_barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    pre_barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    pre_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    pre_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    pre_barrier.buffer = resolve_downscale_buffer_;
-    pre_barrier.offset = 0;
-    pre_barrier.size = written_length;
-    deferred_command_buffer_.CmdVkPipelineBarrier(
-        VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &pre_barrier, 0, nullptr);
-
-    BindExternalComputePipeline(resolve_downscale_pipeline_);
-
-    ResolveDownscaleConstants constants;
-    constants.scale_x = texture_cache_->draw_resolution_scale_x();
-    constants.scale_y = texture_cache_->draw_resolution_scale_y();
-    constants.pixel_size_log2 = pixel_size_log2;
-    constants.tile_count = tile_count;
-    constants.source_offset_bytes = uint32_t(scaled_start);
-    constants.half_pixel_offset = (REXCVAR_GET(readback_resolve_half_pixel_offset) &&
-                                   (constants.scale_x > 1 || constants.scale_y > 1))
-                                      ? 1u
-                                      : 0u;
-    deferred_command_buffer_.CmdVkPushConstants(resolve_downscale_pipeline_layout_,
-                                                VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(constants),
-                                                &constants);
-    deferred_command_buffer_.CmdVkBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
-                                                     resolve_downscale_pipeline_layout_, 0, 1,
-                                                     &descriptor_set, 0, nullptr);
-#if REX_PLATFORM_SWITCH
-    if (!RexSwitchPerfSkip(32))
-#endif
-    deferred_command_buffer_.CmdVkDispatch(tile_count, 1, 1);
-
-    VkBufferMemoryBarrier downscale_barrier = {};
-    downscale_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    downscale_barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    downscale_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    downscale_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    downscale_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    downscale_barrier.buffer = resolve_downscale_buffer_;
-    downscale_barrier.offset = 0;
-    downscale_barrier.size = written_length;
-    deferred_command_buffer_.CmdVkPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                                  VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1,
-                                                  &downscale_barrier, 0, nullptr);
-
-    VkBufferCopy readback_region = {};
-    readback_region.srcOffset = 0;
-    readback_region.dstOffset = 0;
-    readback_region.size = written_length;
-    deferred_command_buffer_.CmdVkCopyBuffer(resolve_downscale_buffer_,
-                                             readback.buffers[write_index], 1, &readback_region);
-  } else {
-    shared_memory_->Use(VulkanSharedMemory::Usage::kRead);
-    SubmitBarriers(true);
-
-    VkBufferCopy readback_region = {};
-    readback_region.srcOffset = written_address;
-    readback_region.dstOffset = 0;
-    readback_region.size = written_length;
-    deferred_command_buffer_.CmdVkCopyBuffer(shared_memory_->buffer(),
-                                             readback.buffers[write_index], 1, &readback_region);
-  }
-
-  PushBufferMemoryBarrier(readback.buffers[write_index], 0, written_length,
-                          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
-                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
-
-  bool use_delayed_sync = !compare_pixels &&
-      (readback_mode == ReadbackResolveMode::kFast || readback_mode == ReadbackResolveMode::kSome);
-  uint32_t read_index = write_index;
-  if (use_delayed_sync) {
-    read_index = 1 - write_index;
-  } else if (!AwaitAllQueueOperationsCompletion()) {
-    return true;
-  }
-
-  bool is_cache_miss = false;
-  if (use_delayed_sync && (readback.buffers[read_index] == VK_NULL_HANDLE ||
-                           written_length > readback.sizes[read_index] ||
-                           readback.mapped_data[read_index] == nullptr)) {
-    is_cache_miss = true;
-    read_index = write_index;
-    if (!AwaitAllQueueOperationsCompletion()) {
-      return true;
-    }
-  }
-
-  bool should_copy = compare_pixels || (readback_mode != ReadbackResolveMode::kSome) || is_cache_miss;
-  if (should_copy && readback.buffers[read_index] != VK_NULL_HANDLE &&
-      written_length <= readback.sizes[read_index] && readback.mapped_data[read_index] != nullptr) {
-    VkMappedMemoryRange readback_memory_range = {};
-    readback_memory_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    readback_memory_range.memory = readback.memories[read_index];
-    readback_memory_range.offset = 0;
-    readback_memory_range.size = VK_WHOLE_SIZE;
-    const VkResult invalidate_status =
-        dfn.vkInvalidateMappedMemoryRanges(device, 1, &readback_memory_range);
-    if (compare_pixels && invalidate_status != VK_SUCCESS) {
-      REXGPU_WARN("[gl-pixels] readback invalidation failed: {}", int32_t(invalidate_status));
-      return true;
-    }
-
-    if (compare_pixels) {
-      CaptureResolveComparison(*register_file_, "vulkan", written_address, written_length,
-          frame_current_, active_vertex_shader() ? active_vertex_shader()->ucode_data_hash() : 0,
-          active_pixel_shader() ? active_pixel_shader()->ucode_data_hash() : 0,
-          readback.mapped_data[read_index]);
-    }
-
-    uint8_t* destination = memory_->TranslatePhysical(written_address);
-    if (destination && readback_mode != ReadbackResolveMode::kDisabled) {
-      std::memcpy(destination, readback.mapped_data[read_index], written_length);
-    }
-  }
-
-  readback.current_index = 1 - readback.current_index;
-  return true;
-}
-
-void VulkanCommandProcessor::EvictOldReadbackBuffers(
-    std::unordered_map<uint64_t, ReadbackBuffer>& buffer_map) {
-  if (buffer_map.empty()) {
-    return;
-  }
-
-  const uint64_t eviction_frame_floor = (frame_current_ > kReadbackBufferEvictionAgeFrames)
-                                            ? (frame_current_ - kReadbackBufferEvictionAgeFrames)
-                                            : 0;
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-  for (auto it = buffer_map.begin(); it != buffer_map.end();) {
-    ReadbackBuffer& readback = it->second;
-    bool evict =
-        buffer_map.size() > kMaxReadbackBuffers || readback.last_used_frame < eviction_frame_floor;
-    if (!evict) {
-      ++it;
-      continue;
-    }
-    for (uint32_t i = 0; i < 2; ++i) {
-      if (readback.mapped_data[i] && readback.memories[i] != VK_NULL_HANDLE) {
-        dfn.vkUnmapMemory(device, readback.memories[i]);
-      }
-      if (readback.buffers[i] != VK_NULL_HANDLE) {
-        dfn.vkDestroyBuffer(device, readback.buffers[i], nullptr);
-      }
-      if (readback.memories[i] != VK_NULL_HANDLE) {
-        dfn.vkFreeMemory(device, readback.memories[i], nullptr);
-      }
-      readback.buffers[i] = VK_NULL_HANDLE;
-      readback.memories[i] = VK_NULL_HANDLE;
-      readback.mapped_data[i] = nullptr;
-      readback.sizes[i] = 0;
-      readback.submission_written[i] = 0;
-      readback.written_size[i] = 0;
-    }
-    it = buffer_map.erase(it);
-  }
-}
-
-bool VulkanCommandProcessor::InitializeOcclusionQueryResources() {
-  active_occlusion_query_ = {};
-  occlusion_query_cursor_ = 0;
-  occlusion_query_resources_available_ = false;
-  occlusion_query_pool_ = VK_NULL_HANDLE;
-  occlusion_query_readback_buffer_ = VK_NULL_HANDLE;
-  occlusion_query_readback_memory_ = VK_NULL_HANDLE;
-  occlusion_query_readback_memory_type_ = UINT32_MAX;
-  occlusion_query_readback_memory_size_ = 0;
-  occlusion_query_readback_mapping_ = nullptr;
-
-  const ui::vulkan::VulkanDevice* vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  VkDevice device = vulkan_device->device();
-
-  // GPU frame timing, if asked for. Independent of the occlusion pool below:
-  // its failure must not take occlusion queries down with it, and vice versa.
-  if (REXCVAR_GET(gpu_timestamp_queries)) {
-    const float timestamp_period = vulkan_device->properties().timestampPeriod;
-    if (timestamp_period <= 0.0f) {
-      REXGPU_WARN("gpu_timestamp_queries: device reports timestampPeriod 0; disabled");
-    } else {
-      VkQueryPoolCreateInfo ts_info = {};
-      ts_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-      ts_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-      ts_info.queryCount = kTimestampQueriesPerFrame * kMaxFramesInFlight;
-      if (dfn.vkCreateQueryPool(device, &ts_info, nullptr, &timestamp_query_pool_) != VK_SUCCESS) {
-        REXGPU_WARN("gpu_timestamp_queries: failed to create the query pool; disabled");
-        timestamp_query_pool_ = VK_NULL_HANDLE;
-      } else {
-        timestamp_period_ns_ = double(timestamp_period);
-        timestamp_queries_available_ = true;
-        REXGPU_INFO("gpu_timestamp_queries: enabled, timestampPeriod {} ns",
-                    timestamp_period_ns_);
-      }
-    }
-  }
-
-  VkQueryPoolCreateInfo pool_info = {};
-  pool_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-  pool_info.queryType = VK_QUERY_TYPE_OCCLUSION;
-  pool_info.queryCount = kMaxOcclusionQueries;
-  if (dfn.vkCreateQueryPool(device, &pool_info, nullptr, &occlusion_query_pool_) != VK_SUCCESS) {
-    REXGPU_WARN(
-        "VulkanCommandProcessor: Failed to create occlusion query pool, using fake sample counts");
-    return false;
-  }
-
-  if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
-          vulkan_device, sizeof(uint64_t) * kMaxOcclusionQueries, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-          ui::vulkan::util::MemoryPurpose::kReadback, occlusion_query_readback_buffer_,
-          occlusion_query_readback_memory_, &occlusion_query_readback_memory_type_,
-          &occlusion_query_readback_memory_size_)) {
-    REXGPU_WARN(
-        "VulkanCommandProcessor: Failed to create occlusion query readback buffer, using fake "
-        "sample counts");
-    ShutdownOcclusionQueryResources();
-    return false;
-  }
-
-  if (dfn.vkMapMemory(device, occlusion_query_readback_memory_, 0, VK_WHOLE_SIZE, 0,
-                      reinterpret_cast<void**>(&occlusion_query_readback_mapping_)) != VK_SUCCESS) {
-    REXGPU_WARN(
-        "VulkanCommandProcessor: Failed to map occlusion query readback buffer, using fake sample "
-        "counts");
-    ShutdownOcclusionQueryResources();
-    return false;
-  }
-
-  occlusion_query_resources_available_ = true;
-  return true;
-}
-
-void VulkanCommandProcessor::ShutdownOcclusionQueryResources() {
-  DisableHostOcclusionQueries();
-
-  const ui::vulkan::VulkanDevice* vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  VkDevice device = vulkan_device->device();
-
-  if (occlusion_query_readback_mapping_ && occlusion_query_readback_memory_ != VK_NULL_HANDLE) {
-    dfn.vkUnmapMemory(device, occlusion_query_readback_memory_);
-  }
-  occlusion_query_readback_mapping_ = nullptr;
-  if (occlusion_query_readback_buffer_ != VK_NULL_HANDLE) {
-    dfn.vkDestroyBuffer(device, occlusion_query_readback_buffer_, nullptr);
-  }
-  if (occlusion_query_readback_memory_ != VK_NULL_HANDLE) {
-    dfn.vkFreeMemory(device, occlusion_query_readback_memory_, nullptr);
-  }
-  if (occlusion_query_pool_ != VK_NULL_HANDLE) {
-    dfn.vkDestroyQueryPool(device, occlusion_query_pool_, nullptr);
-  }
-  if (timestamp_query_pool_ != VK_NULL_HANDLE) {
-    dfn.vkDestroyQueryPool(device, timestamp_query_pool_, nullptr);
-    timestamp_query_pool_ = VK_NULL_HANDLE;
-  }
-  timestamp_queries_available_ = false;
-  std::memset(timestamp_slot_frame_, 0, sizeof(timestamp_slot_frame_));
-
-  occlusion_query_pool_ = VK_NULL_HANDLE;
-  occlusion_query_readback_buffer_ = VK_NULL_HANDLE;
-  occlusion_query_readback_memory_ = VK_NULL_HANDLE;
-  occlusion_query_readback_memory_type_ = UINT32_MAX;
-  occlusion_query_readback_memory_size_ = 0;
-}
-
-bool VulkanCommandProcessor::AcquireOcclusionQueryIndex(uint32_t& host_index_out) {
-  if (occlusion_query_cursor_ >= kMaxOcclusionQueries) {
-    occlusion_query_cursor_ = 0;
-  }
-  host_index_out = occlusion_query_cursor_++;
-  return true;
-}
-
-void VulkanCommandProcessor::DisableHostOcclusionQueries() {
-  if (active_occlusion_query_.valid && occlusion_query_pool_ != VK_NULL_HANDLE) {
-    if (BeginSubmission(true)) {
-      deferred_command_buffer_.CmdVkEndQuery(occlusion_query_pool_,
-                                             active_occlusion_query_.host_index);
-      EndSubmission(false);
-    }
-  }
-  active_occlusion_query_ = {};
-  occlusion_query_cursor_ = 0;
-  occlusion_query_resources_available_ = false;
-}
-
-bool VulkanCommandProcessor::BeginGuestOcclusionQuery(uint32_t sample_count_address) {
-  if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_ ||
-      occlusion_query_pool_ == VK_NULL_HANDLE || occlusion_query_readback_mapping_ == nullptr) {
-    return false;
-  }
-  if (active_occlusion_query_.valid) {
-    REXGPU_WARN(
-        "VulkanCommandProcessor: Occlusion query begin issued while another query is active");
-    DisableHostOcclusionQueries();
-    return false;
-  }
-
-  uint32_t host_index = 0;
-  if (!AcquireOcclusionQueryIndex(host_index)) {
-    return false;
-  }
-  if (!BeginSubmission(true)) {
-    return false;
-  }
-
-  EndRenderPass();
-
-  DeferredCommandBuffer& command_buffer = deferred_command_buffer();
-  command_buffer.CmdVkResetQueryPool(occlusion_query_pool_, host_index, 1);
-  command_buffer.CmdVkBeginQuery(occlusion_query_pool_, host_index, 0);
-  active_occlusion_query_.sample_count_address = sample_count_address;
-  active_occlusion_query_.host_index = host_index;
-  active_occlusion_query_.valid = true;
-  return true;
-}
-
-bool VulkanCommandProcessor::EndGuestOcclusionQuery(uint32_t sample_count_address) {
-  if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_ ||
-      !active_occlusion_query_.valid || occlusion_query_pool_ == VK_NULL_HANDLE ||
-      occlusion_query_readback_mapping_ == nullptr) {
-    return false;
-  }
-
-  uint32_t host_index = active_occlusion_query_.host_index;
-  active_occlusion_query_ = {};
-
-  if (!BeginSubmission(true)) {
-    return false;
-  }
-
-  EndRenderPass();
-
-  DeferredCommandBuffer& command_buffer = deferred_command_buffer();
-  command_buffer.CmdVkEndQuery(occlusion_query_pool_, host_index);
-  command_buffer.CmdVkCopyQueryPoolResults(occlusion_query_pool_, host_index, 1,
-                                           occlusion_query_readback_buffer_,
-                                           sizeof(uint64_t) * host_index, sizeof(uint64_t),
-                                           VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-
-  if (!EndSubmission(false)) {
-    return false;
-  }
-  if (!AwaitAllQueueOperationsCompletion()) {
-    return false;
-  }
-
-  const ui::vulkan::VulkanDevice* vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-  if (!(vulkan_device->memory_types().host_coherent &
-        (uint32_t(1) << occlusion_query_readback_memory_type_))) {
-    VkMappedMemoryRange memory_range = {};
-    memory_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    memory_range.memory = occlusion_query_readback_memory_;
-    memory_range.offset = 0;
-    memory_range.size =
-        std::min(rex::round_up(VkDeviceSize(sizeof(uint64_t) * kMaxOcclusionQueries),
-                               vulkan_device->properties().nonCoherentAtomSize),
-                 occlusion_query_readback_memory_size_);
-    dfn.vkInvalidateMappedMemoryRanges(device, 1, &memory_range);
-  }
-
-  const uint64_t* results = reinterpret_cast<const uint64_t*>(occlusion_query_readback_mapping_);
-  uint64_t samples = NormalizeOcclusionSamples(results[host_index]);
-  WriteGuestOcclusionResult(sample_count_address, samples);
-  return true;
-}
-
-uint64_t VulkanCommandProcessor::NormalizeOcclusionSamples(uint64_t samples) const {
-  if (samples == 0 || !texture_cache_) {
-    return samples;
-  }
-  uint64_t scale_x = texture_cache_->draw_resolution_scale_x();
-  uint64_t scale_y = texture_cache_->draw_resolution_scale_y();
-  uint64_t scale = scale_x * scale_y;
-  if (scale <= 1) {
-    return samples;
-  }
-  return (samples + (scale >> 1)) / scale;
-}
-
-void VulkanCommandProcessor::WriteGuestOcclusionResult(uint32_t sample_count_address,
-                                                       uint64_t samples) {
-  auto* sample_counts =
-      memory_->TranslatePhysical<xenos::xe_gpu_depth_sample_counts*>(sample_count_address);
-  if (!sample_counts) {
-    return;
-  }
-  uint32_t clamped = samples > uint64_t(UINT32_MAX) ? UINT32_MAX : uint32_t(samples);
-  sample_counts->Total_A = clamped;
-  sample_counts->Total_B = 0;
-  sample_counts->ZPass_A = clamped;
-  sample_counts->ZPass_B = 0;
-  sample_counts->ZFail_A = 0;
-  sample_counts->ZFail_B = 0;
-  sample_counts->StencilFail_A = 0;
-  sample_counts->StencilFail_B = 0;
-}
-
-void VulkanCommandProcessor::CheckSubmissionFenceAndDeviceLoss(uint64_t await_submission) {
-  // Only report once, no need to retry a wait that won't succeed anyway.
-  if (device_lost_) {
-    return;
-  }
-
-  if (await_submission >= GetCurrentSubmission()) {
-    if (submission_open_) {
-      EndSubmission(false);
-    }
-    // A submission won't be ended if it hasn't been started, or if ending
-    // has failed - clamp the index.
-    await_submission = GetCurrentSubmission() - 1;
-  }
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  size_t fences_total = submissions_in_flight_fences_.size();
-  size_t fences_awaited = 0;
-  if (await_submission > submission_completed_) {
-#if REX_PLATFORM_SWITCH
-    RexSwitchPerfCount(switch_timing::kFenceWaitCount);
-    switch_timing::Scope wait_timing(switch_timing::kFenceWaitUs);
-#endif
-    // Await in a blocking way if requested.
-    // TODO(Triang3l): Await only one fence. "Fence signal operations that are
-    // defined by vkQueueSubmit additionally include in the first
-    // synchronization scope all commands that occur earlier in submission
-    // order."
-    // A genuine stall: this blocks with no timeout until the GPU catches up.
-    // (The loop below waits with a timeout of 0, which is a poll, not a stall,
-    // and is deliberately not counted.) PROFILE_CMD_BUFFER_STALL had no call
-    // site anywhere in the tree until now.
-    PROFILE_CMD_BUFFER_STALL();
-#if REX_PLATFORM_SWITCH
-    // A GPU that never signals leaves this thread blocked with nothing in the
-    // log, and every guest thread waiting on the GPU behind it. On Switch that
-    // looks exactly like a guest deadlock, so a fence that outlasts any
-    // plausible frame is named before the wait continues unchanged.
-    VkResult wait_result =
-        dfn.vkWaitForFences(device, uint32_t(await_submission - submission_completed_),
-                            submissions_in_flight_fences_.data(), VK_TRUE, 3'000'000'000ull);
-    if (wait_result == VK_TIMEOUT) {
-      REXGPU_WARN("Switch stall: GPU fence wait 3s for submission {} (completed {})",
-                  await_submission, submission_completed_);
-      wait_result =
-          dfn.vkWaitForFences(device, uint32_t(await_submission - submission_completed_),
-                              submissions_in_flight_fences_.data(), VK_TRUE, UINT64_MAX);
-      REXGPU_WARN("Switch stall: GPU fence wait for submission {} ended with {}",
-                  await_submission, static_cast<int>(wait_result));
-    }
-#else
-    VkResult wait_result =
-        dfn.vkWaitForFences(device, uint32_t(await_submission - submission_completed_),
-                            submissions_in_flight_fences_.data(), VK_TRUE, UINT64_MAX);
-#endif
-    if (wait_result == VK_SUCCESS) {
-      fences_awaited += await_submission - submission_completed_;
-    } else {
-      REXGPU_ERROR("Failed to await submission completion Vulkan fences");
-      if (wait_result == VK_ERROR_DEVICE_LOST) {
-        device_lost_ = true;
-      }
-    }
-  }
-  // Check how far into the submissions the GPU currently is, in order because
-  // submission themselves can be executed out of order, but Xenia serializes
-  // that for simplicity.
-  while (fences_awaited < fences_total) {
-    VkResult fence_status =
-        dfn.vkWaitForFences(device, 1, &submissions_in_flight_fences_[fences_awaited], VK_TRUE, 0);
-    if (fence_status != VK_SUCCESS) {
-      if (fence_status == VK_ERROR_DEVICE_LOST) {
-        device_lost_ = true;
-      }
-      break;
-    }
-    ++fences_awaited;
-  }
-  if (device_lost_) {
-    if (graphics_system_) {
-      graphics_system_->OnHostGpuLossFromAnyThread(true);
-    }
-    return;
-  }
-  if (!fences_awaited) {
-    // Not updated - no need to reclaim or download things.
-    return;
-  }
-  // Reclaim fences.
-  fences_free_.reserve(fences_free_.size() + fences_awaited);
-  auto submissions_in_flight_fences_awaited_end = submissions_in_flight_fences_.cbegin();
-  std::advance(submissions_in_flight_fences_awaited_end, fences_awaited);
-  fences_free_.insert(fences_free_.cend(), submissions_in_flight_fences_.cbegin(),
-                      submissions_in_flight_fences_awaited_end);
-  submissions_in_flight_fences_.erase(submissions_in_flight_fences_.cbegin(),
-                                      submissions_in_flight_fences_awaited_end);
-  submission_completed_ += fences_awaited;
-
-  // Reclaim semaphores.
-  while (!submissions_in_flight_semaphores_.empty()) {
-    const auto& semaphore_submission = submissions_in_flight_semaphores_.front();
-    if (semaphore_submission.first > submission_completed_) {
-      break;
-    }
-    semaphores_free_.push_back(semaphore_submission.second);
-    submissions_in_flight_semaphores_.pop_front();
-  }
-
-  // Reclaim command pools.
-  while (!command_buffers_submitted_.empty()) {
-    const auto& command_buffer_pair = command_buffers_submitted_.front();
-    if (command_buffer_pair.first > submission_completed_) {
-      break;
-    }
-    command_buffers_writable_.push_back(command_buffer_pair.second);
-    command_buffers_submitted_.pop_front();
-  }
-
-  shared_memory_->CompletedSubmissionUpdated();
-
-  primitive_processor_->CompletedSubmissionUpdated();
-
-  render_target_cache_->CompletedSubmissionUpdated();
-
-  texture_cache_->CompletedSubmissionUpdated(submission_completed_);
-
-  // Destroy objects scheduled for destruction.
-  while (!destroy_framebuffers_.empty()) {
-    const auto& destroy_pair = destroy_framebuffers_.front();
-    if (destroy_pair.first > submission_completed_) {
-      break;
-    }
-    dfn.vkDestroyFramebuffer(device, destroy_pair.second, nullptr);
-    destroy_framebuffers_.pop_front();
-  }
-  while (!destroy_image_views_.empty()) {
-    const auto& destroy_pair = destroy_image_views_.front();
-    if (destroy_pair.first > submission_completed_) {
-      break;
-    }
-    dfn.vkDestroyImageView(device, destroy_pair.second, nullptr);
-    destroy_image_views_.pop_front();
-  }
-  while (!destroy_buffers_.empty()) {
-    const auto& destroy_pair = destroy_buffers_.front();
-    if (destroy_pair.first > submission_completed_) {
-      break;
-    }
-    dfn.vkDestroyBuffer(device, destroy_pair.second, nullptr);
-    destroy_buffers_.pop_front();
-  }
-  while (!destroy_images_.empty()) {
-    const auto& destroy_pair = destroy_images_.front();
-    if (destroy_pair.first > submission_completed_) {
-      break;
-    }
-    dfn.vkDestroyImage(device, destroy_pair.second, nullptr);
-    destroy_images_.pop_front();
-  }
-  while (!destroy_memory_.empty()) {
-    const auto& destroy_pair = destroy_memory_.front();
-    if (destroy_pair.first > submission_completed_) {
-      break;
-    }
-    dfn.vkFreeMemory(device, destroy_pair.second, nullptr);
-    destroy_memory_.pop_front();
-  }
-}
-
-bool VulkanCommandProcessor::CanEndSubmissionImmediately() const {
-  return !submission_open_ || (!scratch_buffer_used_ && !pipeline_cache_->IsCreatingPipelines());
-}
-
-bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
-#if XE_GPU_FINE_GRAINED_DRAW_SCOPES
-  SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
-
-  if (device_lost_) {
-    return false;
-  }
-
-  bool is_opening_frame = is_guest_command && !frame_open_;
-  if (submission_open_ && !is_opening_frame) {
-    return true;
-  }
-
-  // Check the fence - needed for all kinds of submissions (to reclaim transient
-  // resources early) and specifically for frames (not to queue too many), and
-  // await the availability of the current frame. Also check whether the device
-  // is still available, and whether the await was successful.
-  uint64_t await_submission =
-      is_opening_frame ? closed_frame_submissions_[frame_current_ % kMaxFramesInFlight] : 0;
-  CheckSubmissionFenceAndDeviceLoss(await_submission);
-  if (device_lost_ || submission_completed_ < await_submission) {
-    return false;
-  }
-
-  if (is_opening_frame) {
-    // Update the completed frame index, also obtaining the actual completed
-    // frame number (since the CPU may be actually less than 3 frames behind)
-    // before reclaiming resources tracked with the frame number.
-    frame_completed_ = std::max(frame_current_, uint64_t(kMaxFramesInFlight)) - kMaxFramesInFlight;
-    for (uint64_t frame = frame_completed_ + 1; frame < frame_current_; ++frame) {
-      if (closed_frame_submissions_[frame % kMaxFramesInFlight] > submission_completed_) {
-        break;
-      }
-      frame_completed_ = frame;
-    }
-  }
-
-  if (!submission_open_) {
-    submission_open_ = true;
-
-    ClearAdjacentTextureDescriptorSetCache();
-
-    // Start a new deferred command buffer - will submit it to the real one in
-    // the end of the submission (when async pipeline object creation requests
-    // are fulfilled).
-    deferred_command_buffer_.Reset();
-
-    // Reset cached state of the command buffer.
-    dynamic_viewport_update_needed_ = true;
-    dynamic_scissor_update_needed_ = true;
-    dynamic_depth_bias_update_needed_ = true;
-    dynamic_blend_constants_update_needed_ = true;
-    dynamic_stencil_compare_mask_front_update_needed_ = true;
-    dynamic_stencil_compare_mask_back_update_needed_ = true;
-    dynamic_stencil_write_mask_front_update_needed_ = true;
-    dynamic_stencil_write_mask_back_update_needed_ = true;
-    dynamic_stencil_reference_front_update_needed_ = true;
-    dynamic_stencil_reference_back_update_needed_ = true;
-    current_render_pass_ = VK_NULL_HANDLE;
-    current_framebuffer_ = nullptr;
-    in_render_pass_ = false;
-    current_guest_graphics_pipeline_ = VK_NULL_HANDLE;
-    current_external_graphics_pipeline_ = VK_NULL_HANDLE;
-    current_external_compute_pipeline_ = VK_NULL_HANDLE;
-    current_guest_graphics_pipeline_layout_ = nullptr;
-    current_graphics_descriptor_sets_bound_up_to_date_ = 0;
-
-    primitive_processor_->BeginSubmission();
-
-    texture_cache_->BeginSubmission(GetCurrentSubmission());
-  }
-
-  if (is_opening_frame) {
-    frame_open_ = true;
-    frame_used_async_placeholder_pipeline_ = false;
-
-    // Harvest any finished frame's timestamps first. frame_completed_ was just
-    // brought up to date above, so a slot whose frame is at or below it has
-    // certainly executed; the read is still issued without WAIT so that a
-    // driver disagreeing about that cannot stall the command processor.
-    if (timestamp_queries_available_) {
-      const ui::vulkan::VulkanDevice* const ts_device = GetVulkanDevice();
-      const ui::vulkan::VulkanDevice::Functions& ts_dfn = ts_device->functions();
-      for (uint32_t slot = 0; slot < kMaxFramesInFlight; ++slot) {
-        const uint64_t slot_frame = timestamp_slot_frame_[slot];
-        if (!slot_frame || slot_frame > frame_completed_) {
-          continue;
-        }
-        uint64_t stamps[kTimestampQueriesPerFrame] = {};
-        if (ts_dfn.vkGetQueryPoolResults(
-                ts_device->device(), timestamp_query_pool_,
-                slot * kTimestampQueriesPerFrame, kTimestampQueriesPerFrame, sizeof(stamps),
-                stamps, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
-          if (stamps[1] > stamps[0]) {
-            const double ns = double(stamps[1] - stamps[0]) * timestamp_period_ns_;
-            rex::perf::SetCounter(rex::perf::CounterId::kGpuFrameUs, int64_t(ns / 1000.0));
-#if REX_PLATFORM_SWITCH
-            RexSwitchPerfAdd(switch_timing::kGpuFrameSpanUs, uint64_t(ns / 1000.0));
-            RexSwitchPerfCount(switch_timing::kGpuFrameSpanCount);
-#endif
-          }
-          timestamp_slot_frame_[slot] = 0;
-        }
-      }
-    }
-
-    if (timestamp_queries_available_) {
-      const uint32_t slot = uint32_t(frame_current_ % kMaxFramesInFlight);
-      const uint32_t first = slot * kTimestampQueriesPerFrame;
-      // Reset both of the slot's queries inside the command buffer, so the
-      // reset is ordered against the GPU's own execution rather than against
-      // the host, and cannot race a still-in-flight frame reading them.
-      deferred_command_buffer_.CmdVkResetQueryPool(timestamp_query_pool_, first,
-                                                   kTimestampQueriesPerFrame);
-      deferred_command_buffer_.CmdVkWriteTimestamp(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                                   timestamp_query_pool_, first);
-      timestamp_slot_frame_[slot] = frame_current_;
-    }
-
-    // Reset bindings that depend on transient data.
-    std::memset(current_float_constant_map_vertex_, 0, sizeof(current_float_constant_map_vertex_));
-    std::memset(current_float_constant_map_pixel_, 0, sizeof(current_float_constant_map_pixel_));
-    std::memset(current_graphics_descriptor_sets_, 0, sizeof(current_graphics_descriptor_sets_));
-    current_constant_buffers_up_to_date_ = 0;
-    current_graphics_descriptor_sets_[SpirvShaderTranslator::kDescriptorSetSharedMemoryAndEdram] =
-        shared_memory_and_edram_descriptor_set_;
-    current_graphics_descriptor_set_values_up_to_date_ =
-        UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetSharedMemoryAndEdram;
-
-    // Reclaim pool pages - no need to do this every small submission since some
-    // may be reused.
-    // FIXME(Triang3l): This will result in a memory leak if the guest is not
-    // presenting.
-    uniform_buffer_pool_->Reclaim(frame_completed_);
-    while (!single_transient_descriptors_used_.empty()) {
-      const UsedSingleTransientDescriptor& used_transient_descriptor =
-          single_transient_descriptors_used_.front();
-      if (used_transient_descriptor.frame > frame_completed_) {
-        break;
-      }
-      single_transient_descriptors_free_[size_t(used_transient_descriptor.layout)].push_back(
-          used_transient_descriptor.set);
-      single_transient_descriptors_used_.pop_front();
-    }
-    while (!constants_transient_descriptors_used_.empty()) {
-      const std::pair<uint64_t, VkDescriptorSet>& used_transient_descriptor =
-          constants_transient_descriptors_used_.front();
-      if (used_transient_descriptor.first > frame_completed_) {
-        break;
-      }
-      constants_transient_descriptors_free_.push_back(used_transient_descriptor.second);
-      constants_transient_descriptors_used_.pop_front();
-    }
-    while (!texture_transient_descriptor_sets_used_.empty()) {
-      const UsedTextureTransientDescriptorSet& used_transient_descriptor_set =
-          texture_transient_descriptor_sets_used_.front();
-      if (used_transient_descriptor_set.frame > frame_completed_) {
-        break;
-      }
-      auto it = texture_transient_descriptor_sets_free_.find(used_transient_descriptor_set.layout);
-      if (it == texture_transient_descriptor_sets_free_.end()) {
-        it = texture_transient_descriptor_sets_free_
-                 .emplace(std::piecewise_construct,
-                          std::forward_as_tuple(used_transient_descriptor_set.layout),
-                          std::forward_as_tuple())
-                 .first;
-      }
-      it->second.push_back(used_transient_descriptor_set.set);
-      texture_transient_descriptor_sets_used_.pop_front();
-    }
-
-    EvictOldReadbackBuffers(readback_buffers_);
-    EvictOldReadbackBuffers(memexport_readback_buffers_);
-
-    primitive_processor_->BeginFrame();
-
-    texture_cache_->BeginFrame();
-  }
-
-  return true;
-}
-
-bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
-#if REX_PLATFORM_SWITCH
-  switch_timing::Scope timing(switch_timing::kEndSubmissionCpuUs);
-#endif
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  // Make sure everything needed for submitting exist.
-  if (submission_open_) {
-    if (fences_free_.empty()) {
-      VkFenceCreateInfo fence_create_info;
-      fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-      fence_create_info.pNext = nullptr;
-      fence_create_info.flags = 0;
-      VkFence fence;
-      if (dfn.vkCreateFence(device, &fence_create_info, nullptr, &fence) != VK_SUCCESS) {
-        REXGPU_ERROR("Failed to create a Vulkan fence");
-        // Try to submit later. Completely dropping the submission is not
-        // permitted because resources would be left in an undefined state.
-        return false;
-      }
-      fences_free_.push_back(fence);
-    }
-    if (!sparse_memory_binds_.empty() && semaphores_free_.empty()) {
-      VkSemaphoreCreateInfo semaphore_create_info;
-      semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-      semaphore_create_info.pNext = nullptr;
-      semaphore_create_info.flags = 0;
-      VkSemaphore semaphore;
-      if (dfn.vkCreateSemaphore(device, &semaphore_create_info, nullptr, &semaphore) !=
-          VK_SUCCESS) {
-        REXGPU_ERROR("Failed to create a Vulkan semaphore");
-        return false;
-      }
-      semaphores_free_.push_back(semaphore);
-    }
-    if (command_buffers_writable_.empty()) {
-      CommandBuffer command_buffer;
-      VkCommandPoolCreateInfo command_pool_create_info;
-      command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-      command_pool_create_info.pNext = nullptr;
-      command_pool_create_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-      command_pool_create_info.queueFamilyIndex = vulkan_device->queue_family_graphics_compute();
-      if (dfn.vkCreateCommandPool(device, &command_pool_create_info, nullptr,
-                                  &command_buffer.pool) != VK_SUCCESS) {
-        REXGPU_ERROR("Failed to create a Vulkan command pool");
-        return false;
-      }
-      VkCommandBufferAllocateInfo command_buffer_allocate_info;
-      command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-      command_buffer_allocate_info.pNext = nullptr;
-      command_buffer_allocate_info.commandPool = command_buffer.pool;
-      command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-      command_buffer_allocate_info.commandBufferCount = 1;
-      if (dfn.vkAllocateCommandBuffers(device, &command_buffer_allocate_info,
-                                       &command_buffer.buffer) != VK_SUCCESS) {
-        REXGPU_ERROR("Failed to allocate a Vulkan command buffer");
-        dfn.vkDestroyCommandPool(device, command_buffer.pool, nullptr);
-        return false;
-      }
-      command_buffers_writable_.push_back(command_buffer);
-    }
-  }
-
-  bool is_closing_frame = is_swap && frame_open_;
-
-  // Before the submit block below, which is the last point at which anything
-  // can still be recorded into this frame's command buffer.
-  if (is_closing_frame && timestamp_queries_available_ && submission_open_) {
-    const uint32_t slot = uint32_t(frame_current_ % kMaxFramesInFlight);
-    deferred_command_buffer_.CmdVkWriteTimestamp(
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestamp_query_pool_,
-        slot * kTimestampQueriesPerFrame + 1);
-  }
-
-  if (is_closing_frame) {
-    texture_cache_->EndFrame();
-
-    primitive_processor_->EndFrame();
-  }
-
-  if (submission_open_) {
-    assert_false(scratch_buffer_used_);
-
-    if (active_occlusion_query_.valid && occlusion_query_pool_ != VK_NULL_HANDLE) {
-      deferred_command_buffer_.CmdVkEndQuery(occlusion_query_pool_,
-                                             active_occlusion_query_.host_index);
-      active_occlusion_query_ = {};
-    }
-
-    EndRenderPass();
-
-    pipeline_cache_->EndSubmission();
-
-    render_target_cache_->EndSubmission();
-
-    primitive_processor_->EndSubmission();
-
-    shared_memory_->EndSubmission();
-
-    uniform_buffer_pool_->FlushWrites();
-
-    // Submit sparse binds earlier, before executing the deferred command
-    // buffer, to reduce latency.
-    if (!sparse_memory_binds_.empty()) {
-      sparse_buffer_bind_infos_temp_.clear();
-      sparse_buffer_bind_infos_temp_.reserve(sparse_buffer_binds_.size());
-      for (const SparseBufferBind& sparse_buffer_bind : sparse_buffer_binds_) {
-        VkSparseBufferMemoryBindInfo& sparse_buffer_bind_info =
-            sparse_buffer_bind_infos_temp_.emplace_back();
-        sparse_buffer_bind_info.buffer = sparse_buffer_bind.buffer;
-        sparse_buffer_bind_info.bindCount = sparse_buffer_bind.bind_count;
-        sparse_buffer_bind_info.pBinds =
-            sparse_memory_binds_.data() + sparse_buffer_bind.bind_offset;
-      }
-      assert_false(semaphores_free_.empty());
-      VkSemaphore bind_sparse_semaphore = semaphores_free_.back();
-      VkBindSparseInfo bind_sparse_info;
-      bind_sparse_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
-      bind_sparse_info.pNext = nullptr;
-      bind_sparse_info.waitSemaphoreCount = 0;
-      bind_sparse_info.pWaitSemaphores = nullptr;
-      bind_sparse_info.bufferBindCount = uint32_t(sparse_buffer_bind_infos_temp_.size());
-      bind_sparse_info.pBufferBinds =
-          !sparse_buffer_bind_infos_temp_.empty() ? sparse_buffer_bind_infos_temp_.data() : nullptr;
-      bind_sparse_info.imageOpaqueBindCount = 0;
-      bind_sparse_info.pImageOpaqueBinds = nullptr;
-      bind_sparse_info.imageBindCount = 0;
-      bind_sparse_info.pImageBinds = 0;
-      bind_sparse_info.signalSemaphoreCount = 1;
-      bind_sparse_info.pSignalSemaphores = &bind_sparse_semaphore;
-      VkResult bind_sparse_result;
-      {
-        ui::vulkan::VulkanDevice::Queue::Acquisition queue_acquisition =
-            vulkan_device->AcquireQueue(vulkan_device->queue_family_sparse_binding(), 0);
-        bind_sparse_result =
-            dfn.vkQueueBindSparse(queue_acquisition.queue(), 1, &bind_sparse_info, VK_NULL_HANDLE);
-      }
-      if (bind_sparse_result != VK_SUCCESS) {
-        REXGPU_ERROR("Failed to submit Vulkan sparse binds");
-        return false;
-      }
-      current_submission_wait_semaphores_.push_back(bind_sparse_semaphore);
-      semaphores_free_.pop_back();
-      current_submission_wait_stage_masks_.push_back(sparse_bind_wait_stage_mask_);
-      sparse_bind_wait_stage_mask_ = 0;
-      sparse_buffer_binds_.clear();
-      sparse_memory_binds_.clear();
-    }
-
-    SubmitBarriers(true);
-
-    assert_false(command_buffers_writable_.empty());
-    CommandBuffer command_buffer = command_buffers_writable_.back();
-    if (dfn.vkResetCommandPool(device, command_buffer.pool, 0) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to reset a Vulkan command pool");
-      return false;
-    }
-    VkCommandBufferBeginInfo command_buffer_begin_info;
-    command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    command_buffer_begin_info.pNext = nullptr;
-    command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    command_buffer_begin_info.pInheritanceInfo = nullptr;
-    if (dfn.vkBeginCommandBuffer(command_buffer.buffer, &command_buffer_begin_info) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to begin a Vulkan command buffer");
-      return false;
-    }
-    deferred_command_buffer_.Execute(command_buffer.buffer);
-    if (dfn.vkEndCommandBuffer(command_buffer.buffer) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to end a Vulkan command buffer");
-      return false;
-    }
-
-    VkSubmitInfo submit_info;
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.pNext = nullptr;
-    if (!current_submission_wait_semaphores_.empty()) {
-      submit_info.waitSemaphoreCount = uint32_t(current_submission_wait_semaphores_.size());
-      submit_info.pWaitSemaphores = current_submission_wait_semaphores_.data();
-      submit_info.pWaitDstStageMask = current_submission_wait_stage_masks_.data();
-    } else {
-      submit_info.waitSemaphoreCount = 0;
-      submit_info.pWaitSemaphores = nullptr;
-      submit_info.pWaitDstStageMask = nullptr;
-    }
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer.buffer;
-    submit_info.signalSemaphoreCount = 0;
-    submit_info.pSignalSemaphores = nullptr;
-    assert_false(fences_free_.empty());
-    VkFence fence = fences_free_.back();
-    if (dfn.vkResetFences(device, 1, &fence) != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to reset a Vulkan submission fence");
-      return false;
-    }
-    VkResult submit_result;
-    {
-      ui::vulkan::VulkanDevice::Queue::Acquisition queue_acquisition =
-          vulkan_device->AcquireQueue(vulkan_device->queue_family_graphics_compute(), 0);
-#if REX_PLATFORM_SWITCH
-      RexSwitchPerfCount(7);
-#endif
-      submit_result = dfn.vkQueueSubmit(queue_acquisition.queue(), 1, &submit_info, fence);
-    }
-    if (submit_result != VK_SUCCESS) {
-      REXGPU_ERROR("Failed to submit a Vulkan command buffer");
-      if (submit_result == VK_ERROR_DEVICE_LOST && !device_lost_) {
-        device_lost_ = true;
-        if (graphics_system_) {
-          graphics_system_->OnHostGpuLossFromAnyThread(true);
-        }
-      }
-      return false;
-    }
-    uint64_t submission_current = GetCurrentSubmission();
-    current_submission_wait_stage_masks_.clear();
-    for (VkSemaphore semaphore : current_submission_wait_semaphores_) {
-      submissions_in_flight_semaphores_.emplace_back(submission_current, semaphore);
-    }
-    current_submission_wait_semaphores_.clear();
-    command_buffers_submitted_.emplace_back(submission_current, command_buffer);
-    command_buffers_writable_.pop_back();
-    // Increments the current submission number, going to the next submission.
-    submissions_in_flight_fences_.push_back(fence);
-    fences_free_.pop_back();
-
-    submission_open_ = false;
-  }
-
-  if (is_closing_frame) {
-    if (REXCVAR_GET(clear_memory_page_state) && shared_memory_) {
-      shared_memory_->SetSystemPageBlocksValidWithGpuDataWritten();
-    }
-    frame_open_ = false;
-    // Submission already closed now, so minus 1.
-    closed_frame_submissions_[(frame_current_++) % kMaxFramesInFlight] = GetCurrentSubmission() - 1;
-
-    if (cache_clear_requested_ && AwaitAllQueueOperationsCompletion()) {
-      cache_clear_requested_ = false;
-
-      DestroyScratchBuffer();
-
-      for (SwapFramebuffer& swap_framebuffer : swap_framebuffers_) {
-        ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyFramebuffer, device,
-                                               swap_framebuffer.framebuffer);
-      }
-
-      assert_true(command_buffers_submitted_.empty());
-      for (const CommandBuffer& command_buffer : command_buffers_writable_) {
-        dfn.vkDestroyCommandPool(device, command_buffer.pool, nullptr);
-      }
-      command_buffers_writable_.clear();
-
-      ClearTransientDescriptorPools();
-
-      uniform_buffer_pool_->ClearCache();
-
-      texture_cache_->ClearCache();
-
-      render_target_cache_->ClearCache();
-
-      // Not clearing the pipeline layouts and the descriptor set layouts as
-      // they're referenced by pipelines, which are not destroyed.
-
-      primitive_processor_->ClearCache();
-
-      shared_memory_->ClearCache();
-    }
-  }
-
-  return true;
-}
-
-void VulkanCommandProcessor::ClearTransientDescriptorPools() {
-  ClearAdjacentTextureDescriptorSetCache();
-  texture_transient_descriptor_sets_free_.clear();
-  texture_transient_descriptor_sets_used_.clear();
-  transient_descriptor_allocator_textures_.Reset();
-
-  constants_transient_descriptors_free_.clear();
-  constants_transient_descriptors_used_.clear();
-  for (std::vector<VkDescriptorSet>& transient_descriptors_free :
-       single_transient_descriptors_free_) {
-    transient_descriptors_free.clear();
-  }
-  single_transient_descriptors_used_.clear();
-  transient_descriptor_allocator_storage_buffer_.Reset();
-  transient_descriptor_allocator_uniform_buffer_.Reset();
-}
-
-void VulkanCommandProcessor::ClearAdjacentTextureDescriptorSetCache() {
-  for (AdjacentTextureDescriptorSetCacheEntry& entry : adjacent_texture_descriptor_set_cache_) {
-    entry.descriptor_set_layout = VK_NULL_HANDLE;
-    entry.descriptor_set = VK_NULL_HANDLE;
-    entry.texture_infos.clear();
-    entry.sampler_infos.clear();
-    entry.valid = false;
-  }
-}
-
-void VulkanCommandProcessor::SplitPendingBarrier() {
-  size_t pending_buffer_memory_barrier_count = pending_barriers_buffer_memory_barriers_.size();
-  size_t pending_image_memory_barrier_count = pending_barriers_image_memory_barriers_.size();
-  if (!current_pending_barrier_.src_stage_mask && !current_pending_barrier_.dst_stage_mask &&
-      current_pending_barrier_.buffer_memory_barriers_offset >=
-          pending_buffer_memory_barrier_count &&
-      current_pending_barrier_.image_memory_barriers_offset >= pending_image_memory_barrier_count) {
-    return;
-  }
-  pending_barriers_.emplace_back(current_pending_barrier_);
-  current_pending_barrier_.src_stage_mask = 0;
-  current_pending_barrier_.dst_stage_mask = 0;
-  current_pending_barrier_.buffer_memory_barriers_offset = pending_buffer_memory_barrier_count;
-  current_pending_barrier_.image_memory_barriers_offset = pending_image_memory_barrier_count;
-}
-
-void VulkanCommandProcessor::DestroyScratchBuffer() {
-  assert_false(scratch_buffer_used_);
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  scratch_buffer_last_usage_submission_ = 0;
-  scratch_buffer_last_access_mask_ = 0;
-  scratch_buffer_last_stage_mask_ = 0;
-  scratch_buffer_size_ = 0;
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device, scratch_buffer_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device, scratch_buffer_memory_);
-}
-
-bool VulkanCommandProcessor::EnsureSwapFxaaSourceImage(uint32_t width, uint32_t height) {
-  assert_true(submission_open_);
-  if (!width || !height) {
-    return false;
-  }
-  if (swap_fxaa_source_image_ != VK_NULL_HANDLE && swap_fxaa_source_image_width_ == width &&
-      swap_fxaa_source_image_height_ == height) {
-    return true;
-  }
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  if (swap_fxaa_source_image_ != VK_NULL_HANDLE) {
-    const uint64_t destroy_submission = swap_fxaa_source_image_submission_;
-    const uint64_t deferred_destroy_submission = GetCurrentSubmission();
-    if (submission_completed_ >= destroy_submission) {
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyImageView, device,
-                                             swap_fxaa_source_image_view_);
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyImage, device, swap_fxaa_source_image_);
-      ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device,
-                                             swap_fxaa_source_image_memory_);
-    } else {
-      if (swap_fxaa_source_image_view_ != VK_NULL_HANDLE) {
-        destroy_image_views_.emplace_back(deferred_destroy_submission,
-                                          swap_fxaa_source_image_view_);
-        swap_fxaa_source_image_view_ = VK_NULL_HANDLE;
-      }
-      if (swap_fxaa_source_image_ != VK_NULL_HANDLE) {
-        destroy_images_.emplace_back(deferred_destroy_submission, swap_fxaa_source_image_);
-        swap_fxaa_source_image_ = VK_NULL_HANDLE;
-      }
-      if (swap_fxaa_source_image_memory_ != VK_NULL_HANDLE) {
-        destroy_memory_.emplace_back(deferred_destroy_submission, swap_fxaa_source_image_memory_);
-        swap_fxaa_source_image_memory_ = VK_NULL_HANDLE;
-      }
-    }
-  }
-  swap_fxaa_source_image_width_ = 0;
-  swap_fxaa_source_image_height_ = 0;
-  swap_fxaa_source_image_submission_ = 0;
-  swap_fxaa_source_stage_mask_ = 0;
-  swap_fxaa_source_access_mask_ = 0;
-  swap_fxaa_source_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
-
-  VkImageCreateInfo image_create_info;
-  image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  image_create_info.pNext = nullptr;
-  image_create_info.flags = 0;
-  image_create_info.imageType = VK_IMAGE_TYPE_2D;
-  image_create_info.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-  image_create_info.extent.width = width;
-  image_create_info.extent.height = height;
-  image_create_info.extent.depth = 1;
-  image_create_info.mipLevels = 1;
-  image_create_info.arrayLayers = 1;
-  image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-  image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-  image_create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-  image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  image_create_info.queueFamilyIndexCount = 0;
-  image_create_info.pQueueFamilyIndices = nullptr;
-  image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  if (!ui::vulkan::util::CreateDedicatedAllocationImage(
-          vulkan_device, image_create_info, ui::vulkan::util::MemoryPurpose::kDeviceLocal,
-          swap_fxaa_source_image_, swap_fxaa_source_image_memory_)) {
-    REXGPU_ERROR("Failed to create the FXAA source image");
-    return false;
-  }
-
-  VkImageViewCreateInfo image_view_create_info;
-  image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  image_view_create_info.pNext = nullptr;
-  image_view_create_info.flags = 0;
-  image_view_create_info.image = swap_fxaa_source_image_;
-  image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  image_view_create_info.format = image_create_info.format;
-  image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.subresourceRange = ui::vulkan::util::InitializeSubresourceRange();
-  if (dfn.vkCreateImageView(device, &image_view_create_info, nullptr,
-                            &swap_fxaa_source_image_view_) != VK_SUCCESS) {
-    REXGPU_ERROR("Failed to create the FXAA source image view");
-    ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyImage, device, swap_fxaa_source_image_);
-    ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device,
-                                           swap_fxaa_source_image_memory_);
-    return false;
-  }
-
-  swap_fxaa_source_image_width_ = width;
-  swap_fxaa_source_image_height_ = height;
-  swap_fxaa_source_image_submission_ = 0;
-  swap_fxaa_source_stage_mask_ = 0;
-  swap_fxaa_source_access_mask_ = 0;
-  swap_fxaa_source_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
-  return true;
-}
-
-void VulkanCommandProcessor::DestroySwapFxaaSourceImage() {
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyImageView, device,
-                                         swap_fxaa_source_image_view_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyImage, device, swap_fxaa_source_image_);
-  ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device, swap_fxaa_source_image_memory_);
-  swap_fxaa_source_image_width_ = 0;
-  swap_fxaa_source_image_height_ = 0;
-  swap_fxaa_source_image_submission_ = 0;
-  swap_fxaa_source_stage_mask_ = 0;
-  swap_fxaa_source_access_mask_ = 0;
-  swap_fxaa_source_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
-}
-
-void VulkanCommandProcessor::UpdateDynamicState(const draw_util::ViewportInfo& viewport_info,
-                                                bool primitive_polygonal,
-                                                reg::RB_DEPTHCONTROL normalized_depth_control) {
-#if XE_GPU_FINE_GRAINED_DRAW_SCOPES
-  SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
-
-  const RegisterFile& regs = *register_file_;
-  uint32_t draw_resolution_scale_x = texture_cache_ ? texture_cache_->draw_resolution_scale_x() : 1;
-  uint32_t draw_resolution_scale_y = texture_cache_ ? texture_cache_->draw_resolution_scale_y() : 1;
-
-  // Window parameters.
-  // http://ftp.tku.edu.tw/NetBSD/NetBSD-current/xsrc/external/mit/xf86-video-ati/dist/src/r600_reg_auto_r6xx.h
-  // See r200UpdateWindow:
-  // https://github.com/freedreno/mesa/blob/master/src/mesa/drivers/dri/r200/r200_state.c
-  auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
-
-  // Viewport.
-  VkViewport viewport;
-  if (viewport_info.xy_extent[0] && viewport_info.xy_extent[1]) {
-    viewport.x = float(viewport_info.xy_offset[0]);
-    viewport.y = float(viewport_info.xy_offset[1]);
-    viewport.width = float(viewport_info.xy_extent[0]);
-    viewport.height = float(viewport_info.xy_extent[1]);
-  } else {
-    // Vulkan viewport width must be greater than 0.0f, but the Xenia  viewport
-    // may be empty for various reasons - set the viewport to outside the
-    // framebuffer.
-    viewport.x = -1.0f;
-    viewport.y = -1.0f;
-    viewport.width = 1.0f;
-    viewport.height = 1.0f;
-  }
-  viewport.minDepth = viewport_info.z_min;
-  viewport.maxDepth = viewport_info.z_max;
-  SetViewport(viewport);
-
-  // Scissor.
-  draw_util::Scissor scissor;
-  draw_util::GetScissor(regs, scissor);
-  scissor.offset[0] *= draw_resolution_scale_x;
-  scissor.offset[1] *= draw_resolution_scale_y;
-  scissor.extent[0] *= draw_resolution_scale_x;
-  scissor.extent[1] *= draw_resolution_scale_y;
-  VkRect2D scissor_rect;
-  scissor_rect.offset.x = int32_t(scissor.offset[0]);
-  scissor_rect.offset.y = int32_t(scissor.offset[1]);
-  scissor_rect.extent.width = scissor.extent[0];
-  scissor_rect.extent.height = scissor.extent[1];
-  SetScissor(scissor_rect);
-
-  if (render_target_cache_->GetPath() == RenderTargetCache::Path::kHostRenderTargets) {
-    // Depth bias.
-    float depth_bias_constant_factor, depth_bias_slope_factor;
-    draw_util::GetPreferredFacePolygonOffset(regs, primitive_polygonal, depth_bias_slope_factor,
-                                             depth_bias_constant_factor);
-    depth_bias_constant_factor *=
-        regs.Get<reg::RB_DEPTH_INFO>().depth_format == xenos::DepthRenderTargetFormat::kD24S8
-            ? draw_util::kD3D10PolygonOffsetFactorUnorm24
-            : draw_util::kD3D10PolygonOffsetFactorFloat24;
-    // With non-square resolution scaling, make sure the worst-case impact is
-    // reverted (slope only along the scaled axis), thus max. More bias is
-    // better than less bias, because less bias means Z fighting with the
-    // background is more likely.
-    depth_bias_slope_factor *= xenos::kPolygonOffsetScaleSubpixelUnit *
-                               float(std::max(draw_resolution_scale_x, draw_resolution_scale_y));
-    // std::memcmp instead of != so in case of NaN, every draw won't be
-    // invalidating it.
-    dynamic_depth_bias_update_needed_ |=
-        std::memcmp(&dynamic_depth_bias_constant_factor_, &depth_bias_constant_factor,
-                    sizeof(float)) != 0;
-    dynamic_depth_bias_update_needed_ |= std::memcmp(&dynamic_depth_bias_slope_factor_,
-                                                     &depth_bias_slope_factor, sizeof(float)) != 0;
-    if (dynamic_depth_bias_update_needed_) {
-      dynamic_depth_bias_constant_factor_ = depth_bias_constant_factor;
-      dynamic_depth_bias_slope_factor_ = depth_bias_slope_factor;
-      deferred_command_buffer_.CmdVkSetDepthBias(dynamic_depth_bias_constant_factor_, 0.0f,
-                                                 dynamic_depth_bias_slope_factor_);
-      dynamic_depth_bias_update_needed_ = false;
-    }
-
-    // Blend constants.
-    float blend_constants[] = {
-        regs.Get<float>(XE_GPU_REG_RB_BLEND_RED),
-        regs.Get<float>(XE_GPU_REG_RB_BLEND_GREEN),
-        regs.Get<float>(XE_GPU_REG_RB_BLEND_BLUE),
-        regs.Get<float>(XE_GPU_REG_RB_BLEND_ALPHA),
-    };
-    dynamic_blend_constants_update_needed_ |=
-        std::memcmp(dynamic_blend_constants_, blend_constants, sizeof(float) * 4) != 0;
-    if (dynamic_blend_constants_update_needed_) {
-      std::memcpy(dynamic_blend_constants_, blend_constants, sizeof(float) * 4);
-      deferred_command_buffer_.CmdVkSetBlendConstants(dynamic_blend_constants_);
-      dynamic_blend_constants_update_needed_ = false;
-    }
-
-    // Stencil masks and references.
-    // Due to pretty complex conditions involving registers not directly related
-    // to stencil (primitive type, culling), changing the values only when
-    // stencil is actually needed. However, due to the way dynamic state needs
-    // to be set in Vulkan, which doesn't take into account whether the state
-    // actually has effect on drawing, and because the masks and the references
-    // are always dynamic in Xenia guest pipelines, they must be set in the
-    // command buffer before any draw.
-    if (normalized_depth_control.stencil_enable) {
-      Register stencil_ref_mask_front_reg, stencil_ref_mask_back_reg;
-      if (primitive_polygonal && normalized_depth_control.backface_enable) {
-        if (GetVulkanDevice()->properties().separateStencilMaskRef) {
-          stencil_ref_mask_front_reg = XE_GPU_REG_RB_STENCILREFMASK;
-          stencil_ref_mask_back_reg = XE_GPU_REG_RB_STENCILREFMASK_BF;
-        } else {
-          // Choose the back face values only if drawing only back faces.
-          stencil_ref_mask_front_reg = regs.Get<reg::PA_SU_SC_MODE_CNTL>().cull_front
-                                           ? XE_GPU_REG_RB_STENCILREFMASK_BF
-                                           : XE_GPU_REG_RB_STENCILREFMASK;
-          stencil_ref_mask_back_reg = stencil_ref_mask_front_reg;
-        }
-      } else {
-        stencil_ref_mask_front_reg = XE_GPU_REG_RB_STENCILREFMASK;
-        stencil_ref_mask_back_reg = XE_GPU_REG_RB_STENCILREFMASK;
-      }
-      auto stencil_ref_mask_front = regs.Get<reg::RB_STENCILREFMASK>(stencil_ref_mask_front_reg);
-      auto stencil_ref_mask_back = regs.Get<reg::RB_STENCILREFMASK>(stencil_ref_mask_back_reg);
-      // Compare mask.
-      dynamic_stencil_compare_mask_front_update_needed_ |=
-          dynamic_stencil_compare_mask_front_ != stencil_ref_mask_front.stencilmask;
-      dynamic_stencil_compare_mask_front_ = stencil_ref_mask_front.stencilmask;
-      dynamic_stencil_compare_mask_back_update_needed_ |=
-          dynamic_stencil_compare_mask_back_ != stencil_ref_mask_back.stencilmask;
-      dynamic_stencil_compare_mask_back_ = stencil_ref_mask_back.stencilmask;
-      // Write mask.
-      dynamic_stencil_write_mask_front_update_needed_ |=
-          dynamic_stencil_write_mask_front_ != stencil_ref_mask_front.stencilwritemask;
-      dynamic_stencil_write_mask_front_ = stencil_ref_mask_front.stencilwritemask;
-      dynamic_stencil_write_mask_back_update_needed_ |=
-          dynamic_stencil_write_mask_back_ != stencil_ref_mask_back.stencilwritemask;
-      dynamic_stencil_write_mask_back_ = stencil_ref_mask_back.stencilwritemask;
-      // Reference.
-      dynamic_stencil_reference_front_update_needed_ |=
-          dynamic_stencil_reference_front_ != stencil_ref_mask_front.stencilref;
-      dynamic_stencil_reference_front_ = stencil_ref_mask_front.stencilref;
-      dynamic_stencil_reference_back_update_needed_ |=
-          dynamic_stencil_reference_back_ != stencil_ref_mask_back.stencilref;
-      dynamic_stencil_reference_back_ = stencil_ref_mask_back.stencilref;
-    }
-    // Using VK_STENCIL_FACE_FRONT_AND_BACK for higher safety when running on
-    // the Vulkan portability subset without separateStencilMaskRef.
-    if (dynamic_stencil_compare_mask_front_update_needed_ ||
-        dynamic_stencil_compare_mask_back_update_needed_) {
-      if (dynamic_stencil_compare_mask_front_ == dynamic_stencil_compare_mask_back_) {
-        deferred_command_buffer_.CmdVkSetStencilCompareMask(VK_STENCIL_FACE_FRONT_AND_BACK,
-                                                            dynamic_stencil_compare_mask_front_);
-      } else {
-        if (dynamic_stencil_compare_mask_front_update_needed_) {
-          deferred_command_buffer_.CmdVkSetStencilCompareMask(VK_STENCIL_FACE_FRONT_BIT,
-                                                              dynamic_stencil_compare_mask_front_);
-        }
-        if (dynamic_stencil_compare_mask_back_update_needed_) {
-          deferred_command_buffer_.CmdVkSetStencilCompareMask(VK_STENCIL_FACE_BACK_BIT,
-                                                              dynamic_stencil_compare_mask_back_);
-        }
-      }
-      dynamic_stencil_compare_mask_front_update_needed_ = false;
-      dynamic_stencil_compare_mask_back_update_needed_ = false;
-    }
-    if (dynamic_stencil_write_mask_front_update_needed_ ||
-        dynamic_stencil_write_mask_back_update_needed_) {
-      if (dynamic_stencil_write_mask_front_ == dynamic_stencil_write_mask_back_) {
-        deferred_command_buffer_.CmdVkSetStencilWriteMask(VK_STENCIL_FACE_FRONT_AND_BACK,
-                                                          dynamic_stencil_write_mask_front_);
-      } else {
-        if (dynamic_stencil_write_mask_front_update_needed_) {
-          deferred_command_buffer_.CmdVkSetStencilWriteMask(VK_STENCIL_FACE_FRONT_BIT,
-                                                            dynamic_stencil_write_mask_front_);
-        }
-        if (dynamic_stencil_write_mask_back_update_needed_) {
-          deferred_command_buffer_.CmdVkSetStencilWriteMask(VK_STENCIL_FACE_BACK_BIT,
-                                                            dynamic_stencil_write_mask_back_);
-        }
-      }
-      dynamic_stencil_write_mask_front_update_needed_ = false;
-      dynamic_stencil_write_mask_back_update_needed_ = false;
-    }
-    if (dynamic_stencil_reference_front_update_needed_ ||
-        dynamic_stencil_reference_back_update_needed_) {
-      if (dynamic_stencil_reference_front_ == dynamic_stencil_reference_back_) {
-        deferred_command_buffer_.CmdVkSetStencilReference(VK_STENCIL_FACE_FRONT_AND_BACK,
-                                                          dynamic_stencil_reference_front_);
-      } else {
-        if (dynamic_stencil_reference_front_update_needed_) {
-          deferred_command_buffer_.CmdVkSetStencilReference(VK_STENCIL_FACE_FRONT_BIT,
-                                                            dynamic_stencil_reference_front_);
-        }
-        if (dynamic_stencil_reference_back_update_needed_) {
-          deferred_command_buffer_.CmdVkSetStencilReference(VK_STENCIL_FACE_BACK_BIT,
-                                                            dynamic_stencil_reference_back_);
-        }
-      }
-      dynamic_stencil_reference_front_update_needed_ = false;
-      dynamic_stencil_reference_back_update_needed_ = false;
-    }
-  }
-
-  // TODO(Triang3l): VK_EXT_extended_dynamic_state and
-  // VK_EXT_extended_dynamic_state2.
-}
-
-void VulkanCommandProcessor::UpdateSystemConstantValues(
-    bool primitive_polygonal,
-    const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
-    bool shader_32bit_index_dma, uint32_t compute_memexport_vertex_count,
-    const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask,
-    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask) {
-#if XE_GPU_FINE_GRAINED_DRAW_SCOPES
-  SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
-
-  const RegisterFile& regs = *register_file_;
-  auto pa_cl_clip_cntl = regs.Get<reg::PA_CL_CLIP_CNTL>();
-  auto pa_cl_vte_cntl = regs.Get<reg::PA_CL_VTE_CNTL>();
-  auto pa_su_sc_mode_cntl = regs.Get<reg::PA_SU_SC_MODE_CNTL>();
-  auto rb_alpha_ref = regs.Get<float>(XE_GPU_REG_RB_ALPHA_REF);
-  auto rb_colorcontrol = regs.Get<reg::RB_COLORCONTROL>();
-  auto rb_depth_info = regs.Get<reg::RB_DEPTH_INFO>();
-  auto rb_stencilrefmask = regs.Get<reg::RB_STENCILREFMASK>();
-  auto rb_stencilrefmask_bf = regs.Get<reg::RB_STENCILREFMASK>(XE_GPU_REG_RB_STENCILREFMASK_BF);
-  auto rb_surface_info = regs.Get<reg::RB_SURFACE_INFO>();
-  auto vgt_dma_size = regs.Get<reg::VGT_DMA_SIZE>();
-  auto vgt_draw_initiator = regs.Get<reg::VGT_DRAW_INITIATOR>();
-  auto vgt_indx_offset = regs.Get<int32_t>(XE_GPU_REG_VGT_INDX_OFFSET);
-  auto vgt_max_vtx_indx = regs.Get<uint32_t>(XE_GPU_REG_VGT_MAX_VTX_INDX);
-  auto vgt_min_vtx_indx = regs.Get<uint32_t>(XE_GPU_REG_VGT_MIN_VTX_INDX);
-
-  bool edram_fragment_shader_interlock =
-      render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
-  uint32_t draw_resolution_scale_x = texture_cache_->draw_resolution_scale_x();
-  uint32_t draw_resolution_scale_y = texture_cache_->draw_resolution_scale_y();
-
-  // Get the color info register values for each render target. Also, for FSI,
-  // exclude components that don't exist in the format from the write mask.
-  // Don't exclude fully overlapping render targets, however - two render
-  // targets with the same base address are used in the lighting pass of
-  // 4D5307E6, for example, with the needed one picked with dynamic control
-  // flow.
-  reg::RB_COLOR_INFO color_infos[xenos::kMaxColorRenderTargets];
-  float rt_clamp[4][4];
-  // Two UINT32_MAX if no components actually existing in the RT are written.
-  uint32_t rt_keep_masks[4][2];
-  for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
-    auto color_info = regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]);
-    color_infos[i] = color_info;
-    if (edram_fragment_shader_interlock) {
-      RenderTargetCache::GetPSIColorFormatInfo(
-          color_info.color_format, (normalized_color_mask >> (i * 4)) & 0b1111, rt_clamp[i][0],
-          rt_clamp[i][1], rt_clamp[i][2], rt_clamp[i][3], rt_keep_masks[i][0], rt_keep_masks[i][1]);
-    }
-  }
-
-  // Disable depth and stencil if it aliases a color render target (for
-  // instance, during the XBLA logo in 58410954, though depth writing is already
-  // disabled there).
-  bool depth_stencil_enabled =
-      normalized_depth_control.stencil_enable || normalized_depth_control.z_enable;
-  if (edram_fragment_shader_interlock && depth_stencil_enabled) {
-    for (uint32_t i = 0; i < 4; ++i) {
-      if (rb_depth_info.depth_base == color_infos[i].color_base &&
-          (rt_keep_masks[i][0] != UINT32_MAX || rt_keep_masks[i][1] != UINT32_MAX)) {
-        depth_stencil_enabled = false;
-        break;
-      }
-    }
-  }
-
-  bool dirty = false;
-
-  // Flags.
-  uint32_t flags = 0;
-  // Vertex index shader loading.
-  if (shader_32bit_index_dma) {
-    flags |= SpirvShaderTranslator::kSysFlag_VertexIndexLoad;
-  }
-  if (primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kHostBuiltinForDMA ||
-      primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kGuestDMA ||
-      primitive_processing_result.index_buffer_type ==
-          PrimitiveProcessor::ProcessedIndexBufferType::kHostConverted) {
-    flags |= SpirvShaderTranslator::kSysFlag_ComputeOrPrimitiveVertexIndexLoad;
-    if (vgt_draw_initiator.index_size == xenos::IndexFormat::kInt32) {
-      flags |= SpirvShaderTranslator ::kSysFlag_ComputeOrPrimitiveVertexIndexLoad32Bit;
-    }
-    // Point and rectangle expansion uses primitive restart only in the host
-    // built-in strip index buffer; guest indices are not reset-based there.
-    bool compute_or_primitive_vertex_index_reset =
-        primitive_processing_result.host_primitive_reset_enabled &&
-        primitive_processing_result.host_vertex_shader_type !=
-            Shader::HostVertexShaderType::kPointListAsTriangleStrip &&
-        primitive_processing_result.host_vertex_shader_type !=
-            Shader::HostVertexShaderType::kRectangleListAsTriangleStrip;
-    if (compute_or_primitive_vertex_index_reset) {
-      flags |= SpirvShaderTranslator::kSysFlag_ComputeOrPrimitiveVertexIndexReset;
-    }
-  }
-  if (primitive_processing_result.host_vertex_shader_type ==
-      Shader::HostVertexShaderType::kTriangleDomainPatchIndexed) {
-    flags |= SpirvShaderTranslator::kSysFlag_ComputeMemExportPatchIndexInRegister1;
-  }
-  if (primitive_processing_result.host_vertex_shader_type ==
-      Shader::HostVertexShaderType::kTriangleDomainCPIndexed) {
-    flags |= SpirvShaderTranslator::kSysFlag_ComputeMemExportTriangleCPIndexed;
-  } else if (primitive_processing_result.host_vertex_shader_type ==
-             Shader::HostVertexShaderType::kQuadDomainCPIndexed) {
-    flags |= SpirvShaderTranslator::kSysFlag_ComputeMemExportQuadCPIndexed;
-  }
-  if (primitive_processing_result.tessellation_mode == xenos::TessellationMode::kAdaptive &&
-      (primitive_processing_result.host_vertex_shader_type ==
-           Shader::HostVertexShaderType::kTriangleDomainPatchIndexed ||
-       primitive_processing_result.host_vertex_shader_type ==
-           Shader::HostVertexShaderType::kQuadDomainPatchIndexed)) {
-    flags |= SpirvShaderTranslator::kSysFlag_ComputeMemExportPatchIndexFromInvocation;
-  }
-  // W0 division control.
-  // http://www.x.org/docs/AMD/old/evergreen_3D_registers_v2.pdf
-  // 8: VTX_XY_FMT = true: the incoming XY have already been multiplied by 1/W0.
-  //               = false: multiply the X, Y coordinates by 1/W0.
-  // 9: VTX_Z_FMT = true: the incoming Z has already been multiplied by 1/W0.
-  //              = false: multiply the Z coordinate by 1/W0.
-  // 10: VTX_W0_FMT = true: the incoming W0 is not 1/W0. Perform the reciprocal
-  //                        to get 1/W0.
-  if (pa_cl_vte_cntl.vtx_xy_fmt) {
-    flags |= SpirvShaderTranslator::kSysFlag_XYDividedByW;
-  }
-  if (pa_cl_vte_cntl.vtx_z_fmt) {
-    flags |= SpirvShaderTranslator::kSysFlag_ZDividedByW;
-  }
-  if (pa_cl_vte_cntl.vtx_w0_fmt) {
-    flags |= SpirvShaderTranslator::kSysFlag_WNotReciprocal;
-  }
-  // Whether the primitive is polygonal, and gl_FrontFacing matters.
-  if (primitive_polygonal) {
-    flags |= SpirvShaderTranslator::kSysFlag_PrimitivePolygonal;
-  }
-  // Primitive type.
-  if (draw_util::IsPrimitiveLine(regs)) {
-    flags |= SpirvShaderTranslator::kSysFlag_PrimitiveLine;
-  }
-  // MSAA sample count.
-  flags |= uint32_t(rb_surface_info.msaa_samples)
-           << SpirvShaderTranslator::kSysFlag_MsaaSamples_Shift;
-  // Depth format.
-  if (rb_depth_info.depth_format == xenos::DepthRenderTargetFormat::kD24FS8) {
-    flags |= SpirvShaderTranslator::kSysFlag_DepthFloat24;
-  }
-  // Alpha test.
-  xenos::CompareFunction alpha_test_function = rb_colorcontrol.alpha_test_enable
-                                                   ? rb_colorcontrol.alpha_func
-                                                   : xenos::CompareFunction::kAlways;
-  flags |= uint32_t(alpha_test_function) << SpirvShaderTranslator::kSysFlag_AlphaPassIfLess_Shift;
-  // Gamma writing.
-  if (!render_target_cache_->gamma_render_target_as_unorm16()) {
-    // Keep parity with D3D12: gamma targets in this path are converted via
-    // explicit Xenos PWL gamma logic in shaders rather than via host sRGB
-    // attachment conversion semantics.
-    for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
-      if (color_infos[i].color_format == xenos::ColorRenderTargetFormat::k_8_8_8_8_GAMMA) {
-        flags |= SpirvShaderTranslator::kSysFlag_ConvertColor0ToGamma << i;
-      }
-    }
-  }
-  if (edram_fragment_shader_interlock && depth_stencil_enabled) {
-    flags |= SpirvShaderTranslator::kSysFlag_FSIDepthStencil;
-    if (normalized_depth_control.z_enable) {
-      flags |= uint32_t(normalized_depth_control.zfunc)
-               << SpirvShaderTranslator::kSysFlag_FSIDepthPassIfLess_Shift;
-      if (normalized_depth_control.z_write_enable) {
-        flags |= SpirvShaderTranslator::kSysFlag_FSIDepthWrite;
-      }
-    } else {
-      // In case stencil is used without depth testing - always pass, and
-      // don't modify the stored depth.
-      flags |= SpirvShaderTranslator::kSysFlag_FSIDepthPassIfLess |
-               SpirvShaderTranslator::kSysFlag_FSIDepthPassIfEqual |
-               SpirvShaderTranslator::kSysFlag_FSIDepthPassIfGreater;
-    }
-    if (normalized_depth_control.stencil_enable) {
-      flags |= SpirvShaderTranslator::kSysFlag_FSIStencilTest;
-    }
-    // Hint - if not applicable to the shader, will not have effect.
-    if (alpha_test_function == xenos::CompareFunction::kAlways &&
-        !rb_colorcontrol.alpha_to_mask_enable) {
-      flags |= SpirvShaderTranslator::kSysFlag_FSIDepthStencilEarlyWrite;
-    }
-  }
-  dirty |= system_constants_.flags != flags;
-  system_constants_.flags = flags;
-
-  // Index buffer address for loading in the shaders.
-  if (flags & (SpirvShaderTranslator::kSysFlag_VertexIndexLoad |
-               SpirvShaderTranslator::kSysFlag_ComputeOrPrimitiveVertexIndexLoad)) {
-    dirty |=
-        system_constants_.vertex_index_load_address != primitive_processing_result.guest_index_base;
-    system_constants_.vertex_index_load_address = primitive_processing_result.guest_index_base;
-  }
-
-  // Primitive reset index for shader-side index loading.
-  uint32_t vertex_index_reset =
-      (flags & SpirvShaderTranslator::kSysFlag_ComputeOrPrimitiveVertexIndexReset)
-          ? regs.Get<reg::VGT_MULTI_PRIM_IB_RESET_INDX>().reset_indx
-          : 0;
-  dirty |= system_constants_.vertex_index_reset != vertex_index_reset;
-  system_constants_.vertex_index_reset = vertex_index_reset;
-  dirty |= system_constants_.compute_memexport_vertex_count != compute_memexport_vertex_count;
-  system_constants_.compute_memexport_vertex_count = compute_memexport_vertex_count;
-
-  // Index or tessellation edge factor buffer endianness.
-  xenos::Endian guest_index_endian = vgt_dma_size.swap_mode;
-  if (vgt_draw_initiator.index_size == xenos::IndexFormat::kInt16 &&
-      guest_index_endian != xenos::Endian::kNone && guest_index_endian != xenos::Endian::k8in16) {
-    guest_index_endian =
-        guest_index_endian == xenos::Endian::k8in32 ? xenos::Endian::k8in16 : xenos::Endian::kNone;
-  }
-  xenos::Endian index_endian =
-      (flags & SpirvShaderTranslator::kSysFlag_ComputeOrPrimitiveVertexIndexLoad)
-          ? guest_index_endian
-          : primitive_processing_result.host_shader_index_endian;
-  dirty |= system_constants_.vertex_index_endian != index_endian;
-  system_constants_.vertex_index_endian = index_endian;
-
-  dirty |= system_constants_.line_loop_closing_index !=
-           primitive_processing_result.line_loop_closing_index;
-  system_constants_.line_loop_closing_index = primitive_processing_result.line_loop_closing_index;
-
-  // Vertex index offset.
-  dirty |= system_constants_.vertex_base_index != vgt_indx_offset;
-  system_constants_.vertex_base_index = vgt_indx_offset;
-
-  // Vertex index range.
-  dirty |= system_constants_.vertex_index_min != vgt_min_vtx_indx;
-  dirty |= system_constants_.vertex_index_max != vgt_max_vtx_indx;
-  system_constants_.vertex_index_min = vgt_min_vtx_indx;
-  system_constants_.vertex_index_max = vgt_max_vtx_indx;
-
-  // User clip planes (UCP_ENA_#), when not CLIP_DISABLE.
-  // The shader knows only the total count - tightly packing the user clip
-  // planes that are actually used.
-  if (!pa_cl_clip_cntl.clip_disable) {
-    float* user_clip_plane_write_ptr = system_constants_.user_clip_planes[0];
-    uint32_t user_clip_planes_remaining = pa_cl_clip_cntl.ucp_ena;
-    uint32_t user_clip_plane_index;
-    while (rex::bit_scan_forward(user_clip_planes_remaining, &user_clip_plane_index)) {
-      user_clip_planes_remaining &= ~(UINT32_C(1) << user_clip_plane_index);
-      const void* user_clip_plane_regs =
-          &regs[XE_GPU_REG_PA_CL_UCP_0_X + user_clip_plane_index * 4];
-      if (std::memcmp(user_clip_plane_write_ptr, user_clip_plane_regs, 4 * sizeof(float))) {
-        dirty = true;
-        std::memcpy(user_clip_plane_write_ptr, user_clip_plane_regs, 4 * sizeof(float));
-      }
-      user_clip_plane_write_ptr += 4;
-    }
-  }
-
-  // Tessellation factor range, plus 1.0 according to
-  // https://www.slideshare.net/blackdevilvikas/next-generation-graphics-programming-on-xbox-360.
-  float tessellation_factor_min = regs.Get<float>(XE_GPU_REG_VGT_HOS_MIN_TESS_LEVEL) + 1.0f;
-  float tessellation_factor_max = regs.Get<float>(XE_GPU_REG_VGT_HOS_MAX_TESS_LEVEL) + 1.0f;
-  dirty |= system_constants_.tessellation_factor_range_min != tessellation_factor_min;
-  dirty |= system_constants_.tessellation_factor_range_max != tessellation_factor_max;
-  system_constants_.tessellation_factor_range_min = tessellation_factor_min;
-  system_constants_.tessellation_factor_range_max = tessellation_factor_max;
-
-  // Conversion to host normalized device coordinates.
-  for (uint32_t i = 0; i < 3; ++i) {
-    dirty |= system_constants_.ndc_scale[i] != viewport_info.ndc_scale[i];
-    dirty |= system_constants_.ndc_offset[i] != viewport_info.ndc_offset[i];
-    system_constants_.ndc_scale[i] = viewport_info.ndc_scale[i];
-    system_constants_.ndc_offset[i] = viewport_info.ndc_offset[i];
-  }
-
-  // Point size.
-  if (vgt_draw_initiator.prim_type == xenos::PrimitiveType::kPointList) {
-    auto pa_su_point_minmax = regs.Get<reg::PA_SU_POINT_MINMAX>();
-    auto pa_su_point_size = regs.Get<reg::PA_SU_POINT_SIZE>();
-    float point_vertex_diameter_min = float(pa_su_point_minmax.min_size) * (2.0f / 16.0f);
-    float point_vertex_diameter_max = float(pa_su_point_minmax.max_size) * (2.0f / 16.0f);
-    float point_constant_diameter_x = float(pa_su_point_size.width) * (2.0f / 16.0f);
-    float point_constant_diameter_y = float(pa_su_point_size.height) * (2.0f / 16.0f);
-    dirty |= system_constants_.point_vertex_diameter_min != point_vertex_diameter_min;
-    dirty |= system_constants_.point_vertex_diameter_max != point_vertex_diameter_max;
-    dirty |= system_constants_.point_constant_diameter[0] != point_constant_diameter_x;
-    dirty |= system_constants_.point_constant_diameter[1] != point_constant_diameter_y;
-    system_constants_.point_vertex_diameter_min = point_vertex_diameter_min;
-    system_constants_.point_vertex_diameter_max = point_vertex_diameter_max;
-    system_constants_.point_constant_diameter[0] = point_constant_diameter_x;
-    system_constants_.point_constant_diameter[1] = point_constant_diameter_y;
-    // 2 because 1 in the NDC is half of the viewport's axis, 0.5 for diameter
-    // to radius conversion to avoid multiplying the per-vertex diameter by an
-    // additional constant in the shader.
-    float point_screen_diameter_to_ndc_radius_x =
-        (/* 0.5f * 2.0f * */ float(draw_resolution_scale_x)) /
-        std::max(viewport_info.xy_extent[0], uint32_t(1));
-    float point_screen_diameter_to_ndc_radius_y =
-        (/* 0.5f * 2.0f * */ float(draw_resolution_scale_y)) /
-        std::max(viewport_info.xy_extent[1], uint32_t(1));
-    dirty |= system_constants_.point_screen_diameter_to_ndc_radius[0] !=
-             point_screen_diameter_to_ndc_radius_x;
-    dirty |= system_constants_.point_screen_diameter_to_ndc_radius[1] !=
-             point_screen_diameter_to_ndc_radius_y;
-    system_constants_.point_screen_diameter_to_ndc_radius[0] =
-        point_screen_diameter_to_ndc_radius_x;
-    system_constants_.point_screen_diameter_to_ndc_radius[1] =
-        point_screen_diameter_to_ndc_radius_y;
-  }
-
-  // Texture signedness / gamma.
-  uint32_t textures_resolution_scaled = 0;
-  {
-    uint32_t textures_remaining = used_texture_mask;
-    uint32_t texture_index;
-    while (rex::bit_scan_forward(textures_remaining, &texture_index)) {
-      textures_remaining &= ~(UINT32_C(1) << texture_index);
-      uint32_t& texture_signs_uint = system_constants_.texture_swizzled_signs[texture_index >> 2];
-      uint32_t texture_signs_shift = 8 * (texture_index & 3);
-      uint8_t texture_signs = texture_cache_->GetActiveTextureSwizzledSigns(texture_index);
-      uint32_t texture_signs_shifted = uint32_t(texture_signs) << texture_signs_shift;
-      uint32_t texture_signs_mask = ((UINT32_C(1) << 8) - 1) << texture_signs_shift;
-      dirty |= (texture_signs_uint & texture_signs_mask) != texture_signs_shifted;
-      texture_signs_uint = (texture_signs_uint & ~texture_signs_mask) | texture_signs_shifted;
-      textures_resolution_scaled |=
-          uint32_t(texture_cache_->IsActiveTextureResolutionScaled(texture_index)) << texture_index;
-    }
-  }
-  dirty |= system_constants_.textures_resolution_scaled != textures_resolution_scaled;
-  system_constants_.textures_resolution_scaled = textures_resolution_scaled;
-
-  // Texture host swizzle in the shader.
-  if (!GetVulkanDevice()->properties().imageViewFormatSwizzle) {
-    uint32_t textures_remaining = used_texture_mask;
-    uint32_t texture_index;
-    while (rex::bit_scan_forward(textures_remaining, &texture_index)) {
-      textures_remaining &= ~(UINT32_C(1) << texture_index);
-      uint32_t& texture_swizzles_uint = system_constants_.texture_swizzles[texture_index >> 1];
-      uint32_t texture_swizzle_shift = 12 * (texture_index & 1);
-      uint32_t texture_swizzle = texture_cache_->GetActiveTextureHostSwizzle(texture_index);
-      uint32_t texture_swizzle_shifted = uint32_t(texture_swizzle) << texture_swizzle_shift;
-      uint32_t texture_swizzle_mask = ((UINT32_C(1) << 12) - 1) << texture_swizzle_shift;
-      dirty |= (texture_swizzles_uint & texture_swizzle_mask) != texture_swizzle_shifted;
-      texture_swizzles_uint =
-          (texture_swizzles_uint & ~texture_swizzle_mask) | texture_swizzle_shifted;
-    }
-  }
-
-  // Alpha test.
-  dirty |= system_constants_.alpha_test_reference != rb_alpha_ref;
-  system_constants_.alpha_test_reference = rb_alpha_ref;
-  uint32_t alpha_to_mask =
-      rb_colorcontrol.alpha_to_mask_enable ? (rb_colorcontrol.value >> 24) | (UINT32_C(1) << 8) : 0;
-  dirty |= system_constants_.alpha_to_mask != alpha_to_mask;
-  system_constants_.alpha_to_mask = alpha_to_mask;
-
-  uint32_t edram_tile_dwords_scaled = xenos::kEdramTileWidthSamples *
-                                      xenos::kEdramTileHeightSamples *
-                                      (draw_resolution_scale_x * draw_resolution_scale_y);
-
-  // EDRAM pitch for FSI render target writing.
-  if (edram_fragment_shader_interlock) {
-    // Align, then multiply by 32bpp tile size in dwords.
-    uint32_t edram_32bpp_tile_pitch_dwords_scaled =
-        ((rb_surface_info.surface_pitch *
-          (rb_surface_info.msaa_samples >= xenos::MsaaSamples::k4X ? 2 : 1)) +
-         (xenos::kEdramTileWidthSamples - 1)) /
-        xenos::kEdramTileWidthSamples * edram_tile_dwords_scaled;
-    dirty |= system_constants_.edram_32bpp_tile_pitch_dwords_scaled !=
-             edram_32bpp_tile_pitch_dwords_scaled;
-    system_constants_.edram_32bpp_tile_pitch_dwords_scaled = edram_32bpp_tile_pitch_dwords_scaled;
-  }
-
-  // Color exponent bias and FSI render target writing.
-  for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
-    reg::RB_COLOR_INFO color_info = color_infos[i];
-    // Exponent bias is in bits 20:25 of RB_COLOR_INFO.
-    int32_t color_exp_bias = color_info.color_exp_bias;
-    if (render_target_cache_->GetPath() == RenderTargetCache::Path::kHostRenderTargets &&
-        (color_info.color_format == xenos::ColorRenderTargetFormat::k_16_16 &&
-             !render_target_cache_->IsFixedRG16TruncatedToMinus1To1() ||
-         color_info.color_format == xenos::ColorRenderTargetFormat::k_16_16_16_16 &&
-             !render_target_cache_->IsFixedRGBA16TruncatedToMinus1To1())) {
-      // Remap from -32...32 to -1...1 by dividing the output values by 32,
-      // losing blending correctness, but getting the full range.
-      color_exp_bias -= 5;
-    }
-    float color_exp_bias_scale;
-    *reinterpret_cast<int32_t*>(&color_exp_bias_scale) =
-        UINT32_C(0x3F800000) + (color_exp_bias << 23);
-    dirty |= system_constants_.color_exp_bias[i] != color_exp_bias_scale;
-    system_constants_.color_exp_bias[i] = color_exp_bias_scale;
-    if (edram_fragment_shader_interlock) {
-      dirty |= system_constants_.edram_rt_keep_mask[i][0] != rt_keep_masks[i][0];
-      system_constants_.edram_rt_keep_mask[i][0] = rt_keep_masks[i][0];
-      dirty |= system_constants_.edram_rt_keep_mask[i][1] != rt_keep_masks[i][1];
-      system_constants_.edram_rt_keep_mask[i][1] = rt_keep_masks[i][1];
-      if (rt_keep_masks[i][0] != UINT32_MAX || rt_keep_masks[i][1] != UINT32_MAX) {
-        uint32_t rt_base_dwords_scaled = color_info.color_base * edram_tile_dwords_scaled;
-        dirty |= system_constants_.edram_rt_base_dwords_scaled[i] != rt_base_dwords_scaled;
-        system_constants_.edram_rt_base_dwords_scaled[i] = rt_base_dwords_scaled;
-        uint32_t format_flags = RenderTargetCache::AddPSIColorFormatFlags(color_info.color_format);
-        dirty |= system_constants_.edram_rt_format_flags[i] != format_flags;
-        system_constants_.edram_rt_format_flags[i] = format_flags;
-        uint32_t blend_factors_ops =
-            regs[reg::RB_BLENDCONTROL::rt_register_indices[i]] & 0x1FFF1FFF;
-        dirty |= system_constants_.edram_rt_blend_factors_ops[i] != blend_factors_ops;
-        system_constants_.edram_rt_blend_factors_ops[i] = blend_factors_ops;
-        // Can't do float comparisons here because NaNs would result in always
-        // setting the dirty flag.
-        dirty |=
-            std::memcmp(system_constants_.edram_rt_clamp[i], rt_clamp[i], 4 * sizeof(float)) != 0;
-        std::memcpy(system_constants_.edram_rt_clamp[i], rt_clamp[i], 4 * sizeof(float));
-      }
-    }
-  }
-
-  if (edram_fragment_shader_interlock) {
-    uint32_t depth_base_dwords_scaled = rb_depth_info.depth_base * edram_tile_dwords_scaled;
-    dirty |= system_constants_.edram_depth_base_dwords_scaled != depth_base_dwords_scaled;
-    system_constants_.edram_depth_base_dwords_scaled = depth_base_dwords_scaled;
-
-    // For non-polygons, front polygon offset is used, and it's enabled if
-    // POLY_OFFSET_PARA_ENABLED is set, for polygons, separate front and back
-    // are used.
-    float poly_offset_front_scale = 0.0f, poly_offset_front_offset = 0.0f;
-    float poly_offset_back_scale = 0.0f, poly_offset_back_offset = 0.0f;
-    if (primitive_polygonal) {
-      if (pa_su_sc_mode_cntl.poly_offset_front_enable) {
-        poly_offset_front_scale = regs.Get<float>(XE_GPU_REG_PA_SU_POLY_OFFSET_FRONT_SCALE);
-        poly_offset_front_offset = regs.Get<float>(XE_GPU_REG_PA_SU_POLY_OFFSET_FRONT_OFFSET);
-      }
-      if (pa_su_sc_mode_cntl.poly_offset_back_enable) {
-        poly_offset_back_scale = regs.Get<float>(XE_GPU_REG_PA_SU_POLY_OFFSET_BACK_SCALE);
-        poly_offset_back_offset = regs.Get<float>(XE_GPU_REG_PA_SU_POLY_OFFSET_BACK_OFFSET);
-      }
-    } else {
-      if (pa_su_sc_mode_cntl.poly_offset_para_enable) {
-        poly_offset_front_scale = regs.Get<float>(XE_GPU_REG_PA_SU_POLY_OFFSET_FRONT_SCALE);
-        poly_offset_front_offset = regs.Get<float>(XE_GPU_REG_PA_SU_POLY_OFFSET_FRONT_OFFSET);
-        poly_offset_back_scale = poly_offset_front_scale;
-        poly_offset_back_offset = poly_offset_front_offset;
-      }
-    }
-    // With non-square resolution scaling, make sure the worst-case impact is
-    // reverted (slope only along the scaled axis), thus max. More bias is
-    // better than less bias, because less bias means Z fighting with the
-    // background is more likely.
-    float poly_offset_scale_factor = xenos::kPolygonOffsetScaleSubpixelUnit *
-                                     std::max(draw_resolution_scale_x, draw_resolution_scale_y);
-    poly_offset_front_scale *= poly_offset_scale_factor;
-    poly_offset_back_scale *= poly_offset_scale_factor;
-    dirty |= system_constants_.edram_poly_offset_front_scale != poly_offset_front_scale;
-    system_constants_.edram_poly_offset_front_scale = poly_offset_front_scale;
-    dirty |= system_constants_.edram_poly_offset_front_offset != poly_offset_front_offset;
-    system_constants_.edram_poly_offset_front_offset = poly_offset_front_offset;
-    dirty |= system_constants_.edram_poly_offset_back_scale != poly_offset_back_scale;
-    system_constants_.edram_poly_offset_back_scale = poly_offset_back_scale;
-    dirty |= system_constants_.edram_poly_offset_back_offset != poly_offset_back_offset;
-    system_constants_.edram_poly_offset_back_offset = poly_offset_back_offset;
-
-    if (depth_stencil_enabled && normalized_depth_control.stencil_enable) {
-      uint32_t stencil_front_reference_masks = rb_stencilrefmask.value & 0xFFFFFF;
-      dirty |=
-          system_constants_.edram_stencil_front_reference_masks != stencil_front_reference_masks;
-      system_constants_.edram_stencil_front_reference_masks = stencil_front_reference_masks;
-      uint32_t stencil_func_ops = (normalized_depth_control.value >> 8) & ((1 << 12) - 1);
-      dirty |= system_constants_.edram_stencil_front_func_ops != stencil_func_ops;
-      system_constants_.edram_stencil_front_func_ops = stencil_func_ops;
-
-      if (primitive_polygonal && normalized_depth_control.backface_enable) {
-        uint32_t stencil_back_reference_masks = rb_stencilrefmask_bf.value & 0xFFFFFF;
-        dirty |=
-            system_constants_.edram_stencil_back_reference_masks != stencil_back_reference_masks;
-        system_constants_.edram_stencil_back_reference_masks = stencil_back_reference_masks;
-        uint32_t stencil_func_ops_bf = (normalized_depth_control.value >> 20) & ((1 << 12) - 1);
-        dirty |= system_constants_.edram_stencil_back_func_ops != stencil_func_ops_bf;
-        system_constants_.edram_stencil_back_func_ops = stencil_func_ops_bf;
-      } else {
-        dirty |= std::memcmp(system_constants_.edram_stencil_back,
-                             system_constants_.edram_stencil_front, 2 * sizeof(uint32_t)) != 0;
-        std::memcpy(system_constants_.edram_stencil_back, system_constants_.edram_stencil_front,
-                    2 * sizeof(uint32_t));
-      }
-    }
-
-    dirty |= system_constants_.edram_blend_constant[0] != regs.Get<float>(XE_GPU_REG_RB_BLEND_RED);
-    system_constants_.edram_blend_constant[0] = regs.Get<float>(XE_GPU_REG_RB_BLEND_RED);
-    dirty |=
-        system_constants_.edram_blend_constant[1] != regs.Get<float>(XE_GPU_REG_RB_BLEND_GREEN);
-    system_constants_.edram_blend_constant[1] = regs.Get<float>(XE_GPU_REG_RB_BLEND_GREEN);
-    dirty |= system_constants_.edram_blend_constant[2] != regs.Get<float>(XE_GPU_REG_RB_BLEND_BLUE);
-    system_constants_.edram_blend_constant[2] = regs.Get<float>(XE_GPU_REG_RB_BLEND_BLUE);
-    dirty |=
-        system_constants_.edram_blend_constant[3] != regs.Get<float>(XE_GPU_REG_RB_BLEND_ALPHA);
-    system_constants_.edram_blend_constant[3] = regs.Get<float>(XE_GPU_REG_RB_BLEND_ALPHA);
-  }
-
-  if (dirty) {
-    current_constant_buffers_up_to_date_ &=
-        ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferSystem);
-  }
-}
-
-bool VulkanCommandProcessor::UpdateBindings(const VulkanShader* vertex_shader,
-                                            const VulkanShader* pixel_shader) {
-#if XE_GPU_FINE_GRAINED_DRAW_SCOPES
-  SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
-
-  const RegisterFile& regs = *register_file_;
-
-  const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
-  const VkDevice device = vulkan_device->device();
-
-  // Invalidate constant buffers and descriptors for changed data.
-
-  // Float constants.
-  // These are the constant base addresses/ranges for shaders.
-  // We have these hardcoded right now cause nothing seems to differ on the Xbox
-  // 360 (however, OpenGL ES on Adreno 200 on Android has different ranges).
-  assert_true(regs[XE_GPU_REG_SQ_VS_CONST] == 0x000FF000 ||
-              regs[XE_GPU_REG_SQ_VS_CONST] == 0x00000000);
-  assert_true(regs[XE_GPU_REG_SQ_PS_CONST] == 0x000FF100 ||
-              regs[XE_GPU_REG_SQ_PS_CONST] == 0x00000000);
-  // Check if the float constant layout is still the same and get the counts.
-  const Shader::ConstantRegisterMap& float_constant_map_vertex =
-      vertex_shader->constant_register_map();
-  uint32_t float_constant_count_vertex = float_constant_map_vertex.float_count;
-  for (uint32_t i = 0; i < 4; ++i) {
-    if (current_float_constant_map_vertex_[i] != float_constant_map_vertex.float_bitmap[i]) {
-      current_float_constant_map_vertex_[i] = float_constant_map_vertex.float_bitmap[i];
-      // If no float constants at all, any buffer can be reused for them, so not
-      // invalidating.
-      if (float_constant_count_vertex) {
-        current_constant_buffers_up_to_date_ &=
-            ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatVertex);
-      }
-    }
-  }
-  uint32_t float_constant_count_pixel = 0;
-  if (pixel_shader != nullptr) {
-    const Shader::ConstantRegisterMap& float_constant_map_pixel =
-        pixel_shader->constant_register_map();
-    float_constant_count_pixel = float_constant_map_pixel.float_count;
-    for (uint32_t i = 0; i < 4; ++i) {
-      if (current_float_constant_map_pixel_[i] != float_constant_map_pixel.float_bitmap[i]) {
-        current_float_constant_map_pixel_[i] = float_constant_map_pixel.float_bitmap[i];
-        if (float_constant_count_pixel) {
-          current_constant_buffers_up_to_date_ &=
-              ~(UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatPixel);
-        }
-      }
-    }
-  } else {
-    std::memset(current_float_constant_map_pixel_, 0, sizeof(current_float_constant_map_pixel_));
-  }
-
-  // Write the new constant buffers.
-  constexpr uint32_t kAllConstantBuffersMask =
-      (UINT32_C(1) << SpirvShaderTranslator::kConstantBufferCount) - 1;
-  assert_zero(current_constant_buffers_up_to_date_ & ~kAllConstantBuffersMask);
-  if ((current_constant_buffers_up_to_date_ & kAllConstantBuffersMask) != kAllConstantBuffersMask) {
-    current_graphics_descriptor_set_values_up_to_date_ &=
-        ~(UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetConstants);
-    size_t uniform_buffer_alignment =
-        size_t(vulkan_device->properties().minUniformBufferOffsetAlignment);
-    // System constants.
-    if (!(current_constant_buffers_up_to_date_ &
-          (UINT32_C(1) << SpirvShaderTranslator::kConstantBufferSystem))) {
-      VkDescriptorBufferInfo& buffer_info =
-          current_constant_buffer_infos_[SpirvShaderTranslator::kConstantBufferSystem];
-      uint8_t* mapping = uniform_buffer_pool_->Request(
-          frame_current_, sizeof(SpirvShaderTranslator::SystemConstants), uniform_buffer_alignment,
-          buffer_info.buffer, buffer_info.offset);
-      if (!mapping) {
-        return false;
-      }
-      buffer_info.range = sizeof(SpirvShaderTranslator::SystemConstants);
-      std::memcpy(mapping, &system_constants_, sizeof(SpirvShaderTranslator::SystemConstants));
-      current_constant_buffers_up_to_date_ |= UINT32_C(1)
-                                              << SpirvShaderTranslator::kConstantBufferSystem;
-    }
-    // Vertex shader float constants.
-    if (!(current_constant_buffers_up_to_date_ &
-          (UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatVertex))) {
-      VkDescriptorBufferInfo& buffer_info =
-          current_constant_buffer_infos_[SpirvShaderTranslator::kConstantBufferFloatVertex];
-      // Even if the shader doesn't need any float constants, a valid binding
-      // must still be provided (the pipeline layout always has float constants,
-      // for both the vertex shader and the pixel shader), so if the first draw
-      // in the frame doesn't have float constants at all, still allocate a
-      // dummy buffer.
-      size_t float_constants_size =
-          sizeof(float) * 4 * std::max(float_constant_count_vertex, UINT32_C(1));
-      uint8_t* mapping = uniform_buffer_pool_->Request(frame_current_, float_constants_size,
-                                                       uniform_buffer_alignment, buffer_info.buffer,
-                                                       buffer_info.offset);
-      if (!mapping) {
-        return false;
-      }
-      buffer_info.range = VkDeviceSize(float_constants_size);
-      for (uint32_t i = 0; i < 4; ++i) {
-        uint64_t float_constant_map_entry = current_float_constant_map_vertex_[i];
-        uint32_t float_constant_index;
-        while (rex::bit_scan_forward(float_constant_map_entry, &float_constant_index)) {
-          float_constant_map_entry &= ~(1ull << float_constant_index);
-          std::memcpy(
-              mapping,
-              &regs[XE_GPU_REG_SHADER_CONSTANT_000_X + (i << 8) + (float_constant_index << 2)],
-              sizeof(float) * 4);
-          mapping += sizeof(float) * 4;
-        }
-      }
-      current_constant_buffers_up_to_date_ |= UINT32_C(1)
-                                              << SpirvShaderTranslator::kConstantBufferFloatVertex;
-    }
-    // Pixel shader float constants.
-    if (!(current_constant_buffers_up_to_date_ &
-          (UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFloatPixel))) {
-      VkDescriptorBufferInfo& buffer_info =
-          current_constant_buffer_infos_[SpirvShaderTranslator::kConstantBufferFloatPixel];
-      size_t float_constants_size =
-          sizeof(float) * 4 * std::max(float_constant_count_pixel, UINT32_C(1));
-      uint8_t* mapping = uniform_buffer_pool_->Request(frame_current_, float_constants_size,
-                                                       uniform_buffer_alignment, buffer_info.buffer,
-                                                       buffer_info.offset);
-      if (!mapping) {
-        return false;
-      }
-      buffer_info.range = VkDeviceSize(float_constants_size);
-      for (uint32_t i = 0; i < 4; ++i) {
-        uint64_t float_constant_map_entry = current_float_constant_map_pixel_[i];
-        uint32_t float_constant_index;
-        while (rex::bit_scan_forward(float_constant_map_entry, &float_constant_index)) {
-          float_constant_map_entry &= ~(1ull << float_constant_index);
-          std::memcpy(
-              mapping,
-              &regs[XE_GPU_REG_SHADER_CONSTANT_256_X + (i << 8) + (float_constant_index << 2)],
-              sizeof(float) * 4);
-          mapping += sizeof(float) * 4;
-        }
-      }
-      current_constant_buffers_up_to_date_ |= UINT32_C(1)
-                                              << SpirvShaderTranslator::kConstantBufferFloatPixel;
-    }
-    // Bool and loop constants.
-    if (!(current_constant_buffers_up_to_date_ &
-          (UINT32_C(1) << SpirvShaderTranslator::kConstantBufferBoolLoop))) {
-      VkDescriptorBufferInfo& buffer_info =
-          current_constant_buffer_infos_[SpirvShaderTranslator::kConstantBufferBoolLoop];
-      constexpr size_t kBoolLoopConstantsSize = sizeof(uint32_t) * (8 + 32);
-      uint8_t* mapping = uniform_buffer_pool_->Request(frame_current_, kBoolLoopConstantsSize,
-                                                       uniform_buffer_alignment, buffer_info.buffer,
-                                                       buffer_info.offset);
-      if (!mapping) {
-        return false;
-      }
-      buffer_info.range = VkDeviceSize(kBoolLoopConstantsSize);
-      std::memcpy(mapping, &regs[XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031], kBoolLoopConstantsSize);
-      current_constant_buffers_up_to_date_ |= UINT32_C(1)
-                                              << SpirvShaderTranslator::kConstantBufferBoolLoop;
-    }
-    // Fetch constants.
-    if (!(current_constant_buffers_up_to_date_ &
-          (UINT32_C(1) << SpirvShaderTranslator::kConstantBufferFetch))) {
-      VkDescriptorBufferInfo& buffer_info =
-          current_constant_buffer_infos_[SpirvShaderTranslator::kConstantBufferFetch];
-      constexpr size_t kFetchConstantsSize = sizeof(uint32_t) * 6 * 32;
-      uint8_t* mapping = uniform_buffer_pool_->Request(frame_current_, kFetchConstantsSize,
-                                                       uniform_buffer_alignment, buffer_info.buffer,
-                                                       buffer_info.offset);
-      if (!mapping) {
-        return false;
-      }
-      buffer_info.range = VkDeviceSize(kFetchConstantsSize);
-      std::memcpy(mapping, &regs[XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0], kFetchConstantsSize);
-      current_constant_buffers_up_to_date_ |= UINT32_C(1)
-                                              << SpirvShaderTranslator::kConstantBufferFetch;
-    }
-  }
-
-  // Textures and samplers.
-  const std::vector<VulkanShader::SamplerBinding>& samplers_vertex =
-      vertex_shader->GetSamplerBindingsAfterTranslation();
-  const std::vector<VulkanShader::TextureBinding>& textures_vertex =
-      vertex_shader->GetTextureBindingsAfterTranslation();
-  uint32_t sampler_count_vertex = uint32_t(samplers_vertex.size());
-  uint32_t texture_count_vertex = uint32_t(textures_vertex.size());
-  const std::vector<VulkanShader::SamplerBinding>* samplers_pixel;
-  const std::vector<VulkanShader::TextureBinding>* textures_pixel;
-  uint32_t sampler_count_pixel, texture_count_pixel;
-  if (pixel_shader) {
-    samplers_pixel = &pixel_shader->GetSamplerBindingsAfterTranslation();
-    textures_pixel = &pixel_shader->GetTextureBindingsAfterTranslation();
-    sampler_count_pixel = uint32_t(samplers_pixel->size());
-    texture_count_pixel = uint32_t(textures_pixel->size());
-  } else {
-    samplers_pixel = nullptr;
-    textures_pixel = nullptr;
-    sampler_count_pixel = 0;
-    texture_count_pixel = 0;
-  }
-  // TODO(Triang3l): Reuse texture and sampler bindings if not changed.
-  current_graphics_descriptor_set_values_up_to_date_ &=
-      ~((UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesVertex) |
-        (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesPixel));
-
-  // Make sure new descriptor sets are bound to the command buffer.
-
-  current_graphics_descriptor_sets_bound_up_to_date_ &=
-      current_graphics_descriptor_set_values_up_to_date_;
-
-  // Fill the texture and sampler write image infos.
-
-  bool write_vertex_textures =
-      (texture_count_vertex || sampler_count_vertex) &&
-      !(current_graphics_descriptor_set_values_up_to_date_ &
-        (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesVertex));
-  bool write_pixel_textures =
-      (texture_count_pixel || sampler_count_pixel) &&
-      !(current_graphics_descriptor_set_values_up_to_date_ &
-        (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesPixel));
-  descriptor_write_image_info_.clear();
-  descriptor_write_image_info_.reserve(
-      (write_vertex_textures ? texture_count_vertex + sampler_count_vertex : 0) +
-      (write_pixel_textures ? texture_count_pixel + sampler_count_pixel : 0));
-  size_t vertex_texture_image_info_offset = descriptor_write_image_info_.size();
-  if (write_vertex_textures && texture_count_vertex) {
-    for (const VulkanShader::TextureBinding& texture_binding : textures_vertex) {
-      VkDescriptorImageInfo& descriptor_image_info = descriptor_write_image_info_.emplace_back();
-      descriptor_image_info.imageView = texture_cache_->GetActiveBindingOrNullImageView(
-          texture_binding.fetch_constant, texture_binding.dimension,
-          bool(texture_binding.is_signed));
-      descriptor_image_info.imageLayout = descriptor_image_info.imageView != VK_NULL_HANDLE
-                                              ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                              : VK_IMAGE_LAYOUT_UNDEFINED;
-    }
-  }
-  size_t vertex_sampler_image_info_offset = descriptor_write_image_info_.size();
-  if (write_vertex_textures && sampler_count_vertex) {
-    for (const std::pair<VulkanTextureCache::SamplerParameters, VkSampler>& sampler_pair :
-         current_samplers_vertex_) {
-      VkDescriptorImageInfo& descriptor_image_info = descriptor_write_image_info_.emplace_back();
-      descriptor_image_info.sampler = sampler_pair.second;
-    }
-  }
-  size_t pixel_texture_image_info_offset = descriptor_write_image_info_.size();
-  if (write_pixel_textures && texture_count_pixel) {
-    for (const VulkanShader::TextureBinding& texture_binding : *textures_pixel) {
-      VkDescriptorImageInfo& descriptor_image_info = descriptor_write_image_info_.emplace_back();
-      descriptor_image_info.imageView = texture_cache_->GetActiveBindingOrNullImageView(
-          texture_binding.fetch_constant, texture_binding.dimension,
-          bool(texture_binding.is_signed));
-      descriptor_image_info.imageLayout = descriptor_image_info.imageView != VK_NULL_HANDLE
-                                              ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                              : VK_IMAGE_LAYOUT_UNDEFINED;
-    }
-  }
-  size_t pixel_sampler_image_info_offset = descriptor_write_image_info_.size();
-  if (write_pixel_textures && sampler_count_pixel) {
-    for (const std::pair<VulkanTextureCache::SamplerParameters, VkSampler>& sampler_pair :
-         current_samplers_pixel_) {
-      VkDescriptorImageInfo& descriptor_image_info = descriptor_write_image_info_.emplace_back();
-      descriptor_image_info.sampler = sampler_pair.second;
-    }
-  }
-
-  // Write the new descriptor sets.
-
-  // Consecutive bindings updated via a single VkWriteDescriptorSet must have
-  // identical stage flags, but for the constants they vary. Plus vertex and
-  // pixel texture images and samplers.
-  std::array<VkWriteDescriptorSet, SpirvShaderTranslator::kConstantBufferCount + 2 * 2>
-      write_descriptor_sets;
-  uint32_t write_descriptor_set_count = 0;
-  uint32_t write_descriptor_set_bits = 0;
-  const bool adjacent_texture_descriptor_set_reuse =
-      REXCVAR_GET(gpu_texture_descriptor_set_adjacent_reuse);
-  const bool collect_adjacent_texture_descriptor_set_reuse_stats =
-      adjacent_texture_descriptor_set_reuse && REXCVAR_GET(gpu_native_stats);
-  bool store_adjacent_vertex_texture_descriptor_set = false;
-  bool store_adjacent_pixel_texture_descriptor_set = false;
-  VkDescriptorSet adjacent_vertex_texture_descriptor_set = VK_NULL_HANDLE;
-  VkDescriptorSet adjacent_pixel_texture_descriptor_set = VK_NULL_HANDLE;
-  assert_not_zero(current_graphics_descriptor_set_values_up_to_date_ &
-                  (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetSharedMemoryAndEdram));
-  // Constant buffers.
-  if (!(current_graphics_descriptor_set_values_up_to_date_ &
-        (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetConstants))) {
-    VkDescriptorSet constants_descriptor_set;
-    if (!constants_transient_descriptors_free_.empty()) {
-      constants_descriptor_set = constants_transient_descriptors_free_.back();
-      constants_transient_descriptors_free_.pop_back();
-    } else {
-      VkDescriptorPoolSize constants_descriptor_count;
-      constants_descriptor_count.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-      constants_descriptor_count.descriptorCount = SpirvShaderTranslator::kConstantBufferCount;
-      constants_descriptor_set = transient_descriptor_allocator_uniform_buffer_.Allocate(
-          descriptor_set_layout_constants_, &constants_descriptor_count, 1);
-      if (constants_descriptor_set == VK_NULL_HANDLE) {
-        return false;
-      }
-    }
-    constants_transient_descriptors_used_.emplace_back(frame_current_, constants_descriptor_set);
-    // Consecutive bindings updated via a single VkWriteDescriptorSet must have
-    // identical stage flags, but for the constants they vary.
-    for (uint32_t i = 0; i < SpirvShaderTranslator::kConstantBufferCount; ++i) {
-      VkWriteDescriptorSet& write_constants = write_descriptor_sets[write_descriptor_set_count++];
-      write_constants.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      write_constants.pNext = nullptr;
-      write_constants.dstSet = constants_descriptor_set;
-      write_constants.dstBinding = i;
-      write_constants.dstArrayElement = 0;
-      write_constants.descriptorCount = 1;
-      write_constants.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-      write_constants.pImageInfo = nullptr;
-      write_constants.pBufferInfo = &current_constant_buffer_infos_[i];
-      write_constants.pTexelBufferView = nullptr;
-    }
-    write_descriptor_set_bits |= UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetConstants;
-    current_graphics_descriptor_sets_[SpirvShaderTranslator::kDescriptorSetConstants] =
-        constants_descriptor_set;
-  }
-  // Vertex shader textures and samplers.
-  if (write_vertex_textures) {
-    VkDescriptorSetLayout descriptor_set_layout =
-        current_guest_graphics_pipeline_layout_->descriptor_set_layout_textures_vertex_ref();
-    const VkDescriptorImageInfo* texture_infos =
-        descriptor_write_image_info_.data() + vertex_texture_image_info_offset;
-    const VkDescriptorImageInfo* sampler_infos =
-        descriptor_write_image_info_.data() + vertex_sampler_image_info_offset;
-    VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-    if (adjacent_texture_descriptor_set_reuse) {
-      if (collect_adjacent_texture_descriptor_set_reuse_stats) {
-        rex::perf::IncrementCounter(
-            rex::perf::CounterId::kTextureDescriptorSetAdjacentReuseLookups);
-      }
-      descriptor_set =
-          FindAdjacentTextureDescriptorSet(true, descriptor_set_layout, texture_count_vertex,
-                                           sampler_count_vertex, texture_infos, sampler_infos);
-      if (collect_adjacent_texture_descriptor_set_reuse_stats) {
-        rex::perf::IncrementCounter(
-            descriptor_set != VK_NULL_HANDLE
-                ? rex::perf::CounterId::kTextureDescriptorSetAdjacentReuseHits
-                : rex::perf::CounterId::kTextureDescriptorSetAdjacentReuseMisses);
-      }
-    }
-    if (descriptor_set == VK_NULL_HANDLE) {
-      VkWriteDescriptorSet* write_textures =
-          write_descriptor_sets.data() + write_descriptor_set_count;
-      uint32_t texture_descriptor_set_write_count = WriteTransientTextureBindings(
-          true, texture_count_vertex, sampler_count_vertex, descriptor_set_layout, texture_infos,
-          sampler_infos, write_textures);
-      if (!texture_descriptor_set_write_count) {
-        return false;
-      }
-      descriptor_set = write_textures[0].dstSet;
-      write_descriptor_set_count += texture_descriptor_set_write_count;
-      store_adjacent_vertex_texture_descriptor_set = adjacent_texture_descriptor_set_reuse;
-      adjacent_vertex_texture_descriptor_set = descriptor_set;
-    }
-    write_descriptor_set_bits |= UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesVertex;
-    current_graphics_descriptor_sets_[SpirvShaderTranslator::kDescriptorSetTexturesVertex] =
-        descriptor_set;
-  }
-  // Pixel shader textures and samplers.
-  if (write_pixel_textures) {
-    VkDescriptorSetLayout descriptor_set_layout =
-        current_guest_graphics_pipeline_layout_->descriptor_set_layout_textures_pixel_ref();
-    const VkDescriptorImageInfo* texture_infos =
-        descriptor_write_image_info_.data() + pixel_texture_image_info_offset;
-    const VkDescriptorImageInfo* sampler_infos =
-        descriptor_write_image_info_.data() + pixel_sampler_image_info_offset;
-    VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-    if (adjacent_texture_descriptor_set_reuse) {
-      if (collect_adjacent_texture_descriptor_set_reuse_stats) {
-        rex::perf::IncrementCounter(
-            rex::perf::CounterId::kTextureDescriptorSetAdjacentReuseLookups);
-      }
-      descriptor_set =
-          FindAdjacentTextureDescriptorSet(false, descriptor_set_layout, texture_count_pixel,
-                                           sampler_count_pixel, texture_infos, sampler_infos);
-      if (collect_adjacent_texture_descriptor_set_reuse_stats) {
-        rex::perf::IncrementCounter(
-            descriptor_set != VK_NULL_HANDLE
-                ? rex::perf::CounterId::kTextureDescriptorSetAdjacentReuseHits
-                : rex::perf::CounterId::kTextureDescriptorSetAdjacentReuseMisses);
-      }
-    }
-    if (descriptor_set == VK_NULL_HANDLE) {
-      VkWriteDescriptorSet* write_textures =
-          write_descriptor_sets.data() + write_descriptor_set_count;
-      uint32_t texture_descriptor_set_write_count = WriteTransientTextureBindings(
-          false, texture_count_pixel, sampler_count_pixel, descriptor_set_layout, texture_infos,
-          sampler_infos, write_textures);
-      if (!texture_descriptor_set_write_count) {
-        return false;
-      }
-      descriptor_set = write_textures[0].dstSet;
-      write_descriptor_set_count += texture_descriptor_set_write_count;
-      store_adjacent_pixel_texture_descriptor_set = adjacent_texture_descriptor_set_reuse;
-      adjacent_pixel_texture_descriptor_set = descriptor_set;
-    }
-    write_descriptor_set_bits |= UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesPixel;
-    current_graphics_descriptor_sets_[SpirvShaderTranslator::kDescriptorSetTexturesPixel] =
-        descriptor_set;
-  }
-  // Write.
-  if (write_descriptor_set_count) {
-    dfn.vkUpdateDescriptorSets(device, write_descriptor_set_count, write_descriptor_sets.data(), 0,
-                               nullptr);
-  }
-  // Publish only descriptor sets whose writes completed successfully. This is
-  // intentionally after the combined update so a later stage allocation
-  // failure can't leave an unwritten earlier-stage set reusable.
-  if (store_adjacent_vertex_texture_descriptor_set) {
-    StoreAdjacentTextureDescriptorSet(
-        true, current_guest_graphics_pipeline_layout_->descriptor_set_layout_textures_vertex_ref(),
-        adjacent_vertex_texture_descriptor_set, texture_count_vertex, sampler_count_vertex,
-        descriptor_write_image_info_.data() + vertex_texture_image_info_offset,
-        descriptor_write_image_info_.data() + vertex_sampler_image_info_offset);
-  }
-  if (store_adjacent_pixel_texture_descriptor_set) {
-    StoreAdjacentTextureDescriptorSet(
-        false, current_guest_graphics_pipeline_layout_->descriptor_set_layout_textures_pixel_ref(),
-        adjacent_pixel_texture_descriptor_set, texture_count_pixel, sampler_count_pixel,
-        descriptor_write_image_info_.data() + pixel_texture_image_info_offset,
-        descriptor_write_image_info_.data() + pixel_sampler_image_info_offset);
-  }
-  // Only make valid if all descriptor sets have been allocated and written
-  // successfully.
-  current_graphics_descriptor_set_values_up_to_date_ |= write_descriptor_set_bits;
-
-  // Bind the new descriptor sets.
-  uint32_t descriptor_sets_needed = (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetCount) - 1;
-  if (!texture_count_vertex && !sampler_count_vertex) {
-    descriptor_sets_needed &= ~(UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesVertex);
-  }
-  if (!texture_count_pixel && !sampler_count_pixel) {
-    descriptor_sets_needed &= ~(UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetTexturesPixel);
-  }
-  uint32_t descriptor_sets_remaining =
-      descriptor_sets_needed & ~current_graphics_descriptor_sets_bound_up_to_date_;
-  uint32_t descriptor_set_index;
-  while (rex::bit_scan_forward(descriptor_sets_remaining, &descriptor_set_index)) {
-    uint32_t descriptor_set_mask_tzcnt =
-        rex::tzcnt(~(descriptor_sets_remaining | ((UINT32_C(1) << descriptor_set_index) - 1)));
-    deferred_command_buffer_.CmdVkBindDescriptorSets(
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        current_guest_graphics_pipeline_layout_->GetPipelineLayout(), descriptor_set_index,
-        descriptor_set_mask_tzcnt - descriptor_set_index,
-        current_graphics_descriptor_sets_ + descriptor_set_index, 0, nullptr);
-    if (descriptor_set_mask_tzcnt >= 32) {
-      break;
-    }
-    descriptor_sets_remaining &= ~((UINT32_C(1) << descriptor_set_mask_tzcnt) - 1);
-  }
-  current_graphics_descriptor_sets_bound_up_to_date_ |= descriptor_sets_needed;
-
-  return true;
-}
-
-uint32_t VulkanCommandProcessor::WriteTransientTextureBindings(
-    bool is_vertex, uint32_t texture_count, uint32_t sampler_count,
-    VkDescriptorSetLayout descriptor_set_layout, const VkDescriptorImageInfo* texture_image_info,
-    const VkDescriptorImageInfo* sampler_image_info,
-    VkWriteDescriptorSet* descriptor_set_writes_out) {
-  assert_true(frame_open_);
-  if (!texture_count && !sampler_count) {
-    return 0;
-  }
-  TextureDescriptorSetLayoutKey texture_descriptor_set_layout_key;
-  texture_descriptor_set_layout_key.texture_count = texture_count;
-  texture_descriptor_set_layout_key.sampler_count = sampler_count;
-  texture_descriptor_set_layout_key.is_vertex = uint32_t(is_vertex);
-  VkDescriptorSet texture_descriptor_set;
-  auto textures_free_it =
-      texture_transient_descriptor_sets_free_.find(texture_descriptor_set_layout_key);
-  if (textures_free_it != texture_transient_descriptor_sets_free_.end() &&
-      !textures_free_it->second.empty()) {
-    texture_descriptor_set = textures_free_it->second.back();
-    textures_free_it->second.pop_back();
-  } else {
-    std::array<VkDescriptorPoolSize, 2> texture_descriptor_counts;
-    uint32_t texture_descriptor_counts_count = 0;
-    if (texture_count) {
-      VkDescriptorPoolSize& texture_descriptor_count =
-          texture_descriptor_counts[texture_descriptor_counts_count++];
-      texture_descriptor_count.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-      texture_descriptor_count.descriptorCount = texture_count;
-    }
-    if (sampler_count) {
-      VkDescriptorPoolSize& texture_descriptor_count =
-          texture_descriptor_counts[texture_descriptor_counts_count++];
-      texture_descriptor_count.type = VK_DESCRIPTOR_TYPE_SAMPLER;
-      texture_descriptor_count.descriptorCount = sampler_count;
-    }
-    assert_not_zero(texture_descriptor_counts_count);
-    texture_descriptor_set = transient_descriptor_allocator_textures_.Allocate(
-        descriptor_set_layout, texture_descriptor_counts.data(), texture_descriptor_counts_count);
-    if (texture_descriptor_set == VK_NULL_HANDLE) {
-      return 0;
-    }
-  }
-  UsedTextureTransientDescriptorSet& used_texture_descriptor_set =
-      texture_transient_descriptor_sets_used_.emplace_back();
-  used_texture_descriptor_set.frame = frame_current_;
-  used_texture_descriptor_set.layout = texture_descriptor_set_layout_key;
-  used_texture_descriptor_set.set = texture_descriptor_set;
-  uint32_t descriptor_set_write_count = 0;
-  if (texture_count) {
-    VkWriteDescriptorSet& descriptor_set_write =
-        descriptor_set_writes_out[descriptor_set_write_count++];
-    descriptor_set_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptor_set_write.pNext = nullptr;
-    descriptor_set_write.dstSet = texture_descriptor_set;
-    descriptor_set_write.dstBinding = 0;
-    descriptor_set_write.dstArrayElement = 0;
-    descriptor_set_write.descriptorCount = texture_count;
-    descriptor_set_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    descriptor_set_write.pImageInfo = texture_image_info;
-    descriptor_set_write.pBufferInfo = nullptr;
-    descriptor_set_write.pTexelBufferView = nullptr;
-  }
-  if (sampler_count) {
-    VkWriteDescriptorSet& descriptor_set_write =
-        descriptor_set_writes_out[descriptor_set_write_count++];
-    descriptor_set_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptor_set_write.pNext = nullptr;
-    descriptor_set_write.dstSet = texture_descriptor_set;
-    descriptor_set_write.dstBinding = texture_count;
-    descriptor_set_write.dstArrayElement = 0;
-    descriptor_set_write.descriptorCount = sampler_count;
-    descriptor_set_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-    descriptor_set_write.pImageInfo = sampler_image_info;
-    descriptor_set_write.pBufferInfo = nullptr;
-    descriptor_set_write.pTexelBufferView = nullptr;
-  }
-  assert_not_zero(descriptor_set_write_count);
-  return descriptor_set_write_count;
-}
-
-VkDescriptorSet VulkanCommandProcessor::FindAdjacentTextureDescriptorSet(
-    bool is_vertex, VkDescriptorSetLayout descriptor_set_layout, uint32_t texture_count,
-    uint32_t sampler_count, const VkDescriptorImageInfo* texture_image_info,
-    const VkDescriptorImageInfo* sampler_image_info) const {
-  const AdjacentTextureDescriptorSetCacheEntry& entry =
-      adjacent_texture_descriptor_set_cache_[is_vertex ? 0 : 1];
-  if (!entry.valid || entry.descriptor_set_layout != descriptor_set_layout ||
-      entry.texture_infos.size() != texture_count || entry.sampler_infos.size() != sampler_count) {
-    return VK_NULL_HANDLE;
-  }
-  for (uint32_t i = 0; i < texture_count; ++i) {
-    if (entry.texture_infos[i].imageView != texture_image_info[i].imageView ||
-        entry.texture_infos[i].imageLayout != texture_image_info[i].imageLayout) {
-      return VK_NULL_HANDLE;
-    }
-  }
-  for (uint32_t i = 0; i < sampler_count; ++i) {
-    if (entry.sampler_infos[i].sampler != sampler_image_info[i].sampler) {
-      return VK_NULL_HANDLE;
-    }
-  }
-  return entry.descriptor_set;
-}
-
-void VulkanCommandProcessor::StoreAdjacentTextureDescriptorSet(
-    bool is_vertex, VkDescriptorSetLayout descriptor_set_layout, VkDescriptorSet descriptor_set,
-    uint32_t texture_count, uint32_t sampler_count, const VkDescriptorImageInfo* texture_image_info,
-    const VkDescriptorImageInfo* sampler_image_info) {
-  AdjacentTextureDescriptorSetCacheEntry& entry =
-      adjacent_texture_descriptor_set_cache_[is_vertex ? 0 : 1];
-  entry.descriptor_set_layout = descriptor_set_layout;
-  entry.descriptor_set = descriptor_set;
-  if (texture_count) {
-    entry.texture_infos.assign(texture_image_info, texture_image_info + texture_count);
-  } else {
-    entry.texture_infos.clear();
-  }
-  if (sampler_count) {
-    entry.sampler_infos.assign(sampler_image_info, sampler_image_info + sampler_count);
-  } else {
-    entry.sampler_infos.clear();
-  }
-  entry.valid = true;
-}
-
-}  // namespace rex::graphics::vulkan
+YЄзЉx-®йЬjЧќўлiєЪ+Љ§j[h‘йЬўйнЧn№зDиµ©hєЪn¶X§zНKКЉ‚€
+ЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉ‚€
+€[љXH€›ЮНЊ[][]Ь€™\ЩX\Ъ›Ъ™XЭ
+‚€
+ЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉ‚€
+€ЫЬ\љYЪЊЊ€™[€[љZЛ€[љYЪИ™\Щ\ќ™Y€
+‚€
+€™[X\ЩY[™\€H”СXЩ[њЩHHЩYHPСS”СH[€H›ЫЭ›Ь€[Ь™H]Z[Л€
+‚€
+ЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉЉ‚€
+‚€
+€[ЩYљYYЫHЫ^KЊЌ€HY\Y›Ь€™VЫYHќ[ќ[YB€
+‹В‚€Ъ[ЫYH[ЫЬљ]O‚€Ъ[ЫYH\њ^O‚€Ъ[ЫYH]ЫZXП‚€Ъ[ЫYHљ]‚€Ъ[ЫYHЪ›Ы›П‚€Ъ[ЫYHЬЭ[ќ‚€Ъ[ЫYHЬЭљ[™П‚€Ъ[ЫYH]\]ЬЏ‚€Ъ[ЫYH]]^‚€Ъ[ЫYHЭљ[™П‚€Ъ[ЫYHЭљ[™ЧЭљY]П‚€Ъ[ЫYH\O‚€Ъ[ЫYH][]O‚€Ъ[ЫYH™XЭЬЏ‚‚€Ъ[ЫYHФT•‹СЫЫ[™ХФЬ‹љ‚€Ъ[ЫYHЫЫ[™ЛФX›XЛФЪY\“[™Лљ‚€Ъ[ЫYH™^Ш\ЬЩ\ќљ‚€Ъ[ЫYH™^ШЭ\‹љ‚€Ъ[ЫYH™^Щ™Лљ‚€Ъ[ЫYH™^Ъ\Ъљ‚€Ъ[ЫYH™^ЫЩЩЪ[™Лљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЩ]ЧШЫЫ\\™Kљ‚€Ъ[ЫYH™^ЫX]љ‚€Ъ[ЫYH™^ЩЬ\XЬЛЭ][Щ]Лљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЩ›YЬЛљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЬ\[[™KЬЪY\‹ЬЪY\‹љ‚€Ъ[ЫYH™^ЩЬ\XЬЛЬ\[[™KЬЪY\‹ЬЬ\ќ—Э[њЫ]Ь‹љ‚€Ъ[ЫYH™^ЩЬ\XЬЛЬ™YЪ\Э\њЛљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЭќ[Ш[‹ШЫЫ[X[™Ь›ШЩ\ЬЫЬ‹љ‚€Ъ[ЫYH™^ЩЬ\XЬЛЭќ[Ш[‹Ь\[[™WШШXЪKљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЭќ[Ш[‹Ь™[™\—Э\™Щ]ШШXЪKљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЭќ[Ш[‹ЬЪY\‹љ‚€Ъ[ЫYH™^ЩЬ\XЬЛЭќ[Ш[‹ЬЪ\™YЫY[[ЬћKљ‚€Ъ[ЫYH™^ЩЬ\XЬЛЮ[›ЬЛљ‚€Ъ[ЫYH™^ЪЩ\›™[Ю›ЮЬ››ЭљY[Лљ‚€Ъ[ЫYH™^Ь\™‹ШЫЭ[ќ\‹љ‚€Ъ[ЫYH™^ЬЮ\Э[KЪЩ\›™[ЬЭ]Kљ‚€Ъ[ЫYH™^Э\\Лљ‚€Ъ[ЫYH™^ЫY[[ЬћKЭ][Лљ‚€Ъ[ЫYH™^ЭZKЩ›YЬЛљ‚€Ъ[ЫYH™^ЭZKЭќ[Ш[‹Ь™\Щ[ќ\‹љ‚€Ъ[ЫYH™^ЭZKЭќ[Ш[‹Э][љ‚‚‹ЛИYЪ[‹Z[ќ\›[ЫИ›Э[™\€[ЫYKЬ™^‚€Ъ[ЫYH™]ЧШЩ[њЭ\Лљ‚€Ъ[ЫYH›]]™WЬ™\ЪY[ЮKљ‚‚‹ЛИYШXЮHXЪЩ[™ЫЫ\]Xљ[]H[X\Щ\И›Ь€Ъ\™Y™XYXЪИЫЫќ›ЫЛ‚”‘VХђT—СQ’S‘WР“УУ
+ЬWЭ[Y\Э[\Ь]Y\љY\Л[ЩK‘ФH‹€“YX\Э\™HФH[YH\€њ[YHЪ]HZ\€Щ€ќ[Ш[€[Y\Э[\]Y\љY\И[™‚€њX›\Ъ]\ИHЬWЩњ[YWЭ\ИЫЭ[ќ\‹€]™\ћHЭ\€ЫЭ[ќ\€\™H\И‚€ђФK\ЪYKЪXЪЫ€[€TH\ИЫ›H[€HXЭ\™K€ЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљФ™\]Z\™\Ф™\Э\ќ
+NВ”‘VХђT—СQ’S‘WР“УУ
+ЬWЬШ[\\—ЬЩ]Ь™]\ЩK[ЩK‘ФKХќ[Ш[€‹€‘VT’SQS•SH™]\ЩH[€Y[ќXШ[YXЩ[ќШ[\\€Щ]Ъ][€HЭX›Z\ЬЪ[Ы€ЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљТЭ™[ШY
+NВ”‘VХђT—СQ’S‘WР“УУ
+€ЬWЭ^\™WЩ\ШЬљ\Ь—ЬЩ]ШYXЩ[ќЬ™]\ЩK[ЩK‘ФKХќ[Ш[€‹€‘VT’SQS•SH™]\ЩHH[[YYX][H™XЩY[™И^XЭ^\™KЬШ[\\€\ШЬљ\Ь€Щ]ЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљФ™\]Z\™\Ф™\Э\ќ
+NВ”‘VХђT—СQ’S‘WР“УУ
+ќ[Ш[—Ь™XYXЪЧЬ™\ЫЫ™K[ЩK‘ФKХќ[Ш[€‹€”™XY™[™\‹]Л]^\™H™\Э[ИЫ€HФHЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљТЭ™[ШY
+NВ‚”‘VХђT—СQ’S‘WР“УУ
+ќ[Ш[—Ь™XYXЪЧЫY[Y^Ьќ[ЩK‘ФKХќ[Ш[€‹€”™XY]HЬљ][€ћHY[[ЬћH^Ьќ[€ЪY\њИЫ€HФHЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљТЭ™[ШY
+NВ‚”‘VХђT—СQ’S‘WР“УУ
+ќ[Ш[—Ш\Ю[ЧЬЪЪ\Ъ[ЫЫ\]WЩњ[Y\ЛќYK‘ФKХќ[Ш[€‹€•Ъ[€\Ю[ИЪY\€ЫЫ\[][Ы€\И[X›YЪЪ\™\Щ[ќ[™Ињ[Y\И]‚€ќ\ЩYXЩZЫ\€\[[™\ИИ]›ЪYљ\ЪX›H›\Ъ[™ИЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљТЭ™[ШY
+NВ‚”‘VХђT—СQ’S‘WР“УУ
+ќ[Ш[—ЬЭX›Z]ЫЫ—Ьљ[X\ћWШќY™™\—Щ[™ќYK‘ФKХќ[Ш[€‹€”ЭX›Z]ЫЫ[X[™ќY™™\€Ъ[€Mљ[X\ћHќY™™\€[™ИЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљТЭ™[ШY
+NВ‚”‘VХђT—СQ’S‘WР“УУ
+ќ[Ш[—Щ[[ZXЧЬ™[™\љ[™ЛќYK‘ФKХќ[Ш[€‹€•\ЩH’ЧТТ—Щ[[ZXЧЬ™[™\љ[™И›Ь€ќ[Ш[€ФH[][][Ы€Ъ[€Э\ЬќYћHH‚€™]љXЩH
+[ИXЪИИ™[™\€\ЬЩ\ИЭ\ќЪ\ЩJHЉB€›Y™XЮXЫJ™^ЋЭ\ЋЋ“Y™XЮXЫNЋљТЭ™[ШY
+NВ‚€Ъ[ЫYH™^Ь]›Ь›Kљ‚€ЪY€‘VФU“Ф“WФХТUТ€Ъ[ЫYH™^ЩЬ\XЬЛЬЭЪ]ЪЩЬWЭ[Z[™Лљ‚‹ЛИЫЭ[ќ\њИ[™KР€ЪЪ\ИЩ€HЭЪ]Ъ›Щљ[\€
+ЭЪ]ЪЬ\™‹Ь
+K‚™^\›€ђИ€›ЪY™^ЭЪ]Ъ\™ђЫЭ[ќ
+[њЪYЫ™YY
+NВ™^\›€ђИ€›ЪY™^ЭЪ]Ъ\™ђY
+[њЪYЫ™YYZ[ќЌЭ[YJNВ™^\›€ђИ€›ЫЫ™^ЭЪ]Ъ\™”ЪЪ\
+[њЪYЫ™Yљ]
+NВ€Щ[™Y‚‚›[Y\ЬXЩH™^Ћ™Ь\XЬОЋќќ[Ш[€В‚›[Y\ЬXЩHВ‚‹ЛИќYHЪ[€]ЬИЪЭ[™H›ЬY›Ь€HЭ\™\ЬЪ[Ы€ЬXЫK€™Yќ\Щ\ИВ‹ЛИ[™ШYЩH[Ы™ЬЪYH]]™H™\ЪY[ЮKЪXЪ]ЫЭ[Ъ[[ќH[ќ[Y]K‚›ЫЫ]]™TЭ\™\ЬС]ЬРXЭ]™J
+HВ€Y€
+T‘VХђT—ССU
+ЬWЫ]]™WЬЭ\™\ЬЧЩ]ЬКJHВ€™]\›€[ЩNВ€B€Y€
+‘VХђT—ССU
+ЬWЫ]]™WЬ™\ЪY[ЮJJHВ€Э]XИ›ЫЫ™Yќ\Ш[ЫЩЩЩYH[ЩNВ€Y€
+\™Yќ\Ш[ЫЩЩЩY
+HВ€™Yќ\Ш[ЫЩЩЩYHќYNВ€‘VФWХРT“Љ™ЬWЫ]]™WЬЭ\™\ЬЧЩ]ЬИYЫ›Ь™Y€]Ш[››Э™HЫЫXљ[™YЪ]‚€™ЬWЫ]]™WЬ™\ЪY[ЮHЉNВ€B€™]\›€[ЩNВ€B€™]\›€ќYNВџB‚Ы\ЬИЩ[њЭ\С]Р][\В€X›XО‚€^XЪ]Щ[њЭ\С]Р][\
+]ЧШЩ[њЭ\ОЋ”™XЫЬ™\Љ€™XЫЬ™\ЉH€™XЫЬ™\—К™XЫЬ™\ЉHЯB€ђЩ[њЭ\С]Р][\
+
+HВ€Y€
+™XЫЬ™\—И	‰€XЫЫ[Z]YКHВ€™XЫЬ™\—ЛO“›ЭQ]ФЪЪ\Y
+
+NВ€B€B€›ЪYЫЫ[Z]
+
+HИЫЫ[Z]YИHќYNИB‚€љ]]N‚€]ЧШЩ[њЭ\ОЋ”™XЫЬ™\Љ€™XЫЬ™\—ОВ€›ЫЫЫЫ[Z]YИH[ЩNВџNВ‚™]ЧШЩ[њЭ\ОЋ”ЪY\”™XЫЬ™XZЩPЩ[њЭ\ФЪY\”™XЫЬ™
+ЫЫњЭќ[Ш[”ЪY\‰€ЪY\ЉHВ€]ЧШЩ[њЭ\ОЋ”ЪY\”™XЫЬ™™XЫЬ™ЯNВ€ЫЫњЭЪY\ЋЋђЫЫњЭ[ќ™YЪ\Э\“X\	€ЫЫњЭ[ќИHЪY\‹ЫЫњЭ[ќЬ™YЪ\Э\—ЫX\
+
+NВ€™XЫЬ™ќXЫЩWЪ\ЪHЪY\‹ќXЫЩWЩ]WЪ\Ъ
+
+NВ€™XЫЬ™њЪY\—Э\HHZ[ќЭ
+ЪY\‹ќ\J
+JNВ€™XЫЬ™›Y[Y^ЬќHЪY\‹›Y[Y^ЬќЩSWЭЬљ][Љ
+HOHВ€™XЫЬ™ќ™\ќ^Шљ[™[™ЧШЫЭ[ќB€Z[ќM—Э
+ЭЋ›Z[ЏЪ^™WЭЉЪY\‹ќ™\ќ^Шљ[™[™ЬК
+KњЪ^™J
+KRS•M—УPV
+JNВ€™XЫЬ™ќXЫЩWЩЫЬ™ШЫЭ[ќHZ[ќМ—Э
+ЪY\‹ќXЫЩWЩЫЬ™ШЫЭ[ќ
+
+JNВ€™XЫЬ™™›Ш]ШЫЭ[ќHЫЫњЭ[ќЛ™›Ш]ШЫЭ[ќВ€ЭЋ›Y[XЬJ™XЫЬ™™›Ш]Шљ]X\ЫЫњЭ[ќЛ™›Ш]Шљ]X\Ъ^™[ЩЉ™XЫЬ™™›Ш]Шљ]X\
+JNВ€ЭЋ›Y[XЬJ™XЫЬ™›ЫЫШљ]X\ЫЫњЭ[ќЛ›ЫЫШљ]X\Ъ^™[ЩЉ™XЫЬ™›ЫЫШљ]X\
+JNВ€™XЫЬ™›ЫЬШљ]X\HЫЫњЭ[ќЛ›ЫЬШљ]X\В€ЭЋ›Y[XЬJ™XЫЬ™ќ™\ќ^Щ™]ЪШљ]X\ЫЫњЭ[ќЛќ™\ќ^Щ™]ЪШљ]X\€Ъ^™[ЩЉ™XЫЬ™ќ™\ќ^Щ™]ЪШљ]X\
+JNВ€™XЫЬ™ќ^\™WЫX\ЪИHЪY\‹‘Щ]\ЩY^\™SX\ЪРYќ\•[њЫ][ЫЉ
+NВ‚€ЛИ\Ъ^XЪ]]ЪYљY[ИЫ™HћHЫ™HЫИ›ИЬЭY[™ИЬ€[ќ[HЪYШ[‚€ЛИ[ќ\€HШ[›ЫљXШ[XЫ\™Y[^[Э]Y[ќ]K‚€ЧЬЭ]WЭ\ЪЬЭ]NВ€ЧНЌљ]ЧЬ™\Щ]
+	љ\ЪЬЭ]JNВ€›Ь€
+ЫЫњЭЪY\ЋЋ•™\ќ^љ[™[™Й€љ[™[™И€ЪY\‹ќ™\ќ^Шљ[™[™ЬК
+JHВ€ЫЫњЭZ[ќМ—Э™]ЪШЫЫњЭ[ќHљ[™[™Л™™]ЪШЫЫњЭ[ќВ€ЫЫњЭZ[ќМ—ЭЭљYWЭЫЬ™ИHљ[™[™ЛњЭљYWЭЫЬ™ОВ€ЫЫњЭZ[ќМ—Э]љXќ]WШЫЭ[ќHZ[ќМ—Э
+љ[™[™Л]љXќ]\ЛњЪ^™J
+JNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	™™]ЪШЫЫњЭ[ќЪ^™[ЩЉ™]ЪШЫЫњЭ[ќ
+JNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	њЭљYWЭЫЬ™ЛЪ^™[ЩЉЭљYWЭЫЬ™КJNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	]љXќ]WШЫЭ[ќЪ^™[ЩЉ]љXќ]WШЫЭ[ќ
+JNВ€›Ь€
+ЫЫњЭЪY\ЋЋ•™\ќ^љ[™[™ОЋђ]љXќ]I€]љXќ]H€љ[™[™Л]љXќ]\КHВ€ЫЫњЭ\њЩY™\ќ^™]Ъ[њЭќXЭ[ЫЋЋђ]љXќ]\Й€^[Э]H]љXќ]K™™]ЪЪ[њЭ‹]љXќ]\ОВ€ЫЫњЭZ[ќМ—Э]WЩ›Ь›X]HZ[ќМ—Э
+^[Э]™]WЩ›Ь›X]
+NВ€ЫЫњЭZ[ќМ—ЭЪYЫ™YЬ™—Ы[ЩHHZ[ќМ—Э
+^[Э]њЪYЫ™YЬ™—Ы[ЩJNВ€ЫЫњЭZ[ќЭ›YЬИHZ[ќЭ
+^[Э]љ\ЧЪ[™^Ь›Э[™Y
+H€
+Z[ќЭ
+^[Э]љ\ЧЬЪYЫ™Y
+HJH€
+Z[ќЭ
+^[Э]љ\ЧЪ[ќYЩ\ЉHЉNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	™]WЩ›Ь›X]Ъ^™[ЩЉ]WЩ›Ь›X]
+JNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	›^[Э]›Щ™њЩ]Ъ^™[ЩЉ^[Э]›Щ™њЩ]
+JNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	›^[Э]њЭљYKЪ^™[ЩЉ^[Э]њЭљYJJNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	›^[Э]™^ШYќ\ЭЪ^™[ЩЉ^[Э]™^ШYќ\Э
+JNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	›^[Э]њ™Y™]ЪШЫЭ[ќЪ^™[ЩЉ^[Э]њ™Y™]ЪШЫЭ[ќ
+JNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	њЪYЫ™YЬ™—Ы[ЩKЪ^™[ЩЉЪYЫ™YЬ™—Ы[ЩJJNВ€ЧНЌљ]ЧЭ\]J	љ\ЪЬЭ]K	™›YЬЛЪ^™[ЩЉ›YЬКJNВ€B€B€™XЫЬ™ќ™\ќ^Ы^[Э]Ъ\ЪHЧНЌљ]ЧЩYЩ\Э
+	љ\ЪЬЭ]JNВ€™]\›€™XЫЬ™ВџB‚‹ЛИЫЫ[™ИY][ќZ[Z[€™\ЫЭ\ЩH[Z]Л‚ЫЫњЭ^€ќZ[[”™\ЫЭ\ЩHСЫЫ[™СY][ќZ[[”™\ЫЭ\ЩHHВ€К€›X^YЪИH
+‹ИМ‹€К€›X^Ы\[™\ИH
+‹И‹€К€›X^^\™U[љ]ИH
+‹ИМ‹€К€›X^^\™PЫЫЬ™ИH
+‹ИМ‹€К€›X^™\ќ^]љXњИH
+‹ИЌ€К€›X^™\ќ^[љY›Ь›PЫЫ\Ы™[ќИH
+‹ИM‹€К€›X^\ћZ[™С›Ш]ИH
+‹ИЌ€К€›X^™\ќ^^\™R[XYЩU[љ]ИH
+‹ИМ‹€К€›X^ЫЫXљ[™Y^\™R[XYЩU[љ]ИH
+‹И€К€›X^^\™R[XYЩU[љ]ИH
+‹ИМ‹€К€›X^њYЫY[ќ[љY›Ь›PЫЫ\Ы™[ќИH
+‹ИM‹€К€›X^]РќY™™\њИH
+‹ИМ‹€К€›X^™\ќ^[љY›Ь›U™XЭЬњИH
+‹ИLЋ€К€›X^\ћZ[™Х™XЭЬњИH
+‹И€К€›X^њYЫY[ќ[љY›Ь›U™XЭЬњИH
+‹ИM‹€К€›X^™\ќ^Э]]™XЭЬњИH
+‹ИM‹€К€›X^њYЫY[ќ[њ]™XЭЬњИH
+‹ИMK€К€›Z[”›ЩЬ[U^[Щ™њЩ]H
+‹ИN€К€›X^›ЩЬ[U^[Щ™њЩ]H
+‹ИЛ€К€›X^Ы\\Э[Щ\ИH
+‹И€К€›X^ЫЫ\]UЫЬљСЬ›Э\ЫЭ[ќH
+‹ИЌMLНK€К€›X^ЫЫ\]UЫЬљСЬ›Э\ЫЭ[ќHH
+‹ИЌMLНK€К€›X^ЫЫ\]UЫЬљСЬ›Э\ЫЭ[ќ€H
+‹ИЌMLНK€К€›X^ЫЫ\]UЫЬљСЬ›Э\Ъ^™VH
+‹ИLЌ€К€›X^ЫЫ\]UЫЬљСЬ›Э\Ъ^™VHH
+‹ИLЌ€К€›X^ЫЫ\]UЫЬљСЬ›Э\Ъ^™V€H
+‹ИЌ€К€›X^ЫЫ\]U[љY›Ь›PЫЫ\Ы™[ќИH
+‹ИLЌ€К€›X^ЫЫ\]U^\™R[XYЩU[љ]ИH
+‹ИM‹€К€›X^ЫЫ\]R[XYЩU[љY›Ь›\ИH
+‹И€К€›X^ЫЫ\]P]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^ЫЫ\]P]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹ИK€К€›X^\ћZ[™РЫЫ\Ы™[ќИH
+‹ИЊ€К€›X^™\ќ^Э]]ЫЫ\Ы™[ќИH
+‹ИЌ€К€›X^Щ[ЫY]ћR[њ]ЫЫ\Ы™[ќИH
+‹ИЌ€К€›X^Щ[ЫY]ћSЭ]]ЫЫ\Ы™[ќИH
+‹ИLЋ€К€›X^њYЫY[ќ[њ]ЫЫ\Ы™[ќИH
+‹ИLЋ€К€›X^[XYЩU[љ]ИH
+‹И€К€›X^ЫЫXљ[™Y[XYЩU[љ]Р[™њYЫY[ќЭ]]ИH
+‹И€К€›X^ЫЫXљ[™YЪY\“Э]]™\ЫЭ\Щ\ИH
+‹И€К€›X^[XYЩTШ[\\ИH
+‹И€К€›X^™\ќ^[XYЩU[љY›Ь›\ИH
+‹И€К€›X^\ЬРЫЫќ›Ы[XYЩU[љY›Ь›\ИH
+‹И€К€›X^\ЬС][X][Ы’[XYЩU[љY›Ь›\ИH
+‹И€К€›X^Щ[ЫY]ћR[XYЩU[љY›Ь›\ИH
+‹И€К€›X^њYЫY[ќ[XYЩU[љY›Ь›\ИH
+‹И€К€›X^ЫЫXљ[™Y[XYЩU[љY›Ь›\ИH
+‹И€К€›X^Щ[ЫY]ћU^\™R[XYЩU[љ]ИH
+‹ИM‹€К€›X^Щ[ЫY]ћSЭ]]™\ќXЩ\ИH
+‹ИЌM‹€К€›X^Щ[ЫY]ћUЭ[Э]]ЫЫ\Ы™[ќИH
+‹ИLЌ€К€›X^Щ[ЫY]ћU[љY›Ь›PЫЫ\Ы™[ќИH
+‹ИLЌ€К€›X^Щ[ЫY]ћU\ћZ[™РЫЫ\Ы™[ќИH
+‹ИЌ€К€›X^\ЬРЫЫќ›Ы[њ]ЫЫ\Ы™[ќИH
+‹ИLЋ€К€›X^\ЬРЫЫќ›ЫЭ]]ЫЫ\Ы™[ќИH
+‹ИLЋ€К€›X^\ЬРЫЫќ›Ы^\™R[XYЩU[љ]ИH
+‹ИM‹€К€›X^\ЬРЫЫќ›Ы[љY›Ь›PЫЫ\Ы™[ќИH
+‹ИLЌ€К€›X^\ЬРЫЫќ›ЫЭ[Э]]ЫЫ\Ы™[ќИH
+‹ИM‹€К€›X^\ЬС][X][Ы’[њ]ЫЫ\Ы™[ќИH
+‹ИLЋ€К€›X^\ЬС][X][Ы“Э]]ЫЫ\Ы™[ќИH
+‹ИLЋ€К€›X^\ЬС][X][Ы•^\™R[XYЩU[љ]ИH
+‹ИM‹€К€›X^\ЬС][X][Ы•[љY›Ь›PЫЫ\Ы™[ќИH
+‹ИLЌ€К€›X^\ЬФ]ЪЫЫ\Ы™[ќИH
+‹ИLЊ€К€›X^]Ъ™\ќXЩ\ИH
+‹ИМ‹€К€›X^\ЬСЩ[“]™[H
+‹ИЌ€К€›X^љY]ЬЬќИH
+‹ИM‹€К€›X^™\ќ^]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^\ЬРЫЫќ›Ы]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^\ЬС][X][Ыђ]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^Щ[ЫY]ћP]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^њYЫY[ќ]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^ЫЫXљ[™Y]ЫZXРЫЭ[ќ\њИH
+‹И€К€›X^]ЫZXРЫЭ[ќ\ђљ[™[™ЬИH
+‹ИK€К€›X^™\ќ^]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹И€К€›X^\ЬРЫЫќ›Ы]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹И€К€›X^\ЬС][X][Ыђ]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹И€К€›X^Щ[ЫY]ћP]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹И€К€›X^њYЫY[ќ]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹ИK€К€›X^ЫЫXљ[™Y]ЫZXРЫЭ[ќ\ђќY™™\њИH
+‹ИK€К€›X^]ЫZXРЫЭ[ќ\ђќY™™\”Ъ^™HH
+‹ИMЊО€К€›X^[њЩ›Ь›Q™YYXЪРќY™™\њИH
+‹И€К€›X^[њЩ›Ь›Q™YYXЪТ[ќ\›X]™YЫЫ\Ы™[ќИH
+‹ИЌ€К€›X^Э[\Э[Щ\ИH
+‹И€К€›X^ЫЫXљ[™YЫ\[™Э[\Э[Щ\ИH
+‹И€К€›X^Ш[\\ИH
+‹И€К€›X^Y\ЪЭ]]™\ќXЩ\У•€H
+‹ИЌM‹€К€›X^Y\ЪЭ]]љ[Z]]™\У•€H
+‹ИLL‹€К€›X^Y\ЪЫЬљСЬ›Э\Ъ^™VУ•€H
+‹ИМ‹€К€›X^Y\ЪЫЬљСЬ›Э\Ъ^™VWУ•€H
+‹ИK€К€›X^Y\ЪЫЬљСЬ›Э\Ъ^™V—У•€H
+‹ИK€К€›X^\ЪХЫЬљСЬ›Э\Ъ^™VУ•€H
+‹ИМ‹€К€›X^\ЪХЫЬљСЬ›Э\Ъ^™VWУ•€H
+‹ИK€К€›X^\ЪХЫЬљСЬ›Э\Ъ^™V—У•€H
+‹ИK€К€›X^Y\ЪљY]РЫЭ[ќ•€H
+‹И€К€›X^X[ЫЭ\ЩQ]РќY™™\њСVH
+‹ИK€К€›[Z]ИH
+‹В€В€К€››Ы’[™XЭ]™Q›Ь“ЫЬИH
+‹ИK€К€ќЪ[SЫЬИH
+‹ИK€К€™ХЪ[SЫЬИH
+‹ИK€К€™Щ[™\[[љY›Ь›R[™^[™ИH
+‹ИK€К€™Щ[™\[]љXќ]SX]љ^™XЭЬ’[™^[™ИH
+‹ИK€К€™Щ[™\[\ћZ[™Т[™^[™ИH
+‹ИK€К€™Щ[™\[Ш[\\’[™^[™ИH
+‹ИK€К€™Щ[™\[\љXX›R[™^[™ИH
+‹ИK€К€™Щ[™\[ЫЫњЭ[ќX]љ^™XЭЬ’[™^[™ИH
+‹ИK€KџNВ‚ЫЫњЭЪ\Љ€Щ]ЭШ\ћXPЫЫ\]TЫЭ\ЩJ›ЫЫ^™[YWЬ]X[]JHВ€™]\›€^™[YWЬ]X[]HИ€ЉЭ™\њЪ[Ы€L›^[Э]
+ШШ[ЬЪ^™WЮHM‹ШШ[ЬЪ^™WЮHHШШ[ЬЪ^™WЮ€HJH[ЋВ‚›^[Э]
+\ЪШЫЫњЭ[ќ
+H[љY›Ь›HP\QШ[[XT[\ЫЫњЭ[ќИВ€]™XМ€WЩћXWЬЪ^™NВ€™XМ€WЩћXWЬЪ^™WЪ[ќЋВџNВ‚›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›HШ[\\Њ‘WЩћXWЬЫЭ\ЩNВ›^[Э]
+Щ]HKљ[™[™ИH™ШЊLШLЉHЬљ][Ы›H[љY›Ь›H[XYЩL‘WЩћXWЩ\ЭВ‚ЫЫњЭ™XМИУ[XUЩZYЪИH™XМКЊЋNKЌNЛЊLM
+NВЫЫњЭ›Ш]СYЩU™\ЪЫHЊЊОВЫЫњЭ›Ш]СYЩU™\ЪЫZ[€HЊМLЋВЫЫњЭ›Ш]ФЬ[“X^HL‹ЊВЫЫњЭ›Ш]С\”™YXЩS][HЊLЌNВЫЫњЭ›Ш]С\”™YXЩSZ[€HKЊИLЋЊВ‚™›Ш]Ш[\S[XJ™XМ€]ЉHВ€™]\›€^\™SЩ
+WЩћXWЬЫЭ\ЩK]‹Њ
+KNВџB‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[HЫСЫШ[[ќ›ШШ][Ы’QћNВ€Y€
+[ћJЬ™X]\•[‘\]X[
+^[WЩћXWЬЪ^™JJJHВ€™]\›ЋВ€B‚€™XМ€]€H
+™XМЉ^[
+H
+И™XМЉЌJJH
+€WЩћXWЬЪ^™WЪ[ќЋВ€™XМ€^[HWЩћXWЬЪ^™WЪ[ќЋВ€™XН™Ш›HH^\™SЩ
+WЩћXWЬЫЭ\ЩK]‹Њ
+NВ‚€›Ш][XSHH™Ш›KNВ€›Ш][XS•ИHШ[\S[XJ]€
+И™XМЉ]^[ћ]^[ћJJNВ€›Ш][XS‘HHШ[\S[XJ]€
+И™XМЉ^[ћ]^[ћJJNВ€›Ш][XTХИHШ[\S[XJ]€
+И™XМЉ]^[ћ^[ћJJNВ€›Ш][XTСHHШ[\S[XJ]€
+И™XМЉ^[ћ^[ћJJNВ‚€›Ш][XSZ[€HZ[Љ[XSKZ[ЉZ[Љ[XS•Л[XS‘JKZ[Љ[XTХЛ[XTСJJJNВ€›Ш][XSX^HX^
+[XSKX^
+X^
+[XS•Л[XS‘JKX^
+[XTХЛ[XTСJJJNВ€›Ш][XT[™ЩHH[XSX^H[XSZ[ЋВ‚€™XМИ™\Э[H™Ш›Kњ™ШЋВ€Y€
+[XT[™ЩHЏHX^
+СYЩU™\ЪЫZ[‹[XSX^
+€СYЩU™\ЪЫ
+JHВ€™XМ€\ЋВ€\‹ћHJ
+[XS•И
+И[XS‘JHH
+[XTХИ
+И[XTСJJNВ€\‹ћHH
+
+[XS•И
+И[XTХКHH
+[XS‘H
+И[XTСJJNВ‚€›Ш]\”™YXЩHHX^
+€
+[XS•И
+И[XS‘H
+И[XTХИ
+И[XTСJH
+€
+ЊЌH
+€С\”™YXЩS][
+K€С\”™YXЩSZ[ЉNВ€›Ш]Ь\“Z[€HKЊИ
+Z[ЉXњК\‹ћ
+KXњК\‹ћJJH
+И\”™YXЩJNВ€\€HЫ[\
+\€
+€Ь\“Z[‹™XМЉZФЬ[“X^
+K™XМЉФЬ[“X^
+JH
+€^[В‚€™XМИ™ШђHB€ЌH
+‚€
+^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€
+KЊИЛЊHЌJKЊ
+Kњ™Ш€
+В€^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€
+‹ЊИЛЊHЌJKЊ
+Kњ™ШЉNВ€™XМИ™Шђ€B€™ШђH
+€ЌH
+В€ЊЌH
+‚€
+^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€LЌKЊ
+Kњ™Ш€
+В€^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€ЌKЊ
+Kњ™ШЉNВ€›Ш][XP€HЭ
+™Шђ‹У[XUЩZYЪКNВ€™\Э[H
+[XP€[XSZ[€[XP€€[XSX^
+HИ™ШђH€™ШђЋВ€B‚€[XYЩTЭЬ™JWЩћXWЩ\Э]™XМЉ^[
+K™XН
+™\Э[KЊ
+JNВџBЉH‚€€€ЉЭ™\њЪ[Ы€L›^[Э]
+ШШ[ЬЪ^™WЮHM‹ШШ[ЬЪ^™WЮHHШШ[ЬЪ^™WЮ€HJH[ЋВ‚›^[Э]
+\ЪШЫЫњЭ[ќ
+H[љY›Ь›HP\QШ[[XT[\ЫЫњЭ[ќИВ€]™XМ€WЩћXWЬЪ^™NВ€™XМ€WЩћXWЬЪ^™WЪ[ќЋВџNВ‚›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›HШ[\\Њ‘WЩћXWЬЫЭ\ЩNВ›^[Э]
+Щ]HKљ[™[™ИH™ШЊLШLЉHЬљ][Ы›H[љY›Ь›H[XYЩL‘WЩћXWЩ\ЭВ‚ЫЫњЭ™XМИУ[XUЩZYЪИH™XМКЊЋNKЌNЛЊLM
+NВЫЫњЭ›Ш]СYЩU™\ЪЫHЊMЌЋВЫЫњЭ›Ш]СYЩU™\ЪЫZ[€HЊМОВЫЫњЭ›Ш]ФЬ[“X^HЊВЫЫњЭ›Ш]С\”™YXЩS][HЊLЌNВЫЫњЭ›Ш]С\”™YXЩSZ[€HKЊИLЋЊВ‚™›Ш]Ш[\S[XJ™XМ€]ЉHВ€™]\›€^\™SЩ
+WЩћXWЬЫЭ\ЩK]‹Њ
+KNВџB‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[HЫСЫШ[[ќ›ШШ][Ы’QћNВ€Y€
+[ћJЬ™X]\•[‘\]X[
+^[WЩћXWЬЪ^™JJJHВ€™]\›ЋВ€B‚€™XМ€]€H
+™XМЉ^[
+H
+И™XМЉЌJJH
+€WЩћXWЬЪ^™WЪ[ќЋВ€™XМ€^[HWЩћXWЬЪ^™WЪ[ќЋВ€™XН™Ш›HH^\™SЩ
+WЩћXWЬЫЭ\ЩK]‹Њ
+NВ‚€›Ш][XSHH™Ш›KNВ€›Ш][XS•ИHШ[\S[XJ]€
+И™XМЉ]^[ћ]^[ћJJNВ€›Ш][XS‘HHШ[\S[XJ]€
+И™XМЉ^[ћ]^[ћJJNВ€›Ш][XTХИHШ[\S[XJ]€
+И™XМЉ]^[ћ^[ћJJNВ€›Ш][XTСHHШ[\S[XJ]€
+И™XМЉ^[ћ^[ћJJNВ‚€›Ш][XSZ[€HZ[Љ[XSKZ[ЉZ[Љ[XS•Л[XS‘JKZ[Љ[XTХЛ[XTСJJJNВ€›Ш][XSX^HX^
+[XSKX^
+X^
+[XS•Л[XS‘JKX^
+[XTХЛ[XTСJJJNВ€›Ш][XT[™ЩHH[XSX^H[XSZ[ЋВ‚€™XМИ™\Э[H™Ш›Kњ™ШЋВ€Y€
+[XT[™ЩHЏHX^
+СYЩU™\ЪЫZ[‹[XSX^
+€СYЩU™\ЪЫ
+JHВ€™XМ€\ЋВ€\‹ћHJ
+[XS•И
+И[XS‘JHH
+[XTХИ
+И[XTСJJNВ€\‹ћHH
+
+[XS•И
+И[XTХКHH
+[XS‘H
+И[XTСJJNВ‚€›Ш]\”™YXЩHHX^
+€
+[XS•И
+И[XS‘H
+И[XTХИ
+И[XTСJH
+€
+ЊЌH
+€С\”™YXЩS][
+K€С\”™YXЩSZ[ЉNВ€›Ш]Ь\“Z[€HKЊИ
+Z[ЉXњК\‹ћ
+KXњК\‹ћJJH
+И\”™YXЩJNВ€\€HЫ[\
+\€
+€Ь\“Z[‹™XМЉZФЬ[“X^
+K™XМЉФЬ[“X^
+JH
+€^[В‚€™XМИ™ШђHB€ЌH
+‚€
+^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€
+KЊИЛЊHЌJKЊ
+Kњ™Ш€
+В€^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€
+‹ЊИЛЊHЌJKЊ
+Kњ™ШЉNВ€™XМИ™Шђ€B€™ШђH
+€ЌH
+В€ЊЌH
+‚€
+^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€LЌKЊ
+Kњ™Ш€
+В€^\™SЩ
+WЩћXWЬЫЭ\ЩK]€
+И\€
+€ЌKЊ
+Kњ™ШЉNВ€›Ш][XP€HЭ
+™Шђ‹У[XUЩZYЪКNВ€™\Э[H
+[XP€[XSZ[€[XP€€[XSX^
+HИ™ШђH€™ШђЋВ€B‚€[XYЩTЭЬ™JWЩћXWЩ\Э]™XМЉ^[
+K™XН
+™\Э[KЊ
+JNВџBЉHЋВџB‚ЫЫњЭЪ\Љ€Щ]ЭШ\\QШ[[XUX›T^[”ЭШ\ЫЭ\ЩJ
+HВ€™]\›€€ЉЭ™\њЪ[Ы€L›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›H^\™PќY™™\€WШ\WЩШ[[XWЬ[\В›^[Э]
+Щ]HKљ[™[™ИH
+H[љY›Ь›H^\™L‘WШ\WЩШ[[XWЬЫЭ\ЩNВ‚›^[Э]
+ШШ][Ы€H
+HЭ]™XНWШ\WЩШ[[XWШЫЫЬЋВ‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[H]™XМЉЫСњYРЫЫЬ™ћJNВ€]™XМИЫЭ\ЩHH]™XМК^[™]Ъ
+WШ\WЩШ[[XWЬЫЭ\ЩK^[
+Kњ™Ш€
+€ЌMKЊ
+И™XМКЌJJK™ЬЋВ€WШ\WЩШ[[XWШЫЫЬ€H™XН
+€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩKњЉJK‹€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩK™КJK™Л€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩKЉJKњ‹€KЊ
+NВџBЉHЋВџB‚ЫЫњЭЪ\Љ€Щ]ЭШ\\QШ[[XTЫ^[”ЭШ\ЫЭ\ЩJ
+HВ€™]\›€€ЉЭ™\њЪ[Ы€L›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›H]^\™PќY™™\€WШ\WЩШ[[XWЬ[\В›^[Э]
+Щ]HKљ[™[™ИH
+H[љY›Ь›H^\™L‘WШ\WЩШ[[XWЬЫЭ\ЩNВ‚›^[Э]
+ШШ][Ы€H
+HЭ]™XНWШ\WЩШ[[XWШЫЫЬЋВ‚™›Ш]\TЫ
+Z[ќЫЭ\ЩWЭ[YWМL‹Z[ќЪ[›™[
+HВ€Z[ќЫЭ\ЩWЭ[YWШ\ЩHHЫЭ\ЩWЭ[YWМL€Џ€ЭNВ€]™XНЫH^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩWЭ[YWШ\ЩH
+€ЭH
+ИЪ[›™[
+JNВ€›Ш][YHH›Ш]
+Ыћ
+H
+И›Ш]
+
+ЫЭ\ЩWЭ[YWМL€	€ЭJH
+€ЫћJH
+€ЊLЌNВ€™]\›€Ы[\
+[YH
+€KЌLЌМНМKLKЊKЊ
+NВџB‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[H]™XМЉЫСњYРЫЫЬ™ћJNВ€]™XМИЫЭ\ЩHH]™XМК^[™]Ъ
+WШ\WЩШ[[XWЬЫЭ\ЩK^[
+Kњ™Ш€
+€LЊЛЊ
+И™XМКЌJJK™ЬЋВ€WШ\WЩШ[[XWШЫЫЬ€H™XН
+€\TЫ
+ЫЭ\ЩKњ‹JK€\TЫ
+ЫЭ\ЩK™Л]JK€\TЫ
+ЫЭ\ЩK‹ќJK€KЊ
+NВџBЉHЋВџB‚ЫЫњЭЪ\Љ€Щ]ЭШ\\QШ[[XUX›PЫЫ\]T”ЭШ\ЫЭ\ЩJ
+HВ€™]\›€€ЉЭ™\њЪ[Ы€L›^[Э]
+ШШ[ЬЪ^™WЮHM‹ШШ[ЬЪ^™WЮHHШШ[ЬЪ^™WЮ€HJH[ЋВ‚›^[Э]
+\ЪШЫЫњЭ[ќ
+H[љY›Ь›HP\QШ[[XT[\ЫЫњЭ[ќИВ€]™XМ€WШ\WЩШ[[XWЬЪ^™NВџNВ‚›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›H^\™PќY™™\€WШ\WЩШ[[XWЬ[\В›^[Э]
+Щ]HKљ[™[™ИH
+H[љY›Ь›H^\™L‘WШ\WЩШ[[XWЬЫЭ\ЩNВ›^[Э]
+Щ]H‹љ[™[™ИH™ШЊLШLЉHЬљ][Ы›H[љY›Ь›H[XYЩL‘WШ\WЩШ[[XWЩ\ЭВ‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[H]™XМЉЫСЫШ[[ќ›ШШ][Ы’QћJNВ€Y€
+[ћJЬ™X]\•[‘\]X[
+]™XМЉ^[
+KWШ\WЩШ[[XWЬЪ^™JJJHВ€™]\›ЋВ€B‚€]™XМИЫЭ\ЩHH]™XМК^[™]Ъ
+WШ\WЩШ[[XWЬЫЭ\ЩK^[
+Kњ™Ш€
+€ЌMKЊ
+И™XМКЌJJK™ЬЋВ€[XYЩTЭЬ™J€WШ\WЩШ[[XWЩ\Э^[€™XН
+^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩKњЉJK‹€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩK™КJK™Л€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩKЉJKњ‹KЊ
+JNВџBЉHЋВџB‚ЫЫњЭЪ\Љ€Щ]ЭШ\\QШ[[XTЫЫЫ\]T”ЭШ\ЫЭ\ЩJ
+HВ€™]\›€€ЉЭ™\њЪ[Ы€L›^[Э]
+ШШ[ЬЪ^™WЮHM‹ШШ[ЬЪ^™WЮHHШШ[ЬЪ^™WЮ€HJH[ЋВ‚›^[Э]
+\ЪШЫЫњЭ[ќ
+H[љY›Ь›HP\QШ[[XT[\ЫЫњЭ[ќИВ€]™XМ€WШ\WЩШ[[XWЬЪ^™NВџNВ‚›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›H]^\™PќY™™\€WШ\WЩШ[[XWЬ[\В›^[Э]
+Щ]HKљ[™[™ИH
+H[љY›Ь›H^\™L‘WШ\WЩШ[[XWЬЫЭ\ЩNВ›^[Э]
+Щ]H‹љ[™[™ИH™ШЊLШLЉHЬљ][Ы›H[љY›Ь›H[XYЩL‘WШ\WЩШ[[XWЩ\ЭВ‚™›Ш]\TЫ
+Z[ќЫЭ\ЩWЭ[YWМL‹Z[ќЪ[›™[
+HВ€Z[ќЫЭ\ЩWЭ[YWШ\ЩHHЫЭ\ЩWЭ[YWМL€Џ€ЭNВ€]™XНЫH^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩWЭ[YWШ\ЩH
+€ЭH
+ИЪ[›™[
+JNВ€›Ш][YHH›Ш]
+Ыћ
+H
+И›Ш]
+
+ЫЭ\ЩWЭ[YWМL€	€ЭJH
+€ЫћJH
+€ЊLЌNВ€™]\›€Ы[\
+[YH
+€KЌLЌМНМKLKЊKЊ
+NВџB‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[H]™XМЉЫСЫШ[[ќ›ШШ][Ы’QћJNВ€Y€
+[ћJЬ™X]\•[‘\]X[
+]™XМЉ^[
+KWШ\WЩШ[[XWЬЪ^™JJJHВ€™]\›ЋВ€B‚€]™XМИЫЭ\ЩHH]™XМК^[™]Ъ
+WШ\WЩШ[[XWЬЫЭ\ЩK^[
+Kњ™Ш€
+€LЊЛЊ
+И™XМКЌJJK™ЬЋВ€[XYЩTЭЬ™JWШ\WЩШ[[XWЩ\Э^[€™XН
+\TЫ
+ЫЭ\ЩKњ‹JK\TЫ
+ЫЭ\ЩK™Л]JK€\TЫ
+ЫЭ\ЩK‹ќJKKЊ
+JNВџBЉHЋВџB‚ЫЫњЭЪ\Љ€Щ]ЭШ\\QШ[[XUX›QћXS[XPЫЫ\]T”ЭШ\ЫЭ\ЩJ
+HВ€™]\›€€ЉЭ™\њЪ[Ы€L›^[Э]
+ШШ[ЬЪ^™WЮHM‹ШШ[ЬЪ^™WЮHHШШ[ЬЪ^™WЮ€HJH[ЋВ‚›^[Э]
+\ЪШЫЫњЭ[ќ
+H[љY›Ь›HP\QШ[[XT[\ЫЫњЭ[ќИВ€]™XМ€WШ\WЩШ[[XWЬЪ^™NВџNВ‚›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›H^\™PќY™™\€WШ\WЩШ[[XWЬ[\В›^[Э]
+Щ]HKљ[™[™ИH
+H[љY›Ь›H^\™L‘WШ\WЩШ[[XWЬЫЭ\ЩNВ›^[Э]
+Щ]H‹љ[™[™ИH™ШLM™ЉHЬљ][Ы›H[љY›Ь›H[XYЩL‘WШ\WЩШ[[XWЩ\ЭВ‚ЫЫњЭ™XМИУ[XUЩZYЪИH™XМКЊЋNKЌNЛЊLM
+NВ‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[H]™XМЉЫСЫШ[[ќ›ШШ][Ы’QћJNВ€Y€
+[ћJЬ™X]\•[‘\]X[
+]™XМЉ^[
+KWШ\WЩШ[[XWЬЪ^™JJJHВ€™]\›ЋВ€B‚€]™XМИЫЭ\ЩHH]™XМК^[™]Ъ
+WШ\WЩШ[[XWЬЫЭ\ЩK^[
+Kњ™Ш€
+€ЌMKЊ
+И™XМКЌJJK™ЬЋВ€™XМИ™Ш€H™XМК^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩKњЉJK‹€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩK™КJK™Л€^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩKЉJKњЉNВ€[XYЩTЭЬ™JWШ\WЩШ[[XWЩ\Э^[™XН
+™Ш‹Э
+™Ш‹У[XUЩZYЪКJJNВџBЉHЋВџB‚ЫЫњЭЪ\Љ€Щ]ЭШ\\QШ[[XTЫћXS[XPЫЫ\]T”ЭШ\ЫЭ\ЩJ
+HВ€™]\›€€ЉЭ™\њЪ[Ы€L›^[Э]
+ШШ[ЬЪ^™WЮHM‹ШШ[ЬЪ^™WЮHHШШ[ЬЪ^™WЮ€HJH[ЋВ‚›^[Э]
+\ЪШЫЫњЭ[ќ
+H[љY›Ь›HP\QШ[[XT[\ЫЫњЭ[ќИВ€]™XМ€WШ\WЩШ[[XWЬЪ^™NВџNВ‚›^[Э]
+Щ]Hљ[™[™ИH
+H[љY›Ь›H]^\™PќY™™\€WШ\WЩШ[[XWЬ[\В›^[Э]
+Щ]HKљ[™[™ИH
+H[љY›Ь›H^\™L‘WШ\WЩШ[[XWЬЫЭ\ЩNВ›^[Э]
+Щ]H‹љ[™[™ИH™ШLM™ЉHЬљ][Ы›H[љY›Ь›H[XYЩL‘WШ\WЩШ[[XWЩ\ЭВ‚ЫЫњЭ™XМИУ[XUЩZYЪИH™XМКЊЋNKЌNЛЊLM
+NВ‚™›Ш]\TЫ
+Z[ќЫЭ\ЩWЭ[YWМL‹Z[ќЪ[›™[
+HВ€Z[ќЫЭ\ЩWЭ[YWШ\ЩHHЫЭ\ЩWЭ[YWМL€Џ€ЭNВ€]™XНЫH^[™]Ъ
+WШ\WЩШ[[XWЬ[\[ќ
+ЫЭ\ЩWЭ[YWШ\ЩH
+€ЭH
+ИЪ[›™[
+JNВ€›Ш][YHH›Ш]
+Ыћ
+H
+И›Ш]
+
+ЫЭ\ЩWЭ[YWМL€	€ЭJH
+€ЫћJH
+€ЊLЌNВ€™]\›€Ы[\
+[YH
+€KЌLЌМНМKLKЊKЊ
+NВџB‚ќ›ЪYXZ[Љ
+HВ€]™XМ€^[H]™XМЉЫСЫШ[[ќ›ШШ][Ы’QћJNВ€Y€
+[ћJЬ™X]\•[‘\]X[
+]™XМЉ^[
+KWШ\WЩШ[[XWЬЪ^™JJJHВ€™]\›ЋВ€B‚€]™XМИЫЭ\ЩHH]™XМК^[™]Ъ
+WШ\WЩШ[[XWЬЫЭ\ЩK^[
+Kњ™Ш€
+€LЊЛЊ
+И™XМКЌJJK™ЬЋВ€™XМИ™Ш€H™XМК\TЫ
+ЫЭ\ЩKњ‹JK\TЫ
+ЫЭ\ЩK™Л]JK€\TЫ
+ЫЭ\ЩK‹ќJJNВ€[XYЩTЭЬ™JWШ\WЩШ[[XWЩ\Э^[™XН
+™Ш‹Э
+™Ш‹У[XUЩZYЪКJJNВџBЉHЋВџB‚›ЫЫЫЫ\[QЫЫФЬ\ќ’[ќ\›[
+TЪ[™ЭXYЩHЭYЩKЭЋњЭљ[™ЧЭљY]ИЫЭ\ЩK€ЭЋќ™XЭЬЏZ[ќМ—Э‰€Ь\ќ—ЫЭ]ЭЋњЭљ[™Й€\њ›Ь—ЫЭ]
+HВ€Э]XИЭЋ›ЫЩWЩ›YИЫЫ[™ЧЪ[љ]X[^™WЫЫЩNВ€ЭЋШ[ЫЫЩJЫЫ[™ЧЪ[љ]X[^™WЫЫЩKЧJ
+HИЫЫ[™ОЋ’[љ]X[^™T›ШЩ\ЬК
+NИJNВ‚€ЫЫњЭЪ\Љ€ЫЭ\ЩWШЧЬЭ€HЫЭ\ЩK™]J
+NВ€ЫЫ[™ОЋ•ЪY\€ЪY\ЉЭYЩJNВ€ЪY\‹њЩ]Эљ[™ЬК	њЫЭ\ЩWШЧЬЭ‹JNВ€ЪY\‹њЩ][ќ’[њ]
+ЫЫ[™ОЋ‘TЪЫЭ\ЩQЫЫЭYЩKЫЫ[™ОЋ‘TЪЫY[ќќ[Ш[‹L
+NВ€ЪY\‹њЩ][ќђЫY[ќ
+ЫЫ[™ОЋ‘TЪЫY[ќќ[Ш[‹ЫЫ[™ОЋ‘TЪ\™Щ]ќ[Ш[—МWМ
+NВ€ЪY\‹њЩ][ќ•\™Щ]
+ЫЫ[™ОЋ‘TЪ\™Щ]Ь‹ЫЫ[™ОЋ‘TЪ\™Щ]Ь—МWМ
+NВ‚€TЪY\ЬШYЩ\ИY\ЬШYЩ\ИHTЪY\ЬШYЩ\КTЪ\ЩФЬ”ќ[\ИTЪ\ЩХќ[Ш[”ќ[\КNВ€Y€
+\ЪY\‹њ\њЩJ	љСЫЫ[™СY][ќZ[[”™\ЫЭ\ЩKL[ЩKY\ЬШYЩ\КJHВ€\њ›Ь—ЫЭ]H™ЫЫ[™ИЪY\€\њЩHZ[YЋВ€Y€
+ЫЫњЭЪ\Љ€ЪY\—ЫЩИHЪY\‹™Щ][™›УЩК
+NВ€ЪY\—ЫЩИOHќ[€	‰€ЪY\—ЫЩЦМHOH	Ч	КHВ€\њ›Ь—ЫЭ]
+ПHЋ€ЋВ€\њ›Ь—ЫЭ]
+ПHЪY\—ЫЩОВ€B€™]\›€[ЩNВ€B‚€ЫЫ[™ОЋ•›ЩЬ[H›ЩЬ[NВ€›ЩЬ[KYЪY\Љ	њЪY\ЉNВ€Y€
+\›ЩЬ[K›[љКY\ЬШYЩ\КJHВ€\њ›Ь—ЫЭ]H™ЫЫ[™И›ЩЬ[H[љИZ[YЋВ€Y€
+ЫЫњЭЪ\Љ€›ЩЬ[WЫЩИH›ЩЬ[K™Щ][™›УЩК
+NВ€›ЩЬ[WЫЩИOHќ[€	‰€›ЩЬ[WЫЩЦМHOH	Ч	КHВ€\њ›Ь—ЫЭ]
+ПHЋ€ЋВ€\њ›Ь—ЫЭ]
+ПH›ЩЬ[WЫЩОВ€B€™]\›€[ЩNВ€B‚€ЫЫњЭЫЫ[™ОЋ•[ќ\›YYX]J€[ќ\›YYX]HH›ЩЬ[K™Щ][ќ\›YYX]JЭYЩJNВ€Y€
+[ќ\›YYX]HOHќ[ЉHВ€\њ›Ь—ЫЭ]H™ЫЫ[™И›ЩXЩY›ИЭYЩH[ќ\›YYX]HЋВ€™]\›€[ЩNВ€B‚€ЫЫ[™ОЋ”Ь“Ь[ЫњИЬ—ЫЬ[ЫњИHЯNВ€Ь—ЫЬ[ЫњЛ™\ШX›SЬ[Z^™\€HќYNВ€Ь—ЫЬ[ЫњЛ›Ь[Z^™TЪ^™HH[ЩNВ€ЫЫ[™ОЋ‘ЫЫ[™ХФЬЉ
+љ[ќ\›YYX]KЬ\ќ—ЫЭ]	њЬ—ЫЬ[ЫњКNВ€Y€
+Ь\ќ—ЫЭ]™[\J
+JHВ€\њ›Ь—ЫЭ]H™ЫЫ[™И›ЩXЩY[\HФT‹U€ЋВ€™]\›€[ЩNВ€B€™]\›€ќYNВџB‚џHЛИ[Y\ЬXЩB‚‹ЛИЩ[™\]YЪ]€ќZ[ЪY\њШ‚›[Y\ЬXЩHЪY\њИВ€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЬЫШЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЬЫЩћXWЫ[XWЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЬЫЩћXWЫ[XWШЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЬЫЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЭX›WШЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЭX›WЩћXWЫ[XWЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЭX›WЩћXWЫ[XWШЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ш\WЩШ[[XWЭX›WЬЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Щќ[ШЬ™Y[—ШЭЧЭњЛљ‚€Ъ[ЫYH‹‹‹ЬЪY\њЛЭќ[Ш[—ЬЬ\ќ‹Ь™\ЫЫ™WЩЭЫњШШ[WШЬЛљ‚џHЛИ[Y\ЬXЩHЪY\њВ‚ЫЫњЭљС\ШЬљ\Ь”ЫЫЪ^™Hќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋљС\ШЬљ\Ь”ЫЫЪ^™U[љY›Ь›PќY™™\€HВ€’ЧСTРФ’TФ—ХTWХS’Q“Ф“WР•Q‘‘T‹€Ь\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\ђЫЭ[ќ
+€У[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќNВ‚ЫЫњЭљС\ШЬљ\Ь”ЫЫЪ^™Hќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋљС\ШЬљ\Ь”ЫЫЪ^™TЭЬYЩPќY™™\€HВ€’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘T‹€
+€У[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќNВ‚‹ЛИћ\ШЬљ\ЬњИ›Ь€^\™H[XYЩ\И™XШ]\ЩHЩ€[њЪYЫ™Y[™ЪYЫ™Yљ[™[™ЬЛ‚ЫЫњЭљС\ШЬљ\Ь”ЫЫЪ^™Hќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋљС\ШЬљ\Ь”ЫЫЪ^™U^\™\ЦМ—HHВ€Х’ЧСTРФ’TФ—ХTWФРSTQТSPQСK€
+€У[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќK€Х’ЧСTРФ’TФ—ХTWФРSTT‹У[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќKџNВ‚•ќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ•ќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЉќ[Ш[‘Ь\XЬФЮ\Э[J€Ь\XЬЧЬЮ\Э[K€Ю\Э[NЋ’Щ\›™[Э]J€Щ\›™[ЬЭ]JB€€ЫЫ[X[™›ШЩ\ЬЫЬЉЬ\XЬЧЬЮ\Э[KЩ\›™[ЬЭ]JK€Y™\њ™YШЫЫ[X[™ШќY™™\—К
+ќ\КK€[њЪY[ќЩ\ШЬљ\Ь—Ш[ШШ]Ь—Э[љY›Ь›WШќY™™\—К€Э]XЧШШ\ЭЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[”›ЭљY\ЉЏЉЬ\XЬЧЬЮ\Э[KOњ›ЭљY\Љ
+JB€Oќќ[Ш[—Щ]љXЩJ
+K€	љС\ШЬљ\Ь”ЫЫЪ^™U[љY›Ь›PќY™™\‹KУ[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќ
+K€[њЪY[ќЩ\ШЬљ\Ь—Ш[ШШ]Ь—ЬЭЬYЩWШќY™™\—К€Э]XЧШШ\ЭЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[”›ЭљY\ЉЏЉЬ\XЬЧЬЮ\Э[KOњ›ЭљY\Љ
+JB€Oќќ[Ш[—Щ]љXЩJ
+K€	љС\ШЬљ\Ь”ЫЫЪ^™TЭЬYЩPќY™™\‹KУ[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќ
+K€[њЪY[ќЩ\ШЬљ\Ь—Ш[ШШ]Ь—Э^\™\ЧК€Э]XЧШШ\ЭЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[”›ЭљY\ЉЏЉЬ\XЬЧЬЮ\Э[KOњ›ЭљY\Љ
+JB€Oќќ[Ш[—Щ]љXЩJ
+K€С\ШЬљ\Ь”ЫЫЪ^™U^\™\ЛZ[ќМ—Э
+™^ЋЫЭ[ќЩЉС\ШЬљ\Ь”ЫЫЪ^™U^\™\КJK€У[љЩY\Q\ШЬљ\Ь”ЫЫЩ]ЫЭ[ќ
+K€]]™WЬ™\ЪY[ЮWКЭЋ›XZЩWЭ[љ\]YO]]™T™\ЪY[ЮOЉ
+JHВ€YШXЮWЬ™XYXЪЧЫY[Y^ЬќШЭ\—Ы[YWИHќќ[Ш[—Ь™XYXЪЧЫY[Y^ЬќЋВџB‚•ќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋџ•ќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЉ
+HHY][В‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋђЫX\ђШXЪ\К
+HВ€ЫЫ[X[™›ШЩ\ЬЫЬЋЋђЫX\ђШXЪ\К
+NВ€[ќ[Y]P[™\ќ^ќY™™\”™\ЪY[ЮJ
+NВ€ШXЪWШЫX\—Ь™\]Y\ЭYИHќYNВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ’[ќ[Y]QЬSY[[ЬћJ
+HВ€Y€
+Ъ\™YЫY[[ЬћWКHВ€Ъ\™YЫY[[ЬћWЛO’[ќ[Y]P[YЩ\К
+NВ€BџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ’[ќ[Y]P[™\ќ^ќY™™\”™\ЪY[ЮJ
+HВ€™\ќ^ШќY™™\њЧЪ[—ЬЮ[ЧЦМHHВ€™\ќ^ШќY™™\њЧЪ[—ЬЮ[ЧЦМWHHВ€›Ь€
+™\ќ^ќY™™\”Э]I€Э]H€™\ќ^ШќY™™\—ЬЭ]\ЧКHВ€Э]KY™\ЬИHRS•М—УPVВ€Э]KњЪ^™HHRS•М—УPVВ€BџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ’[ќ[Y]U™\ќ^ќY™™\”™\ЪY[ЮJZ[ќМ—Э™™]ЪЪ[™^
+HВ€Y€
+™™]ЪЪ[™^ЏH™\ќ^ШќY™™\—ЬЭ]\ЧЛњЪ^™J
+JHВ€™]\›ЋВ€B€™\ќ^ШќY™™\њЧЪ[—ЬЮ[ЧЦЭ™™]ЪЪ[™^Џ€—H	ЏHЉZ[ќЌЭ
+JH
+™™]ЪЪ[™^	€ЊКJNВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ’[ќ[Y]U™\ќ^ќY™™\”™\ЪY[ЮT[™ЩJZ[ќМ—Эљ\њЭЭ™™]Ъ€Z[ќМ—Э\ЭЭ™™]Ъ
+HВ€Y€
+љ\њЭЭ™™]Ъ€\ЭЭ™™]Ъ
+HВ€ЭЋњЭШ\
+љ\њЭЭ™™]Ъ\ЭЭ™™]Ъ
+NВ€B€Y€
+љ\њЭЭ™™]ЪЏH™\ќ^ШќY™™\—ЬЭ]\ЧЛњЪ^™J
+JHВ€™]\›ЋВ€B€\ЭЭ™™]ЪHЭЋ›Z[Љ\ЭЭ™™]ЪZ[ќМ—Э
+™\ќ^ШќY™™\—ЬЭ]\ЧЛњЪ^™J
+HHJJNВ€›Ь€
+Z[ќМ—Э™™]ЪЪ[™^Hљ\њЭЭ™™]ЪИ™™]ЪЪ[™^H\ЭЭ™™]ЪИ
+КЭ™™]ЪЪ[™^
+HВ€[ќ[Y]U™\ќ^ќY™™\”™\ЪY[ЮJ™™]ЪЪ[™^
+NВ€BџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ’[љ]X[^™TЪY\”ЭЬYЩJЫЫњЭЭЋ™љ[\Ю\Э[NЋњ]	€ШXЪWЬ›ЫЭ€Z[ќМ—Э]WЪY›ЫЫ›ШЪЪ[™КHВ€ЫЫ[X[™›ШЩ\ЬЫЬЋЋ’[љ]X[^™TЪY\”ЭЬYЩJШXЪWЬ›ЫЭ]WЪY›ШЪЪ[™КNВ€\[[™WШШXЪWЛO’[љ]X[^™TЪY\”ЭЬYЩJШXЪWЬ›ЫЭ]WЪY›ШЪЪ[™КNВџB‚›ЫЫќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ‘^XЭ]TXЪЩ]\LЧСU‘S•ХФ’UWЦ”
+Y[[ЬћNЋ”љ[™РќY™™\Љ€™XY\‹€Z[ќМ—ЭXЪЩ]Z[ќМ—ЭЫЭ[ќ
+HВ€Y€
+T‘VХђT—ССU
+ШШЫ\Ъ[Ы—Ь]Y\ћWЩ[X›JH[ШШЫ\Ъ[Ы—Ь]Y\ћWЬ™\ЫЭ\Щ\ЧШ]Z[X›WКHВ€™]\›€ЫЫ[X[™›ШЩ\ЬЫЬЋЋ‘^XЭ]TXЪЩ]\LЧСU‘S•ХФ’UWЦ”
+™XY\‹XЪЩ]ЫЭ[ќ
+NВ€B‚€ЫЫњЭZ[ќМ—ЭФ]Y\ћQљ[љ\ЪYH™^Ћћ]WЬЭШ\
+‘‘‘‘‘QQ
+NВ€\ЬЩ\ќЭќYJЫЭ[ќOHJNВ€Z[ќМ—Э[љ]X]Ь€H™XY\‹O”™XY[™ЭШ\Z[ќМ—ЭЉ
+NВ€Ьљ]T™YЪ\Э\ЉWСФWФ‘QЧХ‘ХСU‘S•ТS’UPUФ‹[љ]X]Ь€	€СЉNВ‚€Z[ќМ—ЭШ[\WШЫЭ[ќШY€H™YЪ\Э\—Щљ[WЛOќ[Y\ЦЦWСФWФ‘QЧФђ—ФРSTWРУХS•РQ—NВ€]]К€Ш[\WШЫЭ[ќИB€Y[[ЬћWЛO•[њЫ]T\ЪXШ[[›ЬОЋћWЩЬWЩ\ЬШ[\WШЫЭ[ќКЏЉШ[\WШЫЭ[ќШYЉNВ€Y€
+\Ш[\WШЫЭ[ќКHВ€\ШX›RЬЭШШЫ\Ъ[Ы”]Y\љY\К
+NВ€™]\›€ќYNВ€B‚€]]ИЬљ]WЩ[XЪЧЬ™\Э[HЬШ[\WШЫЭ[ќЧJ
+HO€›ЫЫВ€]]ИZЩWЬШ[\WШЫЭ[ќH‘VХђT—ССU
+]Y\ћWЫШШЫ\Ъ[Ы—ЩZЩWЬШ[\WШЫЭ[ќ
+NВ€Y€
+ZЩWЬШ[\WШЫЭ[ќ
+HВ€™]\›€ќYNВ€B€›ЫЫ\ЧЩ[™ЭљXWЮ—Ь\ЬИB€Ш[\WШЫЭ[ќЛO–”\ЬЧРHOHФ]Y\ћQљ[љ\ЪYШ[\WШЫЭ[ќЛO–”\ЬЧР€OHФ]Y\ћQљ[љ\ЪYВ€›ЫЫ\ЧЩ[™ЭљXWЮ—ЩZ[B€Ш[\WШЫЭ[ќЛO–‘Z[РHOHФ]Y\ћQљ[љ\ЪYШ[\WШЫЭ[ќЛO–‘Z[Р€OHФ]Y\ћQљ[љ\ЪYВ€ЭЋ›Y[\Щ]
+Ш[\WШЫЭ[ќЛЪ^™[ЩЉ[›ЬОЋћWЩЬWЩ\ЬШ[\WШЫЭ[ќКJNВ€Y€
+\ЧЩ[™ЭљXWЮ—Ь\ЬИ\ЧЩ[™ЭљXWЮ—ЩZ[
+HВ€Ш[\WШЫЭ[ќЛO–”\ЬЧРHHZЩWЬШ[\WШЫЭ[ќВ€Ш[\WШЫЭ[ќЛO•Э[РHHZЩWЬШ[\WШЫЭ[ќВ€B€™]\›€ќYNВ€NВ‚€›ЫЫ\ЧЩ[™ЭљXWЮ—Ь\ЬИB€Ш[\WШЫЭ[ќЛO–”\ЬЧРHOHФ]Y\ћQљ[љ\ЪYШ[\WШЫЭ[ќЛO–”\ЬЧР€OHФ]Y\ћQљ[љ\ЪYВ€›ЫЫ\ЧЩ[™ЭљXWЮ—ЩZ[B€Ш[\WШЫЭ[ќЛO–‘Z[РHOHФ]Y\ћQљ[љ\ЪYШ[\WШЫЭ[ќЛO–‘Z[Р€OHФ]Y\ћQљ[љ\ЪYВ€›ЫЫ\ЧЩ[™H\ЧЩ[™ЭљXWЮ—Ь\ЬИ\ЧЩ[™ЭљXWЮ—ЩZ[В‚€Y€
+Z\ЧЩ[™
+HВ€Y€
+XЭ]™WЫШШЫ\Ъ[Ы—Ь]Y\ћWЛќ[Y	‰‚€XЭ]™WЫШШЫ\Ъ[Ы—Ь]Y\ћWЛњШ[\WШЫЭ[ќШY™\ЬИOHШ[\WШЫЭ[ќШYЉHВ€\ШX›RЬЭШШЫ\Ъ[Ы”]Y\љY\К
+NВ€™]\›€Ьљ]WЩ[XЪЧЬ™\Э[
+
+NВ€B€Y€
+P™YЪ[‘ЭY\ЭШШЫ\Ъ[Ы”]Y\ћJШ[\WШЫЭ[ќШYЉJHВ€™]\›€Ьљ]WЩ[XЪЧЬ™\Э[
+
+NВ€B€™]\›€ќYNВ€B‚€Y€
+XXЭ]™WЫШШЫ\Ъ[Ы—Ь]Y\ћWЛќ[Y€XЭ]™WЫШШЫ\Ъ[Ы—Ь]Y\ћWЛњШ[\WШЫЭ[ќШY™\ЬИOHШ[\WШЫЭ[ќШYЉHВ€\ШX›RЬЭШШЫ\Ъ[Ы”]Y\љY\К
+NВ€™]\›€Ьљ]WЩ[XЪЧЬ™\Э[
+
+NВ€B‚€Y€
+Q[™ЭY\ЭШШЫ\Ъ[Ы”]Y\ћJШ[\WШЫЭ[ќШYЉJHВ€™]\›€Ьљ]WЩ[XЪЧЬ™\Э[
+
+NВ€B€™]\›€ќYNВџB‚њЭЋњЭљ[™Иќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ‘Щ]Ъ[™ЭХ]U^
+
+HЫЫњЭВ€ЭЋ›ЬЭљ[™ЬЭ™X[H]NВ€]H•ќ[Ш[€ЋВ€Y€
+™[™\—Э\™Щ]ШШXЪWКHВ€ЭЪ]Ъ
+™[™\—Э\™Щ]ШШXЪWЛO‘Щ]]
+
+JHВ€Ш\ЩH™[™\•\™Щ]ШXЪNЋ”]ЋљТЬЭ™[™\•\™Щ]О‚€]H€Hђ“ИЋВ€њ™XZОВ€Ш\ЩH™[™\•\™Щ]ШXЪNЋ”]ЋљФ^[ЪY\’[ќ\›ШЪО‚€]H€H”ТHЋВ€њ™XZОВ€Y][‚€њ™XZОВ€B€Z[ќМ—Э]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮB€^\™WШШXЪWИИ^\™WШШXЪWЛO™]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ
+
+H€NВ€Z[ќМ—Э]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮHB€^\™WШШXЪWИИ^\™WШШXЪWЛO™]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮJ
+H€NВ€Y€
+]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ€H]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮH€JHВ€]H	И	И]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ	Ю	И]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮNВ€B€B€]H€HPU’SHSђУУTUKX\›H]™[ЬY[ќЋВ€™]\›€]KњЭЉ
+NВџB‚›ЫЫќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋђЫЫ\[QЫЫФЬ\ќЉљФЪY\”ЭYЩQ›YРљ]ИЭYЩK€ЭЋњЭљ[™ЧЭљY]ИЫЭ\ЩK€ЭЋќ™XЭЬЏZ[ќМ—Э‰€Ь\ќ—ЫЭ]€ЭЋњЭљ[™Й€\њ›Ь—ЫЭ]
+HЫЫњЭВ€TЪ[™ЭXYЩHЫЫ[™ЧЬЭYЩNВ€ЭЪ]Ъ
+ЭYЩJHВ€Ш\ЩH’ЧФТQT—ФХQСWХ‘T•VР’U‚€ЫЫ[™ЧЬЭYЩHHTЪ[™Х™\ќ^В€њ™XZОВ€Ш\ЩH’ЧФТQT—ФХQСWХTФСSUSУ—РУУ•“УР’U‚€ЫЫ[™ЧЬЭYЩHHTЪ[™Х\ЬРЫЫќ›ЫВ€њ™XZОВ€Ш\ЩH’ЧФТQT—ФХQСWХTФСSUSУ—СUђSPUSУ—Р’U‚€ЫЫ[™ЧЬЭYЩHHTЪ[™Х\ЬС][X][ЫЋВ€њ™XZОВ€Ш\ЩH’ЧФТQT—ФХQСWССSУQU–WР’U‚€ЫЫ[™ЧЬЭYЩHHTЪ[™СЩ[ЫY]ћNВ€њ™XZОВ€Ш\ЩH’ЧФТQT—ФХQСWС”ђQУQS•Р’U‚€ЫЫ[™ЧЬЭYЩHHTЪ[™СњYЫY[ќВ€њ™XZОВ€Ш\ЩH’ЧФТQT—ФХQСWРУУTUWР’U‚€ЫЫ[™ЧЬЭYЩHHTЪ[™РЫЫ\]NВ€њ™XZОВ€Y][‚€\њ›Ь—ЫЭ]H›]Ћ™›Ь›X]
+•[њЭ\ЬќYќ[Ш[€ЪY\€ЭYЩHX\ЪИЯH‹Z[ќМ—Э
+ЭYЩJJNВ€™]\›€[ЩNВ€B€™]\›€ЫЫ\[QЫЫФЬ\ќ’[ќ\›[
+ЫЫ[™ЧЬЭYЩKЫЭ\ЩKЬ\ќ—ЫЭ]\њ›Ь—ЫЭ]
+NВџB‚›ЫЫќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ”Щ]\ЫЫќ^
+
+HВ€Y€
+PЫЫ[X[™›ШЩ\ЬЫЬЋЋ”Щ]\ЫЫќ^
+
+JHВ€‘VФWСT”“ФЉ‘Z[YИ[љ]X[^™H\ЩHЫЫ[X[™›ШЩ\ЬЫЬ€ЫЫќ^ЉNВ€™]\›€[ЩNВ€B€[ќ[Y]P[™\ќ^ќY™™\”™\ЪY[ЮJ
+NВ‚€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩJ€ЫЫњЭќ[Ш[—Щ]љXЩHHЩ]ќ[Ш[‘]љXЩJ
+NВ€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩNЋ‘ќ[Э[ЫњЙ€›€Hќ[Ш[—Щ]љXЩKO™ќ[Э[ЫњК
+NВ€ЫЫњЭљС]љXЩH]љXЩHHќ[Ш[—Щ]љXЩKO™]љXЩJ
+NВ€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩNЋ”›Ь\ќY\Й€]љXЩWЬ›Ь\ќY\ИHќ[Ш[—Щ]љXЩKOњ›Ь\ќY\К
+NВ‚€ЛИH[ЫЫ™][Ы[[Ы\Ъ[Ы€Щ€H™\ќ^ЪY\€ЭYЩH[ЫИЫЭ™\њИHШ\ЩB€ЛИЩ€X[ќX[[™^ИXЭЬ€ќY™™\€™]Ъ
+HЮ\Э[HЫЫњЭ[ќИ[™HЪ\™Y€ЛИY[[ЬћH\™H™YYY›Ь€]
+H[€H\ЬЩ[][Ы€™\ќ^ЪY\€Ъ[‚€ЛИќ[]Т[™^Z[ќМ€\И›ЭЭ\ЬќY‚€ЭY\ЭЬЪY\—Ь\[[™WЬЭYЩ\ЧИB€’ЧФTSS‘WФХQСWХ‘T•VФТQT—Р’U’ЧФTSS‘WФХQСWС”ђQУQS•ФТQT—Р’UВ€ЭY\ЭЬЪY\—Э™\ќ^ЬЭYЩ\ЧИH’ЧФТQT—ФХQСWХ‘T•VР’UВ€Y€
+]љXЩWЬ›Ь\ќY\Лќ\ЬЩ[][Ы”ЪY\ЉHВ€ЭY\ЭЬЪY\—Ь\[[™WЬЭYЩ\ЧИH’ЧФTSS‘WФХQСWХTФСSUSУ—РУУ•“УФТQT—Р’U€’ЧФTSS‘WФХQСWХTФСSUSУ—СUђSPUSУ—ФТQT—Р’UВ€ЭY\ЭЬЪY\—Э™\ќ^ЬЭYЩ\ЧИB€’ЧФТQT—ФХQСWХTФСSUSУ—РУУ•“УР’U’ЧФТQT—ФХQСWХTФСSUSУ—СUђSPUSУ—Р’UВ€B€Y€
+Y]љXЩWЬ›Ь\ќY\Лќ™\ќ^\[[™TЭЬ™\Р[™]ЫZXЬКHВ€ЛИ›Ь€Y[[ЬћH^Ьќњ›ЫH™\ќ^ЪY\њИЫЫќ™\ќYИЫЫ\]HЪY\њЛ‚€ЭY\ЭЬЪY\—Ь\[[™WЬЭYЩ\ЧИH’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’UВ€ЭY\ЭЬЪY\—Э™\ќ^ЬЭYЩ\ЧИH’ЧФТQT—ФХQСWРУУTUWР’UВ€B‚€ЛИMЊО\ИљYЩЩ\€[€[ћHЪ[™ЫH[љY›Ь›HќY™™\€][љXH™YYЛќ]\ИB€ЛИZ[љ[][HX^[љY›Ь›PќY™™\”[™ЩK\ИHШY™HZ[љ[][H[[Э[ќ‚€[љY›Ь›WШќY™™\—ЬЫЫИHЭЋ›XZЩWЭ[љ\]YOZNЋќќ[Ш[ЋЋ•ќ[Ш[•\ШYќY™™\”ЫЫЉ€ќ[Ш[—Щ]љXЩK’ЧР•Q‘‘T—ХTРQСWХS’Q“Ф“WР•Q‘‘T—Р’U€™^Ћ[YЫЉЭЋ›X^
+ZNЋ‘Ь\XЬХ\ШYќY™™\”ЫЫЋљСY][YЩTЪ^™KЪ^™WЭ
+MЊО
+JK€Ъ^™WЭ
+]љXЩWЬ›Ь\ќY\Л›Z[•[љY›Ь›PќY™™\“Щ™њЩ][YЫ›Y[ќ
+JJNВ‚€ЛИ\ШЬљ\Ь€Щ]^[Э]И]Ы‰Э\[™Ы€HЩ]\Щ€Э\€ЭXњЮ\Э[\Л‚€љФЪY\”ЭYЩQ›YЬИЭY\ЭЬЪY\—ЬЭYЩ\ИB€ЭY\ЭЬЪY\—Э™\ќ^ЬЭYЩ\ЧИ’ЧФТQT—ФХQСWС”ђQУQS•Р’UВ€ЛИ[\K‚€љС\ШЬљ\Ь”Щ]^[Э]Ь™X]R[™›И\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›ОВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWСTРФ’TФ—ФСUУVSХUРФ‘PUWТS‘“ОВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Л™›YЬИHВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќHВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњљ[™[™ЬИHќ[ЋВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+]љXЩK	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	™\ШЬљ\Ь—ЬЩ]Ы^[Э]Щ[\WКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]H[€[\Hќ[Ш[€\ШЬљ\Ь€Щ]^[Э]ЉNВ€™]\›€[ЩNВ€B€ЛИЭY\Э]ИЫЫњЭ[ќЛ‚€љС\ШЬљ\Ь”Щ]^[Э]љ[™[™В€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦФЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\ђЫЭ[ќHHЯNВ€›Ь€
+Z[ќМ—ЭHHИHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\ђЫЭ[ќИ
+КЪJHВ€љС\ШЬљ\Ь”Щ]^[Э]љ[™[™Й€ЫЫњЭ[ќЧШљ[™[™ИH\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦЪWNВ€ЫЫњЭ[ќЧШљ[™[™Лљ[™[™ИHNВ€ЫЫњЭ[ќЧШљ[™[™Л™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWХS’Q“Ф“WР•Q‘‘TЋВ€ЫЫњЭ[ќЧШљ[™[™Л™\ШЬљ\ЬђЫЭ[ќHNВ€ЫЫњЭ[ќЧШљ[™[™Лњ[[]]X›TШ[\\њИHќ[ЋВ€B€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦФЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\”Ю\Э[WB€њЭYЩQ›YЬИB€ЭY\ЭЬЪY\—ЬЭYЩ\И€
+]љXЩWЬ›Ь\ќY\Лќ\ЬЩ[][Ы”ЪY\€И’ЧФТQT—ФХQСWХTФСSUSУ—РУУ•“УР’U€
+H€
+]љXЩWЬ›Ь\ќY\Л™Щ[ЫY]ћTЪY\€И’ЧФТQT—ФХQСWССSУQU–WР’U€
+NВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦФЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘›Ш]™\ќ^B€њЭYЩQ›YЬИHЭY\ЭЬЪY\—Э™\ќ^ЬЭYЩ\ЧОВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦФЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘›Ш]^[B€њЭYЩQ›YЬИH’ЧФТQT—ФХQСWС”ђQУQS•Р’UВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦФЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\ђ›ЫЫЫЬB€њЭYЩQ›YЬИHЭY\ЭЬЪY\—ЬЭYЩ\ОВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќЦФЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘™]ЪKњЭYЩQ›YЬИB€ЭY\ЭЬЪY\—ЬЭYЩ\ОВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќB€Z[ќМ—Э
+™^ЋЫЭ[ќЩЉ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќКJNВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњљ[™[™ЬИH\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧШЫЫњЭ[ќОВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+]љXЩK	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЫЫњЭ[ќЧКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HHќ[Ш[€\ШЬљ\Ь€Щ]^[Э]›Ь€ЭY\Э]И‚€ЫЫњЭ[ќќY™™\њИЉNВ€™]\›€[ЩNВ€B€ЛИ[њЪY[ќ€ЭЬYЩHќY™™\€›Ь€ЫЫ\]HЪY\њЛ‚€љС\ШЬљ\Ь”Щ]^[Э]љ[™[™И\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќљ[™[™ИHВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќ™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘TЋВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќ™\ШЬљ\ЬђЫЭ[ќHNВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќњЭYЩQ›YЬИH’ЧФТQT—ФХQСWРУУTUWР’UВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќњ[[]]X›TШ[\\њИHќ[ЋВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќHNВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњљ[™[™ЬИH	™\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+€]љXЩK	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ЧЬЪ[™ЫWЭ[њЪY[ќЦЬЪ^™WЭ
+€Ъ[™ЫU[њЪY[ќ\ШЬљ\Ь“^[Э]ЋљФЭЬYЩPќY™™\ђЫЫ\]JWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HHќ[Ш[€\ШЬљ\Ь€Щ]^[Э]›Ь€HЭЬYЩHќY™™\€‚€›Э[™ИHЫЫ\]HЪY\€ЉNВ€™]\›€[ЩNВ€B€ЛИ[њЪY[ќ€ЫИЭЬYЩHќY™™\њИ›Ь€ЫЫ\]HЪY\њЛ‚€љС\ШЬљ\Ь”Щ]^[Э]љ[™[™И\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧЭ[њЪY[ќЬZ\–М—NВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧЭ[њЪY[ќЬZ\–МHH\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧЭ[њЪY[ќЬZ\–МWHH\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЧЭ[њЪY[ќВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧЭ[њЪY[ќЬZ\–МWKљ[™[™ИHNВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќHЋВ€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњљ[™[™ЬИH\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЧЭ[њЪY[ќЬZ\ЋВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+€]љXЩK	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ЧЬЪ[™ЫWЭ[њЪY[ќЦЬЪ^™WЭ
+€Ъ[™ЫU[њЪY[ќ\ШЬљ\Ь“^[Э]ЋљФЭЬYЩPќY™™\”Z\ђЫЫ\]JWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HHќ[Ш[€\ШЬљ\Ь€Щ]^[Э]›Ь€ЫИЭЬYЩH‚€ќY™™\њИ›Э[™ИHЫЫ\]HЪY\€ЉNВ€™]\›€[ЩNВ€B‚€Ъ\™YЫY[[ЬћWИB€ЭЋ›XZЩWЭ[љ\]YOќ[Ш[”Ъ\™YY[[ЬћOЉ
+ќ\Л
+›Y[[ЬћWЛЭY\ЭЬЪY\—Ь\[[™WЬЭYЩ\ЧКNВ€Y€
+\Ъ\™YЫY[[ЬћWЛO’[љ]X[^™J
+JHВ€‘VФWСT”“ФЉ‘Z[YИ[љ]X[^™HЪ\™YY[[ЬћHЉNВ€™]\›€[ЩNВ€B‚€љ[Z]]™WЬ›ШЩ\ЬЫЬ—ИB€ЭЋ›XZЩWЭ[љ\]YOќ[Ш[”љ[Z]]™T›ШЩ\ЬЫЬЏЉ
+њ™YЪ\Э\—Щљ[WЛ
+›Y[[ЬћWЛ
+њЪ\™YЫY[[ЬћWЛ
+ќ\КNВ€Y€
+\љ[Z]]™WЬ›ШЩ\ЬЫЬ—ЛO’[љ]X[^™J
+JHВ€‘VФWСT”“ФЉ‘Z[YИ[љ]X[^™HHЩ[ЫY]љXИљ[Z]]™H›ШЩ\ЬЫЬ€ЉNВ€™]\›€[ЩNВ€B‚€Z[ќМ—ЭЪ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќЫЩМ€B€Ь\ќ”ЪY\•[њЫ]ЬЋЋ‘Щ]Ъ\™YY[[ЬћTЭЬYЩPќY™™\ђЫЭ[ќЩМЉ€]љXЩWЬ›Ь\ќY\Л›X^ЭЬYЩPќY™™\”[™ЩJNВ€Z[ќМ—ЭЪ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќHRS•М—РКJHЪ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќЫЩМЋВ‚€Z[ќМ—Э]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮNВ€›ЫЫ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЫ›ЭШЫ[\YB€^\™PШXЪNЋ‘Щ]ЫЫ™љYС]Ф™\ЫЫ][Ы”ШШ[J]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮJNВ€Y€
+Y]ЧЬ™\ЫЫ][Ы—ЬШШ[WЫ›ЭШЫ[\Y
+HВ€‘VФWХРT“Љ€•H™\]Y\ЭY]И™\ЫЫ][Ы€ШШ[H\И›ЭЭ\ЬќYћHH‚€™[][]Ь‹™YXЪ[™ИИЯ^ЯH‹€]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮJNВ€B€Y€
+]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ€H]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮH€JHВ€‘VФWХРT“Љ€•ќ[Ш[€]И™\ЫЫ][Ы€ШШ[[™И\И^\љ[Y[ќ[[™X^H›ЭY™™XЭ[‚€ќ]\ИЫЬњ™XЭHЉNВ€B€Y€
+Y]љXЩWЬ›Ь\ќY\Л™њYЫY[ќЭЬ™\Р[™]ЫZXЬКHВ€‘VФWСT”“ФЉ€•ќ[Ш[€њYЫY[ќЭЬ™\Р[™]ЫZXЬИ\И™\]Z\™Y›Ь€ФH[][][Ы€[™‚€‘СL€\љ]Kќ][њЭ\ЬќYћHHЩ[XЭY]љXЩHЉNВ€™]\›€[ЩNВ€B€Y€
+Y]љXЩWЬ›Ь\ќY\Лќ™\ќ^\[[™TЭЬ™\Р[™]ЫZXЬКHВ€‘VФWСT”“ФЉ€•ќ[Ш[€™\ќ^\[[™TЭЬ™\Р[™]ЫZXЬИ\И™\]Z\™Y›Ь€ФH[][][Ы€[™‚€‘СL€\љ]Kќ][њЭ\ЬќYћHHЩ[XЭY]љXЩHЉNВ€™]\›€[ЩNВ€B€Y€
+Y]љXЩWЬ›Ь\ќY\Л™Щ[ЫY]ћTЪY\ЉHВ€Y€
+‘VХђT—ССU
+ќ[Ш[—Ь™\]Z\™WЩЩ[ЫY]ћWЬЪY\ЉJHВ€‘VФWСT”“ФЉ€•ќ[Ш[€Щ[ЫY]ћTЪY\€\И™\]Z\™Y›Ь€ФH[][][Ы€‚€Љќ[Ш[—Ь™\]Z\™WЩЩ[ЫY]ћWЬЪY\Џ]ќYJKќ][њЭ\ЬќYћHH‚€њЩ[XЭY]љXЩHЉNВ€™]\›€[ЩNВ€B€‘VФWХРT“Љ€•ќ[Ш[€Щ[ЫY]ћTЪY\€\И›ЭЭ\ЬќYћHH]љXЩNИљ[Z]]™H‚€™[XЪИЫЫќ™\њЪ[Ы‹Щ^[њЪ[Ы€]ИЪ[™H\ЩYЉNВ€B€Y€
+Y]љXЩWЬ›Ь\ќY\Л™љ[[ЩS›Ы”ЫЫY
+HВ€Y€
+‘VХђT—ССU
+ќ[Ш[—Ь™\]Z\™WЩљ[Ы[ЩWЫ›Ы—ЬЫЫY
+JHВ€‘VФWСT”“ФЉ€•ќ[Ш[€љ[[ЩS›Ы”ЫЫY\И™\]Z\™Y›Ь€ФH[][][Ы€‚€Љќ[Ш[—Ь™\]Z\™WЩљ[Ы[ЩWЫ›Ы—ЬЫЫY]ќYJKќ][њЭ\ЬќYћHH‚€њЩ[XЭY]љXЩHЉNВ€™]\›€[ЩNВ€B€‘VФWХРT“Љ€•ќ[Ш[€љ[[ЩS›Ы”ЫЫY\И›ЭЭ\ЬќYћHH]љXЩNИ[™KЬЪ[ќ‚€њЫYЫЫ€[Щ\ИЪ[[XЪИИЫЫYљ[ЉNВ€B‚€ЛИ™\]Z\™\ИH[њЪY[ќ\ШЬљ\Ь€Щ]^[Э]Л‚€™[™\—Э\™Щ]ШШXЪWИHЭЋ›XZЩWЭ[љ\]YOќ[Ш[”™[™\•\™Щ]ШXЪOЉ€
+њ™YЪ\Э\—Щљ[WЛ
+›Y[[ЬћWЛ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮK
+ќ\КNВ€Y€
+\™[™\—Э\™Щ]ШШXЪWЛO’[љ]X[^™JЪ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќ
+JHВ€‘VФWСT”“ФЉ‘Z[YИ[љ]X[^™HH™[™\€\™Щ]ШXЪHЉNВ€™]\›€[ЩNВ€B‚€ЛИЪ\™YY[[ЬћH[™QђSH\ШЬљ\Ь€Щ]^[Э]‚€›ЫЫY[WЩњYЫY[ќЬЪY\—Ъ[ќ\›ШЪИB€™[™\—Э\™Щ]ШШXЪWЛO‘Щ]]
+
+HOH™[™\•\™Щ]ШXЪNЋ”]ЋљФ^[ЪY\’[ќ\›ШЪОВ€љС\ШЬљ\Ь”Щ]^[Э]љ[™[™ИЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМ—NВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМKљ[™[™ИHВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМK™\ШЬљ\Ь•\HB€’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘TЋВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМK™\ШЬљ\ЬђЫЭ[ќB€Ъ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМKњЭYЩQ›YЬИHЭY\ЭЬЪY\—ЬЭYЩ\ОВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМKњ[[]]X›TШ[\\њИHќ[ЋВ€љС\ШЬљ\Ь”Щ]^[Э]Ь™X]R[™›ИЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›ОВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›ЛњХ\HB€’ЧФХ•PХT‘WХTWСTРФ’TФ—ФСUУVSХUРФ‘PUWТS‘“ОВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Л™›YЬИHВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњљ[™[™ЬИB€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬОВ€Y€
+Y[WЩњYЫY[ќЬЪY\—Ъ[ќ\›ШЪКHВ€ЛИQђSK‚€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМWKљ[™[™ИHNВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМWK™\ШЬљ\Ь•\HB€’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘TЋВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМWK™\ШЬљ\ЬђЫЭ[ќHNВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМWKњЭYЩQ›YЬИB€’ЧФТQT—ФХQСWС”ђQУQS•Р’UВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЬЦМWKњ[[]]X›TШ[\\њИHќ[ЋВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќHЋВ€H[ЩHВ€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќHNВ€B€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+€]љXЩK	њЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЪ\™YЫY[[ЬћWШ[™ЩY[WКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HHќ[Ш[€\ШЬљ\Ь€Щ]^[Э]›Ь€HЪ\™YY[[ЬћH‚€[™HQђSHЉNВ€™]\›€[ЩNВ€B‚€\[[™WШШXЪWИHЭЋ›XZЩWЭ[љ\]YOќ[Ш[”\[[™PШXЪOЉ€
+ќ\Л
+њ™YЪ\Э\—Щљ[WЛ
+њ™[™\—Э\™Щ]ШШXЪWЛЭY\ЭЬЪY\—Э™\ќ^ЬЭYЩ\ЧКNВ€Y€
+\\[[™WШШXЪWЛO’[љ]X[^™J
+JHВ€‘VФWСT”“ФЉ‘Z[YИ[љ]X[^™HHЬ\XЬИ\[[™HШXЪHЉNВ€™]\›€[ЩNВ€B‚€ЛИ™\]Z\™\ИH[њЪY[ќ\ШЬљ\Ь€Щ]^[Э]Л‚€^\™WШШXЪWИB€ќ[Ш[•^\™PШXЪNЋђЬ™X]J
+њ™YЪ\Э\—Щљ[WЛ
+њЪ\™YЫY[[ЬћWЛ]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ€]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮK
+ќ\ЛЭY\ЭЬЪY\—Ь\[[™WЬЭYЩ\ЧКNВ€Y€
+]^\™WШШXЪWКHВ€‘VФWСT”“ФЉ‘Z[YИ[љ]X[^™HH^\™HШXЪHЉNВ€™]\›€[ЩNВ€B‚€ЛИЪ\™YY[[ЬћH[™QђSHЫЫ[[Ы€љ[™[™ЬЛ‚€љС\ШЬљ\Ь”ЫЫЪ^™H\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦМWNВ€\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦМKќ\HH’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘TЋВ€\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦМK™\ШЬљ\ЬђЫЭ[ќB€Ъ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќ
+ИZ[ќМ—Э
+Y[WЩњYЫY[ќЬЪY\—Ъ[ќ\›ШЪКNВ€љС\ШЬљ\Ь”ЫЫЬ™X]R[™›И\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ОВ€\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWСTРФ’TФ—ФУУРФ‘PUWТS‘“ОВ€\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л™›YЬИHВ€\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л›X^Щ]ИHNВ€\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™PЫЭ[ќHNВ€\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™\ИH\ШЬљ\Ь—ЬЫЫЬЪ^™\ОВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”ЫЫ
+]љXЩK	™\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Лќ[‹€	њЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЫЫКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HHќ[Ш[€\ШЬљ\Ь€ЫЫ›Ь€Ъ\™YY[[ЬћH[™‚€‘QђSHЉNВ€™]\›€[ЩNВ€B€љС\ШЬљ\Ь”Щ][ШШ]R[™›И\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ОВ€\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWСTРФ’TФ—ФСUРSРРUWТS‘“ОВ€\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Лњ™^Hќ[ЋВ€\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л™\ШЬљ\Ь”ЫЫHЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЫЫОВ€\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л™\ШЬљ\Ь”Щ]ЫЭ[ќHNВ€\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњЩ]^[Э]ИH	™\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЪ\™YЫY[[ЬћWШ[™ЩY[WОВ€Y€
+›‹ќљР[ШШ]Q\ШЬљ\Ь”Щ]К]љXЩK	™\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л€	њЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]КHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИ[ШШ]HHќ[Ш[€\ШЬљ\Ь€Щ]›Ь€Ъ\™YY[[ЬћH[™‚€‘QђSHЉNВ€™]\›€[ЩNВ€B€љС\ШЬљ\ЬђќY™™\’[™›В€Ъ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\њЧЪ[™›ЦФЪ\™YY[[ЬћNЋљРќY™™\”Ъ^™HИ
+LЋЊ
+WNВ€Z[ќМ—ЭЪ\™YЫY[[ЬћWШљ[™[™ЧЬ[™ЩHB€Ъ\™YY[[ЬћNЋљРќY™™\”Ъ^™HЏ€Ъ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќЫЩМЋВ€›Ь€
+Z[ќМ—ЭHHИHЪ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќИ
+КЪJHВ€љС\ШЬљ\ЬђќY™™\’[™›Й€Ъ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›ИB€Ъ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\њЧЪ[™›ЦЪWNВ€Ъ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›ЛќY™™\€HЪ\™YЫY[[ЬћWЛOќY™™\Љ
+NВ€Ъ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›Л›Щ™њЩ]HЪ\™YЫY[[ЬћWШљ[™[™ЧЬ[™ЩH
+€NВ€Ъ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›Лњ[™ЩHHЪ\™YЫY[[ЬћWШљ[™[™ЧЬ[™ЩNВ€B€љХЬљ]Q\ШЬљ\Ь”Щ]Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЦМ—NВ€љХЬљ]Q\ШЬљ\Ь”Щ]	€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћHHЬљ]WЩ\ШЬљ\Ь—ЬЩ]ЦМNВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћKњХ\HH’ЧФХ•PХT‘WХTWХФ’UWСTРФ’TФ—ФСUВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћKњ™^Hќ[ЋВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћK™ЭЩ]HЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]ОВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћK™Эљ[™[™ИHВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћK™Э\њ^Q[[Y[ќHВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћK™\ШЬљ\ЬђЫЭ[ќHЪ\™YЫY[[ЬћWШљ[™[™ЧШЫЭ[ќВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћK™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘TЋВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћKњ[XYЩR[™›ИHќ[ЋВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћKњќY™™\’[™›ИHЪ\™YЫY[[ЬћWЩ\ШЬљ\Ь—ШќY™™\њЧЪ[™›ОВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЬЪ\™YЫY[[ЬћKњ^[ќY™™\•љY]ИHќ[ЋВ€љС\ШЬљ\ЬђќY™™\’[™›ИY[WЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›ОВ€Y€
+Y[WЩњYЫY[ќЬЪY\—Ъ[ќ\›ШЪКHВ€Y[WЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›ЛќY™™\€H™[™\—Э\™Щ]ШШXЪWЛO™Y[WШќY™™\Љ
+NВ€Y[WЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›Л›Щ™њЩ]HВ€Y[WЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›Лњ[™ЩHH’ЧХТУWФТV‘NВ€љХЬљ]Q\ШЬљ\Ь”Щ]	€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[HHЬљ]WЩ\ШЬљ\Ь—ЬЩ]ЦМWNВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[KњХ\HH’ЧФХ•PХT‘WХTWХФ’UWСTРФ’TФ—ФСUВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[Kњ™^Hќ[ЋВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[K™ЭЩ]HЪ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЩ]ОВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[K™Эљ[™[™ИHNВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[K™Э\њ^Q[[Y[ќHВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[K™\ШЬљ\ЬђЫЭ[ќHNВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[K™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWФХФђQСWР•Q‘‘TЋВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[Kњ[XYЩR[™›ИHќ[ЋВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[KњќY™™\’[™›ИH	™Y[WЩ\ШЬљ\Ь—ШќY™™\—Ъ[™›ОВ€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]ЩY[Kњ^[ќY™™\•љY]ИHќ[ЋВ€B€›‹ќљХ\]Q\ШЬљ\Ь”Щ]К]љXЩKH
+ИZ[ќМ—Э
+Y[WЩњYЫY[ќЬЪY\—Ъ[ќ\›ШЪКK€Ьљ]WЩ\ШЬљ\Ь—ЬЩ]Лќ[ЉNВ‚€ЛИЭШ\Шљ™XЭЛ‚‚€ЛИШ[[XH[\Z]\€]љXЩK[ШШ[[™ЬЭ]љ\ЪX›H]ЫЩKЬ€Щ\\]B€ЛИ]љXЩK[ШШ[^[ќY™™\€[™ЬЭ]љ\ЪX›H\ШYќY™™\‹‚€Ш[[XWЬ[\МЌM—Щ[ќћWЭX›WШЭ\њ™[ќЩњ[YWИHRS•М—УPVВ€Ш[[XWЬ[\ЬЫШЭ\њ™[ќЩњ[YWИHRS•М—УPVВ€ЛИћHИЬ™X]HH]љXЩK[ШШ[ЬЭ]љ\ЪX›HќY™™\€љ\њЭИЪЪ\ЫЬZ[™Л‚€ЫЫњЭ^€Z[ќМ—ЭСШ[[XT[\Ъ^™LЌM‘[ќћUX›HHЪ^™[ЩЉZ[ќМ—Э
+H
+€ЌMЋВ€ЫЫњЭ^€Z[ќМ—ЭСШ[[XT[\Ъ^™TУHЪ^™[ЩЉZ[ќM—Э
+H
+€€
+€И
+€LЋВ€ЫЫњЭ^€Z[ќМ—ЭСШ[[XT[\Ъ^™HHСШ[[XT[\Ъ^™LЌM‘[ќћUX›H
+ИСШ[[XT[\Ъ^™TУВ€љРќY™™\ђЬ™X]R[™›ИШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›ОВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWР•Q‘‘T—РФ‘PUWТS‘“ОВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›Л™›YЬИHВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›ЛњЪ^™HHСШ[[XT[\Ъ^™H
+€УX^њ[Y\Т[‘›YЪВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›Лќ\ШYЩHH’ЧР•Q‘‘T—ХTРQСWХS’Q“Ф“WХVSР•Q‘‘T—Р’UВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›ЛњЪ\љ[™У[ЩHH’ЧФТT’S‘ЧУSСWСVУTТU‘NВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›Лњ]Y]YQ[Z[R[™^ЫЭ[ќHВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›Лњ]Y]YQ[Z[R[™XЩ\ИHќ[ЋВ€Y€
+›‹ќљРЬ™X]PќY™™\Љ]љXЩK	™Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ШЬ™X]WЪ[™›Лќ[‹€	™Ш[[XWЬ[\ШќY™™\—КHOH’ЧФХPРСTФКHВ€›ЫЫ\ЩWЩШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\€H[ЩNВ€љУY[[ЬћT™\]Z\™[Y[ќИШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЬ™\]Z\™[Y[ќОВ€›‹ќљСЩ]ќY™™\“Y[[ЬћT™\]Z\™[Y[ќК]љXЩKШ[[XWЬ[\ШќY™™\—Л€	™Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЬ™\]Z\™[Y[ќКNВ€Z[ќМ—ЭШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЭ\\ИB€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЬ™\]Z\™[Y[ќЛ›Y[[ЬћU\Pљ]И	‚€
+ќ[Ш[—Щ]љXЩKO›Y[[ЬћWЭ\\К
+K™]љXЩWЫШШ[	€ќ[Ш[—Щ]љXЩKO›Y[[ЬћWЭ\\К
+KљЬЭЭљ\ЪX›JNВ€љУY[[ЬћP[ШШ]R[™›ИШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›ОВ€ЛИ™Y™\€HЬЭ][ШXЪY
+™XШ]\ЩH]	ЬИЬљ]K[Ы›JHY[[ЬћH\Kќ]ћHB€ЛИЬЭXШXЪYЬЭ]љ\ЪX›H]љXЩK[ШШ[Ы™H\ИЩ[‚€Y€
+™^Ћљ]ЬШШ[—Щ›ЬќШ\™
+€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЭ\\И	‚€ќќ[Ш[—Щ]љXЩKO›Y[[ЬћWЭ\\К
+KљЬЭШШXЪY€	ЉШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Л›Y[[ЬћU\R[™^
+JH€™^Ћљ]ЬШШ[—Щ›ЬќШ\™
+€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЭ\\Л€	ЉШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Л›Y[[ЬћU\R[™^
+JJHВ€љУY[[ЬћP[ШШ]R[™›К€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›ЧЫ\ЭB€	™Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›ОВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›ЛњХ\HB€’ЧФХ•PХT‘WХTWУQSSФ–WРSРРUWТS‘“ОВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Лњ™^Hќ[ЋВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Л[ШШ][Ы”Ъ^™HB€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЬ™\]Z\™[Y[ќЛњЪ^™NВ€љУY[[ЬћQYXШ]Y[ШШ]R[™›ИШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›ОВ€Y€
+ќ[Ш[—Щ]љXЩKO™^[њЪ[ЫњК
+K™^МWМWТТ—ЩYXШ]YШ[ШШ][ЫЉHВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›ЧЫ\ЭOњ™^B€	™Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›ОВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›ЧЫ\ЭB€™Z[ќ\њ™]ШШ\ЭљУY[[ЬћP[ШШ]R[™›КЏЉ€	™Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›КNВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›ЛњХ\HB€’ЧФХ•PХT‘WХTWУQSSФ–WСQPРUQРSРРUWТS‘“ОВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›Лњ™^Hќ[ЋВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›Лљ[XYЩHH’ЧУ•SТS‘NВ€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWЩYXШ]YШ[ШШ]WЪ[™›ЛќY™™\€HШ[[XWЬ[\ШќY™™\—ОВ€B€Y€
+›‹ќљР[ШШ]SY[[ЬћJ]љXЩK	™Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Л€ќ[‹	™Ш[[XWЬ[\ШќY™™\—ЫY[[ЬћWКHOH’ЧФХPРСTФКHВ€Y€
+›‹ќљРљ[™ќY™™\“Y[[ЬћJ]љXЩKШ[[XWЬ[\ШќY™™\—ЛШ[[XWЬ[\ШќY™™\—ЫY[[ЬћWЛ
+HOB€’ЧФХPРСTФКHВ€Y€
+›‹ќљУX\Y[[ЬћJ]љXЩKШ[[XWЬ[\ШќY™™\—ЫY[[ЬћWЛ’ЧХТУWФТV‘K€	™Ш[[XWЬ[\Э\ШYЫX\[™ЧКHOH’ЧФХPРСTФКHВ€\ЩWЩШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\€HќYNВ€Ш[[XWЬ[\Э\ШYЫY[[ЬћWЬЪ^™WИB€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Л[ШШ][Ы”Ъ^™NВ€Ш[[XWЬ[\Э\ШYЫY[[ЬћWЭ\WИB€Ш[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\—ЫY[[ЬћWШ[ШШ]WЪ[™›Л›Y[[ЬћU\R[™^В€B€B€Y€
+]\ЩWЩШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\ЉHВ€›‹ќљСњ™YSY[[ЬћJ]љXЩKШ[[XWЬ[\ШќY™™\—ЫY[[ЬћWЛќ[ЉNВ€Ш[[XWЬ[\ШќY™™\—ЫY[[ЬћWИH’ЧУ•SТS‘NВ€B€B€B€Y€
+]\ЩWЩШ[[XWЬ[\ЪЬЭЭљ\ЪX›WШќY™™\ЉHВ€›‹ќљС\Э›ЮPќY™™\Љ]љXЩKШ[[XWЬ[\ШќY™™\—Лќ[ЉNВ€Ш[[XWЬ[\ШќY™™\—ИH’ЧУ•SТS‘NВ€B€B€Y€
+Ш[[XWЬ[\ШќY™™\—ИOH’ЧУ•SТS‘JHВ€ЛИЬ™X]HЩ\\]HќY™™\њИ›Ь€HЪY\€[™\ШY[™Л‚€Y€
+]ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]QYXШ]Y[ШШ][ЫђќY™™\Љ€ќ[Ш[—Щ]љXЩKСШ[[XT[\Ъ^™K€’ЧР•Q‘‘T—ХTРQСWХђS”С‘T—СХР’U’ЧР•Q‘‘T—ХTРQСWХS’Q“Ф“WХVSР•Q‘‘T—Р’U€ZNЋќќ[Ш[ЋЋќ][Ћ“Y[[ЬћT\њЬЩNЋљС]љXЩSШШ[Ш[[XWЬ[\ШќY™™\—Л€Ш[[XWЬ[\ШќY™™\—ЫY[[ЬћWКJHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\ќY™™\€ЉNВ€™]\›€[ЩNВ€B€Y€
+]ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]QYXШ]Y[ШШ][ЫђќY™™\Љ€ќ[Ш[—Щ]љXЩKСШ[[XT[\Ъ^™H
+€УX^њ[Y\Т[‘›YЪ’ЧР•Q‘‘T—ХTРQСWХђS”С‘T—ФФђЧР’U€ZNЋќќ[Ш[ЋЋќ][Ћ“Y[[ЬћT\њЬЩNЋљХ\ШYШ[[XWЬ[\Э\ШYШќY™™\—Л€Ш[[XWЬ[\Э\ШYШќY™™\—ЫY[[ЬћWЛ	™Ш[[XWЬ[\Э\ШYЫY[[ЬћWЭ\WЛ€	™Ш[[XWЬ[\Э\ШYЫY[[ЬћWЬЪ^™WКJHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\ШYќY™™\€ЉNВ€™]\›€[ЩNВ€B€Y€
+›‹ќљУX\Y[[ЬћJ]љXЩKШ[[XWЬ[\Э\ШYШќY™™\—ЫY[[ЬћWЛ’ЧХТУWФТV‘K€	™Ш[[XWЬ[\Э\ШYЫX\[™ЧКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИX\HШ[[XH[\\ШYќY™™\€ЉNВ€™]\›€[ЩNВ€B€B‚€ЛИШ[[XH[\ќY™™\€љY]ЬЛ‚€Z[ќМ—ЭШ[[XWЬ[\Щњ[YWШЫЭ[ќB€Ш[[XWЬ[\Э\ШYШќY™™\—ИOH’ЧУ•SТS‘HИУX^њ[Y\Т[‘›YЪ€NВ€љРќY™™\•љY]РЬ™X]R[™›ИШ[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›ОВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWР•Q‘‘T—Х’QUЧРФ‘PUWТS‘“ОВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Л™›YЬИHВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›ЛќY™™\€HШ[[XWЬ[\ШќY™™\—ОВ€ЛИЌM‹Y[ќћHX›K‚€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Л™›Ь›X]H’ЧС“Ф“PUРLђЊLМLЊLХS“Ф“WФPТММЋВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Лњ[™ЩHHСШ[[XT[\Ъ^™LЌM‘[ќћUX›NВ€›Ь€
+Z[ќМ—ЭHHИHШ[[XWЬ[\Щњ[YWШЫЭ[ќИ
+КЪJHВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Л›Щ™њЩ]HСШ[[XT[\Ъ^™H
+€NВ€Y€
+›‹ќљРЬ™X]PќY™™\•љY]К]љXЩK	™Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Лќ[‹€	™Ш[[XWЬ[\ШќY™™\—ЭљY]ЬЧЦЪH
+€—JHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHЌM‹Y[ќћHX›HШ[[XH[\ќY™™\€љY]ИЉNВ€™]\›€[ЩNВ€B€B€ЛИYXЩ]Ъ\ЩH[™X\‹‚€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Л™›Ь›X]H’ЧС“Ф“PUФЊM‘МM—ХRS•В€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Лњ[™ЩHHСШ[[XT[\Ъ^™TУВ€›Ь€
+Z[ќМ—ЭHHИHШ[[XWЬ[\Щњ[YWШЫЭ[ќИ
+КЪJHВ€Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Л›Щ™њЩ]HСШ[[XT[\Ъ^™H
+€H
+ИСШ[[XT[\Ъ^™LЌM‘[ќћUX›NВ€Y€
+›‹ќљРЬ™X]PќY™™\•љY]К]љXЩK	™Ш[[XWЬ[\ШќY™™\—ЭљY]ЧШЬ™X]WЪ[™›Лќ[‹€	™Ш[[XWЬ[\ШќY™™\—ЭљY]ЬЧЦЪH
+€€
+ИWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHУШ[[XH[\ќY™™\€љY]ИЉNВ€™]\›€[ЩNВ€B€B‚€ЛИЭШ\\ШЬљ\Ь€Щ]^[Э]Л‚€љС\ШЬљ\Ь”Щ]^[Э]љ[™[™ИЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Лљ[™[™ИHВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Л™\ШЬљ\ЬђЫЭ[ќHNВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЛњЭYЩQ›YЬИB€’ЧФТQT—ФХQСWС”ђQУQS•Р’U’ЧФТQT—ФХQСWРУУTUWР’UВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Лњ[[]]X›TШ[\\њИHќ[ЋВ€љС\ШЬљ\Ь”Щ]^[Э]Ь™X]R[™›ИЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›ЛњХ\HB€’ЧФХ•PХT‘WХTWСTРФ’TФ—ФСUУVSХUРФ‘PUWТS‘“ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Л™›YЬИHВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лљ[™[™РЫЭ[ќHNВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лњљ[™[™ЬИH	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Л™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWФРSTQТSPQСNВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬШ[\YЪ[XYЩWКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HH™\Щ[ќ][Ы€Ш[\Y[XYЩH\ШЬљ\Ь€Щ]‚€›^[Э]ЉNВ€™]\›€[ЩNВ€B€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Л™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWХS’Q“Ф“WХVSР•Q‘‘TЋВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Э[љY›Ь›WЭ^[ШќY™™\—КHOB€’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HH™\Щ[ќ][Ы€[љY›Ь›H^[ќY™™\€\ШЬљ\Ь€Щ]‚€›^[Э]ЉNВ€™]\›€[ЩNВ€B€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Л™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWРУУP’S‘QТSPQСWФРSTTЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™ЛњЭYЩQ›YЬИH’ЧФТQT—ФХQСWРУУTUWР’UВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЫЫXљ[™YЪ[XYЩWЬШ[\\—КHOB€’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HH™\Щ[ќ][Ы€ЫЫXљ[™Y[XYЩHШ[\\€\ШЬљ\Ь€‚€њЩ]^[Э]ЉNВ€™]\›€[ЩNВ€B€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Шљ[™[™Л™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWФХФђQСWТSPQСNВ€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”Щ]^[Э]
+]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЭЬYЩWЪ[XYЩWКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИЬ™X]HH™\Щ[ќ][Ы€ЭЬYЩH[XYЩH\ШЬљ\Ь€Щ]‚€›^[Э]ЉNВ€™]\›€[ЩNВ€B‚€ЛИЭШ\\ШЬљ\Ь€ЫЫ‚€ЭЋ\њ^OљС\ШЬљ\Ь”ЫЫЪ^™K€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™\ОВ€љС\ШЬљ\Ь”ЫЫЬ™X]R[™›ИЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWСTРФ’TФ—ФУУРФ‘PUWТS‘“ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л™›YЬИHВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л›X^Щ]ИHВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™PЫЭ[ќHВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™\ИHЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™\Л™]J
+NВ€В€љС\ШЬљ\Ь”ЫЫЪ^™I€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЬШ[\YЪ[XYЩHB€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦЬЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™PЫЭ[ќ
+КЧNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЬШ[\YЪ[XYЩKќ\HH’ЧСTРФ’TФ—ХTWФРSTQТSPQСNВ€ЛИЫЭ\ЩH[XYЩ\Л‚€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЬШ[\YЪ[XYЩK™\ШЬљ\ЬђЫЭ[ќHУX^њ[Y\Т[‘›YЪВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л›X^Щ]И
+ПHУX^њ[Y\Т[‘›YЪВ€B€В€љС\ШЬљ\Ь”ЫЫЪ^™I€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WШЫЫXљ[™YЪ[XYЩWЬШ[\\€B€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦЬЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™PЫЭ[ќ
+КЧNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WШЫЫXљ[™YЪ[XYЩWЬШ[\\‹ќ\HB€’ЧСTРФ’TФ—ХTWРУУP’S‘QТSPQСWФРSTTЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WШЫЫXљ[™YЪ[XYЩWЬШ[\\‹™\ШЬљ\ЬђЫЭ[ќHУX^њ[Y\Т[‘›YЪВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л›X^Щ]И
+ПHУX^њ[Y\Т[‘›YЪВ€B€В€љС\ШЬљ\Ь”ЫЫЪ^™I€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЬЭЬYЩWЪ[XYЩHB€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦЬЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™PЫЭ[ќ
+КЧNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЬЭЬYЩWЪ[XYЩKќ\HH’ЧСTРФ’TФ—ХTWФХФђQСWТSPQСNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЬЭЬYЩWЪ[XYЩK™\ШЬљ\ЬђЫЭ[ќHУX^њ[Y\Т[‘›YЪ
+€ЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л›X^Щ]И
+ПHУX^њ[Y\Т[‘›YЪ
+€ЋВ€B€ЛИЌM‹Y[ќћHX›H[™УШ[[XH[\Л€Y€HШ[[XH[\ќY™™\€\В€ЛИЬЭ]љ\ЪX›K›Ь€][\Hњ[Y\Л‚€Z[ќМ—ЭШ[[XWЬ[\ШќY™™\—ЭљY]ЧШЫЭ[ќH€
+€Ш[[XWЬ[\Щњ[YWШЫЭ[ќВ€В€љС\ШЬљ\Ь”ЫЫЪ^™I€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЭ[љY›Ь›WЭ^[ШќY™™\€B€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™\ЦЬЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›ЛњЫЫЪ^™PЫЭ[ќ
+КЧNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЭ[љY›Ь›WЭ^[ШќY™™\‹ќ\HH’ЧСTРФ’TФ—ХTWХS’Q“Ф“WХVSР•Q‘‘TЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫЬЪ^™WЭ[љY›Ь›WЭ^[ШќY™™\‹™\ШЬљ\ЬђЫЭ[ќHШ[[XWЬ[\ШќY™™\—ЭљY]ЧШЫЭ[ќВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Л›X^Щ]И
+ПHШ[[XWЬ[\ШќY™™\—ЭљY]ЧШЫЭ[ќВ€B€Y€
+›‹ќљРЬ™X]Q\ШЬљ\Ь”ЫЫ
+]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЫЫШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Щ\ШЬљ\Ь—ЬЫЫКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HH™\Щ[ќ][Ы€\ШЬљ\Ь€ЫЫЉNВ€™]\›€[ЩNВ€B‚€ЛИЭШ\\ШЬљ\Ь€Щ][ШШ][Ы‹‚€љС\ШЬљ\Ь”Щ][ШШ]R[™›ИЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWСTРФ’TФ—ФСUРSРРUWТS‘“ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л™\ШЬљ\Ь”ЫЫHЭШ\Щ\ШЬљ\Ь—ЬЫЫОВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л™\ШЬљ\Ь”Щ]ЫЭ[ќHNВ€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњЩ]^[Э]ИH	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Э[љY›Ь›WЭ^[ШќY™™\—ОВ€›Ь€
+Z[ќМ—ЭHHИHШ[[XWЬ[\ШќY™™\—ЭљY]ЧШЫЭ[ќИ
+КЪJHВ€Y€
+›‹ќљР[ШШ]Q\ШЬљ\Ь”Щ]К]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л€	њЭШ\Щ\ШЬљ\ЬњЧЩШ[[XWЬ[\ЦЪWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИ[ШШ]HHШ[[XH[\\ШЬљ\Ь€Щ]ИЉNВ€™]\›€[ЩNВ€B€B€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњЩ]^[Э]ИH	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬШ[\YЪ[XYЩWОВ€›Ь€
+Z[ќМ—ЭHHИHУX^њ[Y\Т[‘›YЪИ
+КЪJHВ€Y€
+›‹ќљР[ШШ]Q\ШЬљ\Ь”Щ]К]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л€	њЭШ\Щ\ШЬљ\ЬњЧЬЫЭ\ЩWЦЪWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИ[ШШ]HH™\Щ[ќ][Ы€ЫЭ\ЩH[XYЩH\ШЬљ\Ь€Щ]ИЉNВ€™]\›€[ЩNВ€B€B€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњЩ]^[Э]ИB€	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЫЫXљ[™YЪ[XYЩWЬШ[\\—ОВ€›Ь€
+Z[ќМ—ЭHHИHУX^њ[Y\Т[‘›YЪИ
+КЪJHВ€Y€
+›‹ќљР[ШШ]Q\ШЬљ\Ь”Щ]К]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л€	њЭШ\Щ\ШЬљ\ЬњЧЩћXWЬЫЭ\ЩWЦЪWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИ[ШШ]HH™\Щ[ќ][Ы€–PHЫЭ\ЩH[XYЩH\ШЬљ\Ь€‚€њЩ]ИЉNВ€™]\›€[ЩNВ€B€B€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›ЛњЩ]^[Э]ИH	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЭЬYЩWЪ[XYЩWОВ€›Ь€
+Z[ќМ—ЭHHИHУX^њ[Y\Т[‘›YЪИ
+КЪJHВ€Y€
+›‹ќљР[ШШ]Q\ШЬљ\Ь”Щ]К]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л€	њЭШ\Щ\ШЬљ\ЬњЧЩ\Э[][Ы—ЬЭЬYЩWЦЪWJHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИ[ШШ]HH™\Щ[ќ][Ы€\Э[][Ы€ЭЬYЩH[XYЩH‚€™\ШЬљ\Ь€Щ]ИЉNВ€™]\›€[ЩNВ€B€B€›Ь€
+Z[ќМ—ЭHHИHУX^њ[Y\Т[‘›YЪИ
+КЪJHВ€Y€
+›‹ќљР[ШШ]Q\ШЬљ\Ь”Щ]К]љXЩK	њЭШ\Щ\ШЬљ\Ь—ЬЩ]Ш[ШШ]WЪ[™›Л€	њЭШ\Щ\ШЬљ\ЬњЧЩћXWЩ\Э[][Ы—ЬЭЬYЩWЦЪWJHOB€’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ€‘Z[YИ[ШШ]HH™\Щ[ќ][Ы€–PH\Э[][Ы€ЭЬYЩH[XYЩH‚€™\ШЬљ\Ь€Щ]ИЉNВ€™]\›€[ЩNВ€B€B‚€ЛИШ[[XH[\\ШЬљ\Ь€Щ]Л‚€љХЬљ]Q\ШЬљ\Ь”Щ]Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]В€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]њХ\HH’ЧФХ•PХT‘WХTWХФ’UWСTРФ’TФ—ФСUВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]њ™^Hќ[ЋВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]™Эљ[™[™ИHВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]™Э\њ^Q[[Y[ќHВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]™\ШЬљ\ЬђЫЭ[ќHNВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWХS’Q“Ф“WХVSР•Q‘‘TЋВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]њ[XYЩR[™›ИHќ[ЋВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]њќY™™\’[™›ИHќ[ЋВ€›Ь€
+Z[ќМ—ЭHHИHШ[[XWЬ[\ШќY™™\—ЭљY]ЧШЫЭ[ќИ
+КЪJHВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]™ЭЩ]HЭШ\Щ\ШЬљ\ЬњЧЩШ[[XWЬ[\ЦЪWNВ€Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]њ^[ќY™™\•љY]ИH	™Ш[[XWЬ[\ШќY™™\—ЭљY]ЬЧЦЪWNВ€›‹ќљХ\]Q\ШЬљ\Ь”Щ]К]љXЩKK	™Ш[[XWЬ[\ЭЬљ]WЩ\ШЬљ\Ь—ЬЩ]ќ[ЉNВ€B‚€ЛИ[™X\€Ш[\\€›Ь€–PK‚€љФШ[\\ђЬ™X]R[™›ИЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ОВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWФРSTT—РФ‘PUWТS‘“ОВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л™›YЬИHВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›XYСљ[\€H’ЧС’ST—УS‘PTЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›Z[‘љ[\€H’ЧС’ST—УS‘PTЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›Z\X\[ЩHH’ЧФРSTT—УRTPTУSСWУ‘PT‘TХВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ЛY™\ЬУ[ЩUHH’ЧФРSTT—РQ‘TФЧУSСWРУSTХЧСQСNВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ЛY™\ЬУ[ЩU€H’ЧФРSTT—РQ‘TФЧУSСWРУSTХЧСQСNВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ЛY™\ЬУ[ЩUИH’ЧФРSTT—РQ‘TФЧУSСWРУSTХЧСQСNВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›Z\ЩљX\ИHЊЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л[љ\ЫЭ›ЬQ[X›HH’ЧСђSСNВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›X^[љ\ЫЭ›ЬHHKЊЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ЛЫЫ\\™Q[X›HH’ЧСђSСNВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›ЛЫЫ\\™SЬH’ЧРУУTT‘WУФУ‘U‘TЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›Z[“ЩHЊЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›X^ЩHЊЋВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Л›Ь™\ђЫЫЬ€H’ЧР“Ф‘T—РУУФ—С“РUУФTUQWР“PТОВ€ЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Лќ[››Ь›X[^™YЫЫЬ™[]\ИH’ЧСђSСNВ€Y€
+›‹ќљРЬ™X]TШ[\\Љ]љXЩK	њЭШ\ЬШ[\\—ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\ЬШ[\\—Ы[™X\—ШЫ[\КHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HH™\Щ[ќ][Ы€–PHШ[\\€ЉNВ€™]\›€[ЩNВ€B‚€ЛИШ[[XH[\\XШ][Ы€\[[™H^[Э]‚€ЭЋ\њ^OљС\ШЬљ\Ь”Щ]^[Э]ФЭШ\\QШ[[XQ\ШЬљ\Ь”Щ]ЫЭ[ќ‚€ЭШ\Ш\WЩШ[[XWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЮЯNВ€ЭШ\Ш\WЩШ[[XWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\\QШ[[XQ\ШЬљ\Ь”Щ][\HB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Э[љY›Ь›WЭ^[ШќY™™\—ОВ€ЭШ\Ш\WЩШ[[XWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\\QШ[[XQ\ШЬљ\Ь”Щ]ЫЭ\ЩWHB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬШ[\YЪ[XYЩWОВ€љФ\[[™S^[Э]Ь™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WУVSХUРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Л™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ЫЭ[ќB€Z[ќМ—Э
+ЭШ\Ш\WЩШ[[XWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЛњЪ^™J
+JNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ИB€ЭШ\Ш\WЩШ[[XWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Л™]J
+NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™ЩPЫЭ[ќHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™Щ\ИHќ[ЋВ€Y€
+›‹ќљРЬ™X]T\[[™S^[Э]
+]љXЩK	њЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]КHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\XШ][Ы€\[[™H^[Э]ЉNВ€™]\›€[ЩNВ€B‚€ЛИШ[[XH[\\XШ][Ы€ЫЫ\]H\[[™H^[Э]‚€ЭЋ\њ^OљС\ШЬљ\Ь”Щ]^[Э]ФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ]ЫЭ[ќ‚€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЮЯNВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ][\HB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Э[љY›Ь›WЭ^[ШќY™™\—ОВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ]ЫЭ\ЩWHB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬШ[\YЪ[XYЩWОВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ]\Э[][Ы—HB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЭЬYЩWЪ[XYЩWОВ€љФ\ЪЫЫњЭ[ќ[™ЩHЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\ЪШЫЫњЭ[ќЬ[™ЩNВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\ЪШЫЫњЭ[ќЬ[™ЩKњЭYЩQ›YЬИH’ЧФТQT—ФХQСWРУУTUWР’UВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\ЪШЫЫњЭ[ќЬ[™ЩK›Щ™њЩ]HВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\ЪШЫЫњЭ[ќЬ[™ЩKњЪ^™HHЪ^™[ЩЉЭШ\\QШ[[XPЫЫњЭ[ќКNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ЫЭ[ќB€Z[ќМ—Э
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЛњЪ^™J
+JNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ИB€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Л™]J
+NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™ЩPЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™Щ\ИB€	њЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\ЪШЫЫњЭ[ќЬ[™ЩNВ€Y€
+›‹ќљРЬ™X]T\[[™S^[Э]
+]љXЩK	њЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]КHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\XШ][Ы€ЫЫ\]H\[[™H^[Э]ЉNВ€™]\›€[ЩNВ€B‚€ЛИ–PHЫЫ\]H\[[™H^[Э]‚€ЭЋ\њ^OљС\ШЬљ\Ь”Щ]^[Э]ФЭШ\ћXQ\ШЬљ\Ь”Щ]ЫЭ[ќ€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЮЯNВ€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\ћXQ\ШЬљ\Ь”Щ]ЫЭ\ЩWHB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЫЫXљ[™YЪ[XYЩWЬШ[\\—ОВ€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЦЪФЭШ\ћXQ\ШЬљ\Ь”Щ]\Э[][Ы—HB€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЭЬYЩWЪ[XYЩWОВ€љФ\ЪЫЫњЭ[ќ[™ЩHЭШ\ЩћXWЬ\ЪШЫЫњЭ[ќЬ[™ЩNВ€ЭШ\ЩћXWЬ\ЪШЫЫњЭ[ќЬ[™ЩKњЭYЩQ›YЬИH’ЧФТQT—ФХQСWРУУTUWР’UВ€ЭШ\ЩћXWЬ\ЪШЫЫњЭ[ќЬ[™ЩK›Щ™њЩ]HВ€ЭШ\ЩћXWЬ\ЪШЫЫњЭ[ќЬ[™ЩKњЪ^™HHЪ^™[ЩЉЭШ\ћXPЫЫњЭ[ќКNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ЫЭ[ќB€Z[ќМ—Э
+ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЛњЪ^™J
+JNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ИB€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]Ы^[Э]Л™]J
+NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™ЩPЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™Щ\ИH	њЭШ\ЩћXWЬ\ЪШЫЫњЭ[ќЬ[™ЩNВ€Y€
+›‹ќљРЬ™X]T\[[™S^[Э]
+]љXЩK	њЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њЭШ\ЩћXWЬ\[[™WЫ^[Э]КHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HH–PHЫЫ\]H\[[™H^[Э]ЉNВ€™]\›€[ЩNВ€B‚€ЛИШ[[XH\XШ][Ы€™[™\€\ЬЛ€Щ\Ы‰ЭXZЩH\ЬЭ[\[ЫњИX›Э]Э]\€\ШYЩB€ЛИ
+^XЪ]\њљY\њИ]\Э™H\ЩY[њЭXY
+H›Ь€Ъ[\XЪ]HЩ€\ЩH[€Y™™\™[ќ€ЛИШЩ[\љ[ЬИЪ]Y™™\™[ќ\[[™\Л‚€љР]XЪY[ќ\ШЬљ\[Ы€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќ™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќ™›Ь›X]HZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋљСЭY\ЭЭ]]›Ь›X]В€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќњШ[\\ИH’ЧФРSTWРУХS•МWР’UВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќ›ШYЬH’ЧРUPТQS•УРQУФСУ•РРT‘NВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќњЭЬ™SЬH’ЧРUPТQS•ФХФ‘WУФФХФ‘NВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќњЭ[Ъ[ШYЬH’ЧРUPТQS•УРQУФСУ•РРT‘NВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќњЭ[Ъ[ЭЬ™SЬH’ЧРUPТQS•ФХФ‘WУФСУ•РРT‘NВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќљ[љ]X[^[Э]H’ЧТSPQСWУVSХUХS‘Q’S‘QВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќ™љ[[^[Э]H’ЧТSPQСWУVSХUРУУФ—РUPТQS•УФSPSВ€љР]XЪY[ќ™Y™\™[ЩHЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЫЫЬ—Ш]XЪY[ќВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЫЫЬ—Ш]XЪY[ќ]XЪY[ќHВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЫЫЬ—Ш]XЪY[ќ›^[Э]H’ЧТSPQСWУVSХUРУУФ—РUPТQS•УФSPSВ€љФЭXњ\ЬС\ШЬљ\[Ы€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЬЭXњ\ЬИHЯNВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЬЭXњ\ЬЛњ\[[™Pљ[™Ъ[ќH’ЧФTSS‘WР’S‘ФТS•СФђTPФОВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЬЭXњ\ЬЛЫЫЬђ]XЪY[ќЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЬЭXњ\ЬЛњЫЫЬђ]XЪY[ќИB€	њЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЫЫЬ—Ш]XЪY[ќВ€љФЭXњ\ЬС\[™[ЮHЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЪY\ЦМ—NВ€›Ь€
+Z[ќМ—ЭHHИHЋИ
+КЪJHВ€љФЭXњ\ЬС\[™[ЮI€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮHB€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЪY\ЦЪWNВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮKњЬФЭXњ\ЬИHHИ€’ЧФХP”TФЧСVT“ђSВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮK™ЭЭXњ\ЬИHHИ’ЧФХP”TФЧСVT“ђS€В€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮKњЬФЭYЩSX\ЪИB€’ЧФTSS‘WФХQСWРУУФ—РUPТQS•УХUUР’UВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮK™ЭЭYЩSX\ЪИB€’ЧФTSS‘WФХQСWРУУФ—РUPТQS•УХUUР’UВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮKњЬРXШЩ\ЬУX\ЪИH’ЧРPРСTФЧРУУФ—РUPТQS•ХФ’UWР’UВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮK™ЭXШЩ\ЬУX\ЪИH’ЧРPРСTФЧРУУФ—РUPТQS•ХФ’UWР’UВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЮK™\[™[ЮQ›YЬИH’ЧСTS‘SђЦWР–WФ‘QТSУ—Р’UВ€B€љФ™[™\”\ЬРЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›ОВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWФ‘S‘T—ФTФЧРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Л™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Л]XЪY[ќЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Лњ]XЪY[ќИH	њЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШ]XЪY[ќВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›ЛњЭXњ\ЬРЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›ЛњЭXњ\ЬЩ\ИH	њЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЬЭXњ\ЬОВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Л™\[™[ЮPЫЭ[ќB€Z[ќМ—Э
+™^ЋЫЭ[ќЩЉЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЪY\КJNВ€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Лњ\[™[ЪY\ИB€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧЩ\[™[ЪY\ОВ€Y€
+›‹ќљРЬ™X]T™[™\”\ЬК]љXЩK	њЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧШЬ™X]WЪ[™›Лќ[‹€	њЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧКHOH’ЧФХPРСTФКHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\XШ][Ы€™[™\€\ЬИЉNВ€™]\›€[ЩNВ€B‚€ЛИШ[[XH[\\XШ][Ы€\[[™K‚€ЛИ\Ъ[™ИHЬ\XЬИ\[[™K›ЭHЫЫ\]HЫ™K™XШ]\ЩHЭЬYЩH[XYЩHЭ\Ьќ€ЛИ\ИЬ[Ы[›Ь€’ЧС“Ф“PUРLђЊLМLЊLХS“Ф“WФPТММ‹‚‚€[ќ[HЭШ\\QШ[[XT^[ЪY\€В€ФЭШ\\QШ[[XT^[ЪY\ЊЌM‘[ќћUX›K€ФЭШ\\QШ[[XT^[ЪY\”У€ФЭШ\\QШ[[XT^[ЪY\ЊЌM‘[ќћUX›QћXS[XK€ФЭШ\\QШ[[XT^[ЪY\”УћXS[XK‚€ФЭШ\\QШ[[XT^[ЪY\ђЫЭ[ќ€NВ€ЭЋ\њ^OљФЪY\“[Щ[KФЭШ\\QШ[[XT^[ЪY\ђЫЭ[ќ€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЮЯNВ€›ЫЫЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЧШЬ™X]YB€
+ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\ЊЌM‘[ќћUX›WHB€ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]TЪY\“[Щ[Jќ[Ш[—Щ]љXЩKЪY\њОЋ\WЩШ[[XWЭX›WЬЛ€Ъ^™[ЩЉЪY\њОЋ\WЩШ[[XWЭX›WЬКJJHOB€’ЧУ•SТS‘H	‰‚€
+ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\”УHB€ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]TЪY\“[Щ[Jќ[Ш[—Щ]љXЩKЪY\њОЋ\WЩШ[[XWЬЫЬЛ€Ъ^™[ЩЉЪY\њОЋ\WЩШ[[XWЬЫЬКJJHOB€’ЧУ•SТS‘H	‰‚€
+ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\ЊЌM‘[ќћUX›QћXS[XWHB€ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]TЪY\“[Щ[J€ќ[Ш[—Щ]љXЩKЪY\њОЋ\WЩШ[[XWЭX›WЩћXWЫ[XWЬЛ€Ъ^™[ЩЉЪY\њОЋ\WЩШ[[XWЭX›WЩћXWЫ[XWЬКJJHOH’ЧУ•SТS‘H	‰‚€
+ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\”УћXS[XWHB€ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]TЪY\“[Щ[J€ќ[Ш[—Щ]љXЩKЪY\њОЋ\WЩШ[[XWЬЫЩћXWЫ[XWЬЛ€Ъ^™[ЩЉЪY\њОЋ\WЩШ[[XWЬЫЩћXWЫ[XWЬКJJHOH’ЧУ•SТS‘NВ€Y€
+\ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЧШЬ™X]Y
+HВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\XШ][Ы€^[ЪY\€[Щ[\ИЉNВ€›Ь€
+љФЪY\“[Щ[HЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\€€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њКHВ€Y€
+ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\€OH’ЧУ•SТS‘JHВ€›‹ќљС\Э›ЮTЪY\“[Щ[J]љXЩKЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\‹ќ[ЉNВ€B€B€™]\›€[ЩNВ€B‚€љФ\[[™TЪY\”ЭYЩPЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМ—NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМKњХ\HH’ЧФХ•PХT‘WХTWФTSS‘WФТQT—ФХQСWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМKњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМK™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМKњЭYЩHH’ЧФТQT—ФХQСWХ‘T•VР’UВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМK›[Щ[HHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]TЪY\“[Щ[J€ќ[Ш[—Щ]љXЩKЪY\њОЋ™ќ[ШЬ™Y[—ШЭЧЭњЛЪ^™[ЩЉЪY\њОЋ™ќ[ШЬ™Y[—ШЭЧЭњКJNВ€Y€
+ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМK›[Щ[HOH’ЧУ•SТS‘JHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\XШ][Ы€™\ќ^ЪY\€[Щ[HЉNВ€›Ь€
+љФЪY\“[Щ[HЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\€€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њКHВ€\ЬЩ\ќЭќYJЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\€OH’ЧУ•SТS‘JNВ€›‹ќљС\Э›ЮTЪY\“[Щ[J]љXЩKЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\‹ќ[ЉNВ€B€™]\›€[ЩNВ€B€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМKњ[YHH›XZ[€ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМKњЬXЪX[^][Ы’[™›ИHќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWKњХ\HH’ЧФХ•PХT‘WХTWФTSS‘WФТQT—ФХQСWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWKњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWK™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWKњЭYЩHH’ЧФТQT—ФХQСWС”ђQУQS•Р’UВ€ЛИHњYЫY[ќЪY\€[Щ[HЪ[™HЬXЪYљYY]\‹‚€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWKњ[YHH›XZ[€ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWKњЬXЪX[^][Ы’[™›ИHќ[ЋВ‚€љФ\[[™U™\ќ^[њ]Э]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЭ™\ќ^Ъ[њ]ЬЭ]HHЯNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭ™\ќ^Ъ[њ]ЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WХ‘T•VТS”UФХUWРФ‘PUWТS‘“ОВ‚€љФ\[[™R[њ]\ЬЩ[X›TЭ]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WТS”UРTФСSP“WФХUWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]Kњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]K™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]KќЬЫЩЮHH’ЧФ’SRUU‘WХФУСЦWХ’PS‘УWУTХВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]Kњљ[Z]]™T™\Э\ќ[X›HH’ЧСђSСNВ‚€љФ\[[™UљY]ЬЬќЭ]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WХ’QUФФ•ФХUWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]Kњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]K™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]KќљY]ЬЬќЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]KњљY]ЬЬќИHќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]KњШЪ\ЬЫЬђЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]KњШЪ\ЬЫЬњИHќ[ЋВ‚€љФ\[[™T\Э\љ^][Ы”Э]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]HHЯNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WФђTХT’VђUSУ—ФХUWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]KњЫYЫЫ“[ЩHH’ЧФУQУУ—УSСWС’SВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]KЭ[[ЩHH’ЧРХSУSСWУ“У‘NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]K™њ›ЫќXЩHH’ЧС”“У•СђPСWРУРТХТTСNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]K›[™UЪYHKЊЋВ‚€љФ\[[™S][\Ш[\TЭ]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЫ][\Ш[\WЬЭ]HHЯNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ][\Ш[\WЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WУUSTРSTWФХUWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ][\Ш[\WЬЭ]Kњ\Э\љ^][Ы”Ш[\\ИH’ЧФРSTWРУХS•МWР’UВ‚€љФ\[[™PЫЫЬђ›[™]XЪY[ќЭ]HЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™Ш]XЪY[ќЬЭ]HHЯNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™Ш]XЪY[ќЬЭ]KЫЫЬ•Ьљ]SX\ЪИB€’ЧРУУФ—РУУTУ‘S•Ф—Р’U’ЧРУУФ—РУУTУ‘S•СЧР’U’ЧРУУФ—РУУTУ‘S•Р—Р’U€’ЧРУУФ—РУУTУ‘S•РWР’UВ€љФ\[[™PЫЫЬђ›[™Э]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™ЬЭ]HHЯNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™ЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WРУУФ—Р“S‘ФХUWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™ЬЭ]K]XЪY[ќЫЭ[ќHNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™ЬЭ]Kњ]XЪY[ќИB€	њЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™Ш]XЪY[ќЬЭ]NВ‚€Э]XИЫЫњЭљС[[ZXФЭ]HФЭШ\\QШ[[XT\[[™Q[[ZXФЭ]\ЦЧHHВ€’ЧСSђSRPЧФХUWХ’QUФФ•€’ЧСSђSRPЧФХUWФРТTФУФ‹€NВ€љФ\[[™Q[[ZXФЭ]PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]KњХ\HB€’ЧФХ•PХT‘WХTWФTSS‘WСSђSRPЧФХUWРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]Kњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]K™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]K™[[ZXФЭ]PЫЭ[ќB€Z[ќМ—Э
+™^ЋЫЭ[ќЩЉФЭШ\\QШ[[XT\[[™Q[[ZXФЭ]\КJNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]Kњ[[ZXФЭ]\ИHФЭШ\\QШ[[XT\[[™Q[[ZXФЭ]\ОВ‚€љСЬ\XЬФ\[[™PЬ™X]R[™›ИЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWСФђTPФЧФTSS‘WРФ‘PUWТS‘“ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ™^Hќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Л™›YЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ЛњЭYЩPЫЭ[ќB€Z[ќМ—Э
+™^ЋЫЭ[ќЩЉЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\КJNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ЛњЭYЩ\ИHЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ™\ќ^[њ]Э]HB€	њЭШ\Ш\WЩШ[[XWЬ\[[™WЭ™\ќ^Ъ[њ]ЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ[њ]\ЬЩ[X›TЭ]HB€	њЭШ\Ш\WЩШ[[XWЬ\[[™WЪ[њ]Ш\ЬЩ[X›WЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ\ЬЩ[][Ы”Э]HHќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ЛњљY]ЬЬќЭ]HH	њЭШ\Ш\WЩШ[[XWЬ\[[™WЭљY]ЬЬќЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ\Э\љ^][Ы”Э]HB€	њЭШ\Ш\WЩШ[[XWЬ\[[™WЬ\Э\љ^][Ы—ЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ][\Ш[\TЭ]HB€	њЭШ\Ш\WЩШ[[XWЬ\[[™WЫ][\Ш[\WЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ\Э[Ъ[Э]HHќ[ЋВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ЛњЫЫЬђ›[™Э]HB€	њЭШ\Ш\WЩШ[[XWЬ\[[™WШЫЫЬ—Ш›[™ЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ[[ZXФЭ]HH	њЭШ\Ш\WЩШ[[XWЬ\[[™WЩ[[ZXЧЬЭ]NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Л›^[Э]HЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]ОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лњ™[™\”\ЬИHЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧОВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›ЛњЭXњ\ЬИHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Л\ЩT\[[™R[™HH’ЧУ•SТS‘NВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Л\ЩT\[[™R[™^HLNВ€ЭЋ\њ^OљФЪY\“[Щ[K€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬ^[ЬЪY\њИHВ€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\ЊЌM‘[ќћUX›WK€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\”УK€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\ЊЌM‘[ќћUX›QћXS[XWK€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њЦЪФЭШ\\QШ[[XT^[ЪY\”УћXS[XWK€NВ€ЭЋ\њ^OљФ\[[™J‹€ЭШ\Ш\WЩШ[[XWЬ\[[™\ИHВ€	њЭШ\Ш\WЩШ[[XWМЌM—Щ[ќћWЭX›WЬ\[[™WЛ€	њЭШ\Ш\WЩШ[[XWЬЫЬ\[[™WЛ€	њЭШ\Ш\WЩШ[[XWМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ\[[™WЛ€	њЭШ\Ш\WЩШ[[XWЬЫЩћXWЫ[XWЬ\[[™WЛ€NВ€ЭЋ\њ^OљФ™\Э[€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЬ™\Э[ОВ€›Ь€
+Ъ^™WЭHHИHЭШ\Ш\WЩШ[[XWЬ\[[™\ЛњЪ^™J
+NИ
+КЪJHВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWK›[Щ[HHЭШ\Ш\WЩШ[[XWЬ\[[™WЬ^[ЬЪY\њЦЪWNВ€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЬ™\Э[ЦЪWHH›‹ќљРЬ™X]QЬ\XЬФ\[[™\К€]љXЩK’ЧУ•SТS‘KK	њЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лќ[‹€ЭШ\Ш\WЩШ[[XWЬ\[[™\ЦЪWJNВ€B€Y€
+]ќ[Ш[—Щ]љXЩKOњ›Ь\ќY\К
+Kљ[XYЩUљY]С›Ь›X]ЭЪ^ћ›JHВ€]]ИЬ™X]WЬ—ЬЭШ\Ь\[[™HHЙ—JЫЫњЭЪ\Љ€ЫЭ\ЩKљФ\[[™I€\[[™WЫЭ]€ЫЫњЭЪ\Љ€\[[™WЫ[YJHВ€ЭЋќ™XЭЬЏZ[ќМ—Э€^[ЬЬ\ќЋВ€ЭЋњЭљ[™ИЫЫ\[WЩ\њ›ЬЋВ€Y€
+PЫЫ\[QЫЫФЬ\ќЉ’ЧФТQT—ФХQСWС”ђQУQS•Р’UЫЭ\ЩK^[ЬЬ\ќ‹ЫЫ\[WЩ\њ›ЬЉJHВ€‘VФWХРT“Љ‘Z[YИЫЫ\[HЯHЪY\€ИФT‹UЋ€ЯH‹\[[™WЫ[YKЫЫ\[WЩ\њ›ЬЉNВ€™]\›ЋВ€B€љФЪY\“[Щ[H^[ЬЪY\—Ы[Щ[HHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]TЪY\“[Щ[J€ќ[Ш[—Щ]љXЩK^[ЬЬ\ќ‹™]J
+KЪ^™[ЩЉZ[ќМ—Э
+H
+€^[ЬЬ\ќ‹њЪ^™J
+JNВ€Y€
+^[ЬЪY\—Ы[Щ[HOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ‘Z[YИЬ™X]HЯHЪY\€[Щ[H‹\[[™WЫ[YJNВ€™]\›ЋВ€B€ЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМWK›[Щ[HH^[ЬЪY\—Ы[Щ[NВ€Y€
+›‹ќљРЬ™X]QЬ\XЬФ\[[™\К]љXЩK’ЧУ•SТS‘KK€	њЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЪ[™›Лќ[‹€	њ\[[™WЫЭ]
+HOH’ЧФХPРСTФКHВ€‘VФWХРT“Љ‘Z[YИЬ™X]HЯH\[[™H‹\[[™WЫ[YJNВ€\[[™WЫЭ]H’ЧУ•SТS‘NВ€B€›‹ќљС\Э›ЮTЪY\“[Щ[J]љXЩK^[ЬЪY\—Ы[Щ[Kќ[ЉNВ€NВ€Ь™X]WЬ—ЬЭШ\Ь\[[™JЩ]ЭШ\\QШ[[XUX›T^[”ЭШ\ЫЭ\ЩJ
+K€ЭШ\Ш\WЩШ[[XWМЌM—Щ[ќћWЭX›WЬ—ЬЭШ\Ь\[[™WЛ€њЭШ\Ш[[XHX›H™YШ›YH[XЪИЉNВ€Ь™X]WЬ—ЬЭШ\Ь\[[™JЩ]ЭШ\\QШ[[XTЫ^[”ЭШ\ЫЭ\ЩJ
+K€ЭШ\Ш\WЩШ[[XWЬЫЬ—ЬЭШ\Ь\[[™WЛ€њЭШ\Ш[[XHУ™YШ›YH[XЪИЉNВ€B€›‹ќљС\Э›ЮTЪY\“[Щ[J]љXЩKЭШ\Ш\WЩШ[[XWЬ\[[™WЬЭYЩ\ЦМK›[Щ[Kќ[ЉNВ€›Ь€
+љФЪY\“[Щ[HЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\€€ЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\њКHВ€\ЬЩ\ќЭќYJЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\€OH’ЧУ•SТS‘JNВ€›‹ќљС\Э›ЮTЪY\“[Щ[J]љXЩKЭШ\Ш\WЩШ[[XWЬ^[ЬЪY\‹ќ[ЉNВ€B€Y€
+ЭЋ[ћWЫЩЉЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЬ™\Э[Л™YЪ[Љ
+K€ЭШ\Ш\WЩШ[[XWЬ\[[™WШЬ™X]WЬ™\Э[Л™[™
+
+K€ЧJљФ™\Э[™\Э[
+HИ™]\›€™\Э[OH’ЧФХPРСTФОИJJHВ€‘VФWСT”“ФЉ‘Z[YИЬ™X]HHШ[[XH[\\XШ][Ы€\[[™\ИЉNВ€™]\›€[ЩNВ€B‚€ЛИШ[[XH[\\XШ][Ы€ЫЫ\]H\[[™\Л‚€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ\[[™WИHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]ЛЪY\њОЋ\WЩШ[[XWЭX›WШЬЛ€Ъ^™[ЩЉЪY\њОЋ\WЩШ[[XWЭX›WШЬКJNВ€Y€
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ€‘Z[YИЬ™X]HHЌM‹Y[ќћHX›HШ[[XH[\\XШ][Ы€ЫЫ\]H‚€њ\[[™KЩY\[™ИЬ\XЬИ[XЪИЉNВ€B€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ\[[™WИB€ZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]Л€ЪY\њОЋ\WЩШ[[XWЭX›WЩћXWЫ[XWШЬЛЪ^™[ЩЉЪY\њОЋ\WЩШ[[XWЭX›WЩћXWЫ[XWШЬКJNВ€Y€
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ€‘Z[YИЬ™X]HHЌM‹Y[ќћHX›HШ[[XH[\\XШ][Ы€ЫЫ\]H‚€њ\[[™HЪ][XHЭ]]ЉNВ€B€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ\[[™WИHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]ЛЪY\њОЋ\WЩШ[[XWЬЫШЬЛ€Ъ^™[ЩЉЪY\њОЋ\WЩШ[[XWЬЫШЬКJNВ€Y€
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ‘Z[YИЬ™X]HHУШ[[XH[\\XШ][Ы€ЫЫ\]H\[[™HЉNВ€B€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ\[[™WИHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]Л€ЪY\њОЋ\WЩШ[[XWЬЫЩћXWЫ[XWШЬЛЪ^™[ЩЉЪY\њОЋ\WЩШ[[XWЬЫЩћXWЫ[XWШЬКJNВ€Y€
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ€‘Z[YИЬ™X]HHУШ[[XH[\\XШ][Ы€ЫЫ\]H\[[™HЪ]‚€›[XHЭ]]ЉNВ€B€Y€
+]ќ[Ш[—Щ]љXЩKOњ›Ь\ќY\К
+Kљ[XYЩUљY]С›Ь›X]ЭЪ^ћ›JHВ€]]ИЬ™X]WЬ—ЬЭШ\ШЫЫ\]WЬ\[[™HHЙ—JЫЫњЭЪ\Љ€ЫЭ\ЩKљФ\[[™I€\[[™WЫЭ]€ЫЫњЭЪ\Љ€\[[™WЫ[YJHВ€ЭЋќ™XЭЬЏZ[ќМ—Э€ЫЫ\]WЬЬ\ќЋВ€ЭЋњЭљ[™ИЫЫ\[WЩ\њ›ЬЋВ€Y€
+PЫЫ\[QЫЫФЬ\ќЉ’ЧФТQT—ФХQСWРУУTUWР’UЫЭ\ЩKЫЫ\]WЬЬ\ќ‹ЫЫ\[WЩ\њ›ЬЉJHВ€‘VФWХРT“Љ‘Z[YИЫЫ\[HЯHЪY\€ИФT‹UЋ€ЯH‹\[[™WЫ[YKЫЫ\[WЩ\њ›ЬЉNВ€™]\›ЋВ€B€\[[™WЫЭ]HZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]ЛЫЫ\]WЬЬ\ќ‹™]J
+K€Ъ^™[ЩЉZ[ќМ—Э
+H
+€ЫЫ\]WЬЬ\ќ‹њЪ^™J
+JNВ€Y€
+\[[™WЫЭ]OH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ‘Z[YИЬ™X]HЯH\[[™H‹\[[™WЫ[YJNВ€B€NВ€Ь™X]WЬ—ЬЭШ\ШЫЫ\]WЬ\[[™JЩ]ЭШ\\QШ[[XUX›PЫЫ\]T”ЭШ\ЫЭ\ЩJ
+K€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ—ЬЭШ\Ь\[[™WЛ€њЭШ\Ш[[XHX›HЫЫ\]H™YШ›YH[XЪИЉNВ€Ь™X]WЬ—ЬЭШ\ШЫЫ\]WЬ\[[™JЩ]ЭШ\\QШ[[XTЫЫЫ\]T”ЭШ\ЫЭ\ЩJ
+K€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ—ЬЭШ\Ь\[[™WЛ€њЭШ\Ш[[XHУЫЫ\]H™YШ›YH[XЪИЉNВ€Ь™X]WЬ—ЬЭШ\ШЫЫ\]WЬ\[[™J€Щ]ЭШ\\QШ[[XUX›QћXS[XPЫЫ\]T”ЭШ\ЫЭ\ЩJ
+K€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ—ЬЭШ\Ь\[[™WЛ€њЭШ\Ш[[XHX›H–PK[[XHЫЫ\]H™YШ›YH[XЪИЉNВ€Ь™X]WЬ—ЬЭШ\ШЫЫ\]WЬ\[[™JЩ]ЭШ\\QШ[[XTЫћXS[XPЫЫ\]T”ЭШ\ЫЭ\ЩJ
+K€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ—ЬЭШ\Ь\[[™WЛ€њЭШ\Ш[[XHУ–PK[[XHЫЫ\]H™YШ›YH[XЪИЉNВ€B‚€ЛИ–PHЫЫ\]H\[[™\ЛЫЫ\[YИФT‹U€]ќ[ќ[YK‚€ЭЋќ™XЭЬЏZ[ќМ—Э€ЭШ\ЩћXWЬЬ\ќЋВ€ЭЋњЭљ[™ИЭШ\ЩћXWШЫЫ\[WЩ\њ›ЬЋВ€Y€
+PЫЫ\[QЫЫФЬ\ќЉ’ЧФТQT—ФХQСWРУУTUWР’UЩ]ЭШ\ћXPЫЫ\]TЫЭ\ЩJ[ЩJK€ЭШ\ЩћXWЬЬ\ќ‹ЭШ\ЩћXWШЫЫ\[WЩ\њ›ЬЉJHВ€‘VФWХРT“Љ‘Z[YИЫЫ\[H–PHЫЫ\]HЪY\€ИФT‹UЋ€ЯH‹ЭШ\ЩћXWШЫЫ\[WЩ\њ›ЬЉNВ€H[ЩHВ€ЭШ\ЩћXWЬ\[[™WИHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\ЩћXWЬ\[[™WЫ^[Э]ЛЭШ\ЩћXWЬЬ\ќ‹™]J
+K€Ъ^™[ЩЉZ[ќМ—Э
+H
+€ЭШ\ЩћXWЬЬ\ќ‹њЪ^™J
+JNВ€Y€
+ЭШ\ЩћXWЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ‘Z[YИЬ™X]HH–PHЫЫ\]H\[[™HЉNВ€B€B‚€ЭЋќ™XЭЬЏZ[ќМ—Э€ЭШ\ЩћXWЩ^™[YWЬЬ\ќЋВ€ЭЋњЭљ[™ИЭШ\ЩћXWЩ^™[YWШЫЫ\[WЩ\њ›ЬЋВ€Y€
+PЫЫ\[QЫЫФЬ\ќЉ’ЧФТQT—ФХQСWРУУTUWР’UЩ]ЭШ\ћXPЫЫ\]TЫЭ\ЩJќYJK€ЭШ\ЩћXWЩ^™[YWЬЬ\ќ‹ЭШ\ЩћXWЩ^™[YWШЫЫ\[WЩ\њ›ЬЉJHВ€‘VФWХРT“Љ‘Z[YИЫЫ\[H^™[YH–PHЫЫ\]HЪY\€ИФT‹UЋ€ЯH‹€ЭШ\ЩћXWЩ^™[YWШЫЫ\[WЩ\њ›ЬЉNВ€H[ЩHВ€ЭШ\ЩћXWЩ^™[YWЬ\[[™WИHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩKЭШ\ЩћXWЬ\[[™WЫ^[Э]ЛЭШ\ЩћXWЩ^™[YWЬЬ\ќ‹™]J
+K€Ъ^™[ЩЉZ[ќМ—Э
+H
+€ЭШ\ЩћXWЩ^™[YWЬЬ\ќ‹њЪ^™J
+JNВ€Y€
+ЭШ\ЩћXWЩ^™[YWЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ‘Z[YИЬ™X]HH^™[YK\]X[]H–PHЫЫ\]H\[[™HЉNВ€B€B‚€љФ\[[™S^[Э]Ь™X]R[™›И™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›ИHЯNВ€™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›ЛњХ\HH’ЧФХ•PХT‘WХTWФTSS‘WУVSХUРФ‘PUWТS‘“ОВ€љС\ШЬљ\Ь”Щ]^[Э]™\ЫЫ™WЩЭЫњШШ[WЬЩ]Ы^[Э]B€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЧЬЪ[™ЫWЭ[њЪY[ќЦЬЪ^™WЭ
+€Ъ[™ЫU[њЪY[ќ\ШЬљ\Ь“^[Э]ЋљФЭЬYЩPќY™™\”Z\ђЫЫ\]JWNВ€™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ЫЭ[ќHNВ€™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›ЛњЩ]^[Э]ИH	њ™\ЫЫ™WЩЭЫњШШ[WЬЩ]Ы^[Э]В€љФ\ЪЫЫњЭ[ќ[™ЩH™\ЫЫ™WЩЭЫњШШ[WЬ\ЪШЫЫњЭ[ќЬ[™ЩHHЯNВ€™\ЫЫ™WЩЭЫњШШ[WЬ\ЪШЫЫњЭ[ќЬ[™ЩKњЭYЩQ›YЬИH’ЧФТQT—ФХQСWРУУTUWР’UВ€™\ЫЫ™WЩЭЫњШШ[WЬ\ЪШЫЫњЭ[ќЬ[™ЩK›Щ™њЩ]HВ€™\ЫЫ™WЩЭЫњШШ[WЬ\ЪШЫЫњЭ[ќЬ[™ЩKњЪ^™HHЪ^™[ЩЉ™\ЫЫ™QЭЫњШШ[PЫЫњЭ[ќКNВ€™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™ЩPЫЭ[ќHNВ€™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›Лњ\ЪЫЫњЭ[ќ[™Щ\ИH	њ™\ЫЫ™WЩЭЫњШШ[WЬ\ЪШЫЫњЭ[ќЬ[™ЩNВ€Y€
+›‹ќљРЬ™X]T\[[™S^[Э]
+]љXЩK	њ™\ЫЫ™WЩЭЫњШШ[WЫ^[Э]ШЬ™X]WЪ[™›Лќ[‹€	њ™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WЫ^[Э]КHOH’ЧФХPРСTФКHВ€™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WИHZNЋќќ[Ш[ЋЋќ][ЋђЬ™X]PЫЫ\]T\[[™J€ќ[Ш[—Щ]љXЩK™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WЫ^[Э]ЛЪY\њОЋњ™\ЫЫ™WЩЭЫњШШ[WШЬЛ€Ъ^™[ЩЉЪY\њОЋњ™\ЫЫ™WЩЭЫњШШ[WШЬКJNВ€Y€
+™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WИOH’ЧУ•SТS‘JHВ€‘VФWХРT“Љ‘Z[YИЬ™X]Hќ[Ш[€™\ЫЫ™KYЭЫњШШ[H™XYXЪИ\[[™HЉNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™S^[Э]]љXЩK€™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WЫ^[Э]КNВ€B€H[ЩHВ€‘VФWХРT“Љ‘Z[YИЬ™X]Hќ[Ш[€™\ЫЫ™KYЭЫњШШ[H\[[™H^[Э]ЉNВ€B‚€ШШЫ\Ъ[Ы—Ь]Y\ћWЬ™\ЫЭ\Щ\ЧШ]Z[X›WИH[љ]X[^™SШШЫ\Ъ[Ы”]Y\ћT™\ЫЭ\Щ\К
+NВ‚€ЛИќ\Э›ЭИ^ЬЩH[љ[љ]X[^™YY[[ЬћK‚€ЭЋ›Y[\Щ]
+	њЮ\Э[WШЫЫњЭ[ќЧЛЪ^™[ЩЉЮ\Э[WШЫЫњЭ[ќЧКJNВ‚€™]\›€ќYNВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ”Ъ]ЭЫђЫЫќ^
+
+HВ€]ШZ][]Y]YSЬ\][ЫњРЫЫ\][ЫЉ
+NВ€[ќ[Y]P[™\ќ^ќY™™\”™\ЪY[ЮJ
+NВ€Ъ]ЭЫ“ШШЫ\Ъ[Ы”]Y\ћT™\ЫЭ\Щ\К
+NВ‚€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩJ€ЫЫњЭќ[Ш[—Щ]љXЩHHЩ]ќ[Ш[‘]љXЩJ
+NВ€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩNЋ‘ќ[Э[ЫњЙ€›€Hќ[Ш[—Щ]љXЩKO™ќ[Э[ЫњК
+NВ€ЫЫњЭљС]љXЩH]љXЩHHќ[Ш[—Щ]љXЩKO™]љXЩJ
+NВ‚€\Э›ЮTШЬ]ЪќY™™\Љ
+NВ‚€›Ь€
+]]Й€™XYXЪЧЬZ\€€™XYXЪЧШќY™™\њЧКHВ€™XYXЪРќY™™\‰€™XYXЪИH™XYXЪЧЬZ\‹њЩXЫЫ™В€›Ь€
+Z[ќМ—ЭHHИHЋИ
+КЪJHВ€Y€
+™XYXЪЛ›X\YЩ]VЪWH	‰€™XYXЪЛ›Y[[ЬљY\ЦЪWHOH’ЧУ•SТS‘JHВ€›‹ќљХ[›X\Y[[ЬћJ]љXЩK™XYXЪЛ›Y[[ЬљY\ЦЪWJNВ€B€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮPќY™™\‹]љXЩK™XYXЪЛќY™™\њЦЪWJNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљСњ™YSY[[ЬћK]љXЩK™XYXЪЛ›Y[[ЬљY\ЦЪWJNВ€™XYXЪЛ›X\YЩ]VЪWHHќ[ЋВ€™XYXЪЛњЪ^™\ЦЪWHHВ€™XYXЪЛњЭX›Z\ЬЪ[Ы—ЭЬљ][–ЪWHHВ€™XYXЪЛќЬљ][—ЬЪ^™VЪWHHВ€B€B€™XYXЪЧШќY™™\њЧЛЫX\Љ
+NВ€›Ь€
+]]Й€™XYXЪЧЬZ\€€Y[Y^ЬќЬ™XYXЪЧШќY™™\њЧКHВ€™XYXЪРќY™™\‰€™XYXЪИH™XYXЪЧЬZ\‹њЩXЫЫ™В€›Ь€
+Z[ќМ—ЭHHИHЋИ
+КЪJHВ€Y€
+™XYXЪЛ›X\YЩ]VЪWH	‰€™XYXЪЛ›Y[[ЬљY\ЦЪWHOH’ЧУ•SТS‘JHВ€›‹ќљХ[›X\Y[[ЬћJ]љXЩK™XYXЪЛ›Y[[ЬљY\ЦЪWJNВ€B€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮPќY™™\‹]љXЩK™XYXЪЛќY™™\њЦЪWJNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљСњ™YSY[[ЬћK]љXЩK™XYXЪЛ›Y[[ЬљY\ЦЪWJNВ€™XYXЪЛ›X\YЩ]VЪWHHќ[ЋВ€™XYXЪЛњЪ^™\ЦЪWHHВ€™XYXЪЛњЭX›Z\ЬЪ[Ы—ЭЬљ][–ЪWHHВ€™XYXЪЛќЬљ][—ЬЪ^™VЪWHHВ€B€B€Y[Y^ЬќЬ™XYXЪЧШќY™™\њЧЛЫX\Љ
+NВ‚€™\ЫЫ™WЩЭЫњШШ[WШќY™™\—ЬЪ^™WИHВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮPќY™™\‹]љXЩK™\ЫЫ™WЩЭЫњШШ[WШќY™™\—КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљСњ™YSY[[ЬћK]љXЩK€™\ЫЫ™WЩЭЫњШШ[WШќY™™\—ЫY[[ЬћWКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™S^[Э]]љXЩK€™\ЫЫ™WЩЭЫњШШ[WЬ\[[™WЫ^[Э]КNВ‚€›Ь€
+ЭШ\њ[YXќY™™\‰€ЭШ\Щњ[YXќY™™\€€ЭШ\Щњ[YXќY™™\њЧКHВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQњ[YXќY™™\‹]љXЩK€ЭШ\Щњ[YXќY™™\‹™њ[YXќY™™\ЉNВ€B€\Э›ЮTЭШ\ћXTЫЭ\ЩR[XYЩJ
+NВ‚€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\ЩћXWЩ^™[YWЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩKЭШ\ЩћXWЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ—ЬЭШ\Ь\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ—ЬЭШ\Ь\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J€›‹ќљС\Э›ЮT\[[™K]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J€›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ—ЬЭШ\Ь\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J€›‹ќљС\Э›ЮT\[[™K]љXЩKЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ—ЬЭШ\Ь\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWЬЫЬ—ЬЭШ\Ь\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWМЌM—Щ[ќћWЭX›WЬ—ЬЭШ\Ь\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWЬЫЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWЬЫЩћXWЫ[XWЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWМЌM—Щ[ќћWЭX›WЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™K]љXЩK€ЭШ\Ш\WЩШ[[XWМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ\[[™WКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT™[™\”\ЬЛ]љXЩK€ЭШ\Ш\WЩШ[[XWЬ™[™\—Ь\ЬЧКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™S^[Э]]љXЩK€ЭШ\ЩћXWЬ\[[™WЫ^[Э]КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™S^[Э]]љXЩK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮT\[[™S^[Э]]љXЩK€ЭШ\Ш\WЩШ[[XWЬ\[[™WЫ^[Э]КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮTШ[\\‹]љXЩKЭШ\ЬШ[\\—Ы[™X\—ШЫ[\КNВ‚€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”ЫЫ]љXЩK€ЭШ\Щ\ШЬљ\Ь—ЬЫЫКNВ‚€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]Э[љY›Ь›WЭ^[ШќY™™\—КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЭЬYЩWЪ[XYЩWКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЫЫXљ[™YЪ[XYЩWЬШ[\\—КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€ЭШ\Щ\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬШ[\YЪ[XYЩWКNВ€›Ь€
+љРќY™™\•љY]Й€Ш[[XWЬ[\ШќY™™\—ЭљY]И€Ш[[XWЬ[\ШќY™™\—ЭљY]ЬЧКHВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮPќY™™\•љY]Л]љXЩKШ[[XWЬ[\ШќY™™\—ЭљY]КNВ€B€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮPќY™™\‹]љXЩKШ[[XWЬ[\Э\ШYШќY™™\—КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљСњ™YSY[[ЬћK]љXЩK€Ш[[XWЬ[\Э\ШYШќY™™\—ЫY[[ЬћWКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮPќY™™\‹]љXЩKШ[[XWЬ[\ШќY™™\—КNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљСњ™YSY[[ЬћK]љXЩKШ[[XWЬ[\ШќY™™\—ЫY[[ЬћWКNВ‚€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”ЫЫ]љXЩK€Ъ\™YЫY[[ЬћWШ[™ЩY[WЩ\ШЬљ\Ь—ЬЫЫКNВ‚€^\™WШШXЪWЛњ™\Щ]
+
+NВ‚€\[[™WШШXЪWЛњ™\Щ]
+
+NВ‚€™[™\—Э\™Щ]ШШXЪWЛњ™\Щ]
+
+NВ‚€љ[Z]]™WЬ›ШЩ\ЬЫЬ—Лњ™\Щ]
+
+NВ‚€Ъ\™YЫY[[ЬћWЛњ™\Щ]
+
+NВ‚€ЫX\•[њЪY[ќ\ШЬљ\Ь”ЫЫК
+NВ‚€›Ь€
+ЫЫњЭ]]Й€\[[™WЫ^[Э]ЬZ\€€\[[™WЫ^[Э]ЧКHВ€›‹ќљС\Э›ЮT\[[™S^[Э]
+]љXЩK\[[™WЫ^[Э]ЬZ\‹њЩXЫЫ™‘Щ]\[[™S^[Э]
+
+Kќ[ЉNВ€B€\[[™WЫ^[Э]ЧЛЫX\Љ
+NВ€›Ь€
+ЫЫњЭ]]Й€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬZ\€€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЧЭ^\™\ЧКHВ€›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]
+]љXЩK\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬZ\‹њЩXЫЫ™ќ[ЉNВ€B€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЧЭ^\™\ЧЛЫX\Љ
+NВ‚€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЪ\™YЫY[[ЬћWШ[™ЩY[WКNВ€›Ь€
+љС\ШЬљ\Ь”Щ]^[Э]	€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЪ[™ЫWЭ[њЪY[ќ‚€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЧЬЪ[™ЫWЭ[њЪY[ќКHВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€\ШЬљ\Ь—ЬЩ]Ы^[Э]ЬЪ[™ЫWЭ[њЪY[ќ
+NВ€B€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€\ШЬљ\Ь—ЬЩ]Ы^[Э]ШЫЫњЭ[ќЧКNВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘\Э›ЮP[™ќ[[™J›‹ќљС\Э›ЮQ\ШЬљ\Ь”Щ]^[Э]]љXЩK€\ШЬљ\Ь—ЬЩ]Ы^[Э]Щ[\WКNВ‚€[љY›Ь›WШќY™™\—ЬЫЫЛњ™\Щ]
+
+NВ‚€Ь\њЩWШљ[™ЭШZ]ЬЭYЩWЫX\ЪЧИHВ€Ь\њЩWШќY™™\—Шљ[™ЧЛЫX\Љ
+NВ€Ь\њЩWЫY[[ЬћWШљ[™ЧЛЫX\Љ
+NВ‚€Y™\њ™YШЫЫ[X[™ШќY™™\—Л”™\Щ]
+
+NВ€›Ь€
+ЫЫњЭ]]Й€ЫЫ[X[™ШќY™™\—ЬZ\€€ЫЫ[X[™ШќY™™\њЧЬЭX›Z]YКHВ€›‹ќљС\Э›ЮPЫЫ[X[™ЫЫ
+]љXЩKЫЫ[X[™ШќY™™\—ЬZ\‹њЩXЫЫ™њЫЫќ[ЉNВ€B€ЫЫ[X[™ШќY™™\њЧЬЭX›Z]YЛЫX\Љ
+NВ€›Ь€
+ЫЫњЭЫЫ[X[™ќY™™\‰€ЫЫ[X[™ШќY™™\€€ЫЫ[X[™ШќY™™\њЧЭЬљ]X›WКHВ€›‹ќљС\Э›ЮPЫЫ[X[™ЫЫ
+]љXЩKЫЫ[X[™ШќY™™\‹њЫЫќ[ЉNВ€B€ЫЫ[X[™ШќY™™\њЧЭЬљ]X›WЛЫX\Љ
+NВ‚€›Ь€
+ЫЫњЭ]]Й€\Э›ЮWЬZ\€€\Э›ЮWЩњ[YXќY™™\њЧКHВ€›‹ќљС\Э›ЮQњ[YXќY™™\Љ]љXЩK\Э›ЮWЬZ\‹њЩXЫЫ™ќ[ЉNВ€B€\Э›ЮWЩњ[YXќY™™\њЧЛЫX\Љ
+NВ€›Ь€
+ЫЫњЭ]]Й€\Э›ЮWЬZ\€€\Э›ЮWЪ[XYЩWЭљY]ЬЧКHВ€›‹ќљС\Э›ЮR[XYЩUљY]К]љXЩK\Э›ЮWЬZ\‹њЩXЫЫ™ќ[ЉNВ€B€\Э›ЮWЪ[XYЩWЭљY]ЬЧЛЫX\Љ
+NВ€›Ь€
+ЫЫњЭ]]Й€\Э›ЮWЬZ\€€\Э›ЮWШќY™™\њЧКHВ€›‹ќљС\Э›ЮPќY™™\Љ]љXЩK\Э›ЮWЬZ\‹њЩXЫЫ™ќ[ЉNВ€B€\Э›ЮWШќY™™\њЧЛЫX\Љ
+NВ€›Ь€
+ЫЫњЭ]]Й€\Э›ЮWЬZ\€€\Э›ЮWЪ[XYЩ\ЧКHВ€›‹ќљС\Э›ЮR[XYЩJ]љXЩK\Э›ЮWЬZ\‹њЩXЫЫ™ќ[ЉNВ€B€\Э›ЮWЪ[XYЩ\ЧЛЫX\Љ
+NВ€›Ь€
+ЫЫњЭ]]Й€\Э›ЮWЬZ\€€\Э›ЮWЫY[[ЬћWКHВ€›‹ќљСњ™YSY[[ЬћJ]љXЩK\Э›ЮWЬZ\‹њЩXЫЫ™ќ[ЉNВ€B€\Э›ЮWЫY[[ЬћWЛЫX\Љ
+NВ‚€ЭЋ›Y[\Щ]
+ЫЬЩYЩњ[YWЬЭX›Z\ЬЪ[ЫњЧЛЪ^™[ЩЉЫЬЩYЩњ[YWЬЭX›Z\ЬЪ[ЫњЧКJNВ€њ[YWШЫЫ\]YИHВ€њ[YWШЭ\њ™[ќИHNВ€њ[YWЫЬ[—ИH[ЩNВ‚€›Ь€
+ЫЫњЭ]]Й€Щ[X\Ь™H€ЭX›Z\ЬЪ[ЫњЧЪ[—Щ›YЪЬЩ[X\Ь™\ЧКHВ€›‹ќљС\Э›ЮTЩ[X\Ь™J]љXЩKЩ[X\Ь™KњЩXЫЫ™ќ[ЉNВ€B€ЭX›Z\ЬЪ[ЫњЧЪ[—Щ›YЪЬЩ[X\Ь™\ЧЛЫX\Љ
+NВ€›Ь€
+љС™[ЩI€™[ЩH€ЭX›Z\ЬЪ[ЫњЧЪ[—Щ›YЪЩ™[Щ\ЧКHВ€›‹ќљС\Э›ЮQ™[ЩJ]љXЩK™[ЩKќ[ЉNВ€B€ЭX›Z\ЬЪ[ЫњЧЪ[—Щ›YЪЩ™[Щ\ЧЛЫX\Љ
+NВ€Э\њ™[ќЬЭX›Z\ЬЪ[Ы—ЭШZ]ЬЭYЩWЫX\ЪЬЧЛЫX\Љ
+NВ€›Ь€
+љФЩ[X\Ь™HЩ[X\Ь™H€Э\њ™[ќЬЭX›Z\ЬЪ[Ы—ЭШZ]ЬЩ[X\Ь™\ЧКHВ€›‹ќљС\Э›ЮTЩ[X\Ь™J]љXЩKЩ[X\Ь™Kќ[ЉNВ€B€Э\њ™[ќЬЭX›Z\ЬЪ[Ы—ЭШZ]ЬЩ[X\Ь™\ЧЛЫX\Љ
+NВ€ЭX›Z\ЬЪ[Ы—ШЫЫ\]YИHВ€ЭX›Z\ЬЪ[Ы—ЫЬ[—ИH[ЩNВ‚€›Ь€
+љФЩ[X\Ь™HЩ[X\Ь™H€Щ[X\Ь™\ЧЩњ™YWКHВ€›‹ќљС\Э›ЮTЩ[X\Ь™J]љXЩKЩ[X\Ь™Kќ[ЉNВ€B€Щ[X\Ь™\ЧЩњ™YWЛЫX\Љ
+NВ€›Ь€
+љС™[ЩH™[ЩH€™[Щ\ЧЩњ™YWКHВ€›‹ќљС\Э›ЮQ™[ЩJ]љXЩK™[ЩKќ[ЉNВ€B€™[Щ\ЧЩњ™YWЛЫX\Љ
+NВ‚€]љXЩWЫЬЭИH[ЩNВ‚€ЫЫ[X[™›ШЩ\ЬЫЬЋЋ”Ъ]ЭЫђЫЫќ^
+
+NВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ•Ьљ]T™YЪ\Э\ЉZ[ќМ—Э[™^Z[ќМ—Э[YJHВ€ЫЫ[X[™›ШЩ\ЬЫЬЋЋ•Ьљ]T™YЪ\Э\Љ[™^[YJNВ‚€Y€
+]ЧШЩ[њЭ\ЧИ	‰€]ЧШЩ[њЭ\ЧЛO’\Ф™XЫЬ™[™К
+JHВ€Y€
+[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•МЦ	‰‚€[™^HWСФWФ‘QЧФТQT—РУУ”ХS•НLLWХКHВ€ЫЫњЭZ[ќМ—Э™XЭЬ€H
+[™^HWСФWФ‘QЧФТQT—РУУ”ХS•МЦ
+HЏ€ЋВ€]ЧШЩ[њЭ\ЧЩ›Ш]Щ\ќWЦЭ™XЭЬ€Џ€—HHRS•ЌРКJH
+™XЭЬ€	€ЊКNВ€H[ЩHY€
+[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•Р“УУМММH	‰‚€[™^HWСФWФ‘QЧФТQT—РУУ”ХS•УУФММJHВ€
+КЩ]ЧШЩ[њЭ\ЧШ›ЫЫЫЬЩ\ќWЭЬљ]\ЧОВ€H[ЩHY€
+[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММ	‰‚€[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММWНJHВ€ЫЫњЭZ[ќМ—ЭЫЬ™H[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММВ€]ЧШЩ[њЭ\ЧЩ™]ЪЩ\ќWЦЩЫЬ™Џ€WHHRS•М—РКJH
+ЫЬ™	€МJNВ€B€B‚€Y€
+[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•МЦ	‰€[™^HWСФWФ‘QЧФТQT—РУУ”ХS•НLLWХКHВ€Y€
+њ[YWЫЬ[—КHВ€Z[ќМ—Э›Ш]ШЫЫњЭ[ќЪ[™^H
+[™^HWСФWФ‘QЧФТQT—РУУ”ХS•МЦ
+HЏ€ЋВ€Y€
+›Ш]ШЫЫњЭ[ќЪ[™^ЏHЌMЉHВ€›Ш]ШЫЫњЭ[ќЪ[™^OHЌMЋВ€Y€
+Э\њ™[ќЩ›Ш]ШЫЫњЭ[ќЫX\Ь^[ЦЩ›Ш]ШЫЫњЭ[ќЪ[™^Џ€—H	‚€
+][
+›Ш]ШЫЫњЭ[ќЪ[™^	€ЊКJJHВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘›Ш]^[
+NВ€B€H[ЩHВ€Y€
+Э\њ™[ќЩ›Ш]ШЫЫњЭ[ќЫX\Э™\ќ^ЦЩ›Ш]ШЫЫњЭ[ќЪ[™^Џ€—H	‚€
+][
+›Ш]ШЫЫњЭ[ќЪ[™^	€ЊКJJHВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘›Ш]™\ќ^
+NВ€B€B€B€H[ЩHY€
+[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•Р“УУМММH	‰‚€[™^HWСФWФ‘QЧФТQT—РУУ”ХS•УУФММJHВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\ђ›ЫЫЫЬ
+NВ€H[ЩHY€
+[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММ	‰‚€[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММWНJHВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘™]Ъ
+NВ€Y€
+^\™WШШXЪWКHВ€^\™WШШXЪWЛO•^\™Q™]ЪЫЫњЭ[ќЬљ][Љ
+[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММ
+HВ€ЉNВ€B€[ќ[Y]U™\ќ^ќY™™\”™\ЪY[ЮJ
+[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММ
+HИЉNВ€BџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ•Ьљ]T™YЪ\Э\њСњ›ЫSY[JZ[ќМ—ЭЭ\ќЪ[™^Z[ќМ—Э
+€\ЩK€Z[ќМ—Эќ[WЬ™YЪ\Э\њКHВ€Y€
+[ќ[WЬ™YЪ\Э\њКHВ€™]\›ЋВ€B€Z[ќМ—Э[™Ъ[™^HЭ\ќЪ[™^
+Иќ[WЬ™YЪ\Э\њИHNВ‚€]]И[™ЩWЪ\ЧШ[ћWШЫЫњЭ[ќЭ\ШYЩHHЧJЫЫњЭZ[ќЌЭ
+€\ШYЩWЫX\Z[ќМ—Эљ\њЭШЫЫњЭ[ќ€Z[ќМ—Э\ЭШЫЫњЭ[ќ
+HO€›ЫЫВ€Y€
+љ\њЭШЫЫњЭ[ќ€\ЭШЫЫњЭ[ќ
+HВ€™]\›€[ЩNВ€B€Z[ќМ—Эљ\њЭЭЫЬ™Hљ\њЭШЫЫњЭ[ќЏ€ЋВ€Z[ќМ—Э\ЭЭЫЬ™H\ЭШЫЫњЭ[ќЏ€ЋВ€Z[ќМ—Эљ\њЭШљ]Hљ\њЭШЫЫњЭ[ќ	€ЊОВ€Z[ќМ—Э\ЭШљ]H\ЭШЫЫњЭ[ќ	€ЊОВ€Y€
+љ\њЭЭЫЬ™OH\ЭЭЫЬ™
+HВ€Z[ќМ—Эљ]ШЫЭ[ќH\ЭШљ]Hљ\њЭШљ]
+ИNВ€Z[ќЌЭX\ЪИHљ]ШЫЭ[ќOHЌИRS•ЌУPV€
+
+RS•ЌРКJHљ]ШЫЭ[ќ
+HHJHљ\њЭШљ]В€™]\›€
+\ШYЩWЫX\Щљ\њЭЭЫЬ™H	€X\ЪКHOHВ€B€Y€
+\ШYЩWЫX\Щљ\њЭЭЫЬ™H	€
+RS•ЌУPVљ\њЭШљ]
+JHВ€™]\›€ќYNВ€B€›Ь€
+Z[ќМ—ЭЫЬ™Hљ\њЭЭЫЬ™
+ИNИЫЬ™\ЭЭЫЬ™И
+КЭЫЬ™
+HВ€Y€
+\ШYЩWЫX\ЭЫЬ™JHВ€™]\›€ќYNВ€B€B€Z[ќЌЭ\ЭЫX\ЪИH\ЭШљ]OHЊИИRS•ЌУPV€
+
+RS•ЌРКJH
+\ЭШљ]
+ИJJHHJNВ€™]\›€
+\ШYЩWЫX\Ы\ЭЭЫЬ™H	€\ЭЫX\ЪКHOHВ€NВ‚€Y€
+Э\ќЪ[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•МЦ	‰‚€[™Ъ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•НLLWХКHВ€Y[[ЬћNЋЫЬWШ[™ЬЭШ\
+™YЪ\Э\—Щљ[WЛOќ[Y\И
+ИЭ\ќЪ[™^\ЩKќ[WЬ™YЪ\Э\њКNВ€Y€
+]ЧШЩ[њЭ\ЧИ	‰€]ЧШЩ[њЭ\ЧЛO’\Ф™XЫЬ™[™К
+JHВ€ЫЫњЭZ[ќМ—Эљ\њЭЭ™XЭЬ€H
+Э\ќЪ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•МЦ
+HЏ€ЋВ€ЫЫњЭZ[ќМ—Э\ЭЭ™XЭЬ€H
+[™Ъ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•МЦ
+HЏ€ЋВ€›Ь€
+Z[ќМ—Э™XЭЬ€Hљ\њЭЭ™XЭЬЋИ™XЭЬ€H\ЭЭ™XЭЬЋИ
+КЭ™XЭЬЉHВ€]ЧШЩ[њЭ\ЧЩ›Ш]Щ\ќWЦЭ™XЭЬ€Џ€—HHRS•ЌРКJH
+™XЭЬ€	€ЊКNВ€B€B€Y€
+њ[YWЫЬ[—КHВ€Z[ќМ—Эљ\њЭЩ›Ш]ШЫЫњЭ[ќH
+Э\ќЪ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•МЦ
+HЏ€ЋВ€Z[ќМ—Э\ЭЩ›Ш]ШЫЫњЭ[ќH
+[™Ъ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•МЦ
+HЏ€ЋВ€Y€
+љ\њЭЩ›Ш]ШЫЫњЭ[ќЌMЉHВ€Z[ќМ—Э\ЭЭ™\ќ^ШЫЫњЭ[ќHЭЋ›Z[Љ\ЭЩ›Ш]ШЫЫњЭ[ќЌM]JNВ€Y€
+[™ЩWЪ\ЧШ[ћWШЫЫњЭ[ќЭ\ШYЩJЭ\њ™[ќЩ›Ш]ШЫЫњЭ[ќЫX\Э™\ќ^Лљ\њЭЩ›Ш]ШЫЫњЭ[ќ€\ЭЭ™\ќ^ШЫЫњЭ[ќ
+JHВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘›Ш]™\ќ^
+NВ€B€B€Y€
+\ЭЩ›Ш]ШЫЫњЭ[ќЏHЌMЉHВ€Z[ќМ—Эљ\њЭЬ^[ШЫЫњЭ[ќB€љ\њЭЩ›Ш]ШЫЫњЭ[ќЏHЌM€Иљ\њЭЩ›Ш]ШЫЫњЭ[ќHЌM€€В€Z[ќМ—Э\ЭЬ^[ШЫЫњЭ[ќH\ЭЩ›Ш]ШЫЫњЭ[ќHЌMЋВ€Y€
+[™ЩWЪ\ЧШ[ћWШЫЫњЭ[ќЭ\ШYЩJЭ\њ™[ќЩ›Ш]ШЫЫњЭ[ќЫX\Ь^[Лљ\њЭЬ^[ШЫЫњЭ[ќ€\ЭЬ^[ШЫЫњЭ[ќ
+JHВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘›Ш]^[
+NВ€B€B€B€™]\›ЋВ€B‚€Y€
+Э\ќЪ[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•Р“УУМММH	‰‚€[™Ъ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•УУФММJHВ€Y[[ЬћNЋЫЬWШ[™ЬЭШ\
+™YЪ\Э\—Щљ[WЛOќ[Y\И
+ИЭ\ќЪ[™^\ЩKќ[WЬ™YЪ\Э\њКNВ€Y€
+]ЧШЩ[њЭ\ЧИ	‰€]ЧШЩ[њЭ\ЧЛO’\Ф™XЫЬ™[™К
+JHВ€]ЧШЩ[њЭ\ЧШ›ЫЫЫЬЩ\ќWЭЬљ]\ЧИ
+ПHќ[WЬ™YЪ\Э\њОВ€B€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\ђ›ЫЫЫЬ
+NВ€™]\›ЋВ€B‚€Y€
+Э\ќЪ[™^ЏHWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММ	‰‚€[™Ъ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММWНJHВ€Y[[ЬћNЋЫЬWШ[™ЬЭШ\
+™YЪ\Э\—Щљ[WЛOќ[Y\И
+ИЭ\ќЪ[™^\ЩKќ[WЬ™YЪ\Э\њКNВ€Э\њ™[ќШЫЫњЭ[ќШќY™™\њЧЭ\ЭЧЩ]WИ	ЏB€ЉRS•М—РКJHЬ\ќ”ЪY\•[њЫ]ЬЋЋљРЫЫњЭ[ќќY™™\‘™]Ъ
+NВ€Z[ќМ—Эљ\њЭЩ™]ЪЩЫЬ™HЭ\ќЪ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММВ€Z[ќМ—Э\ЭЩ™]ЪЩЫЬ™H[™Ъ[™^HWСФWФ‘QЧФТQT—РУУ”ХS•С‘UТММВ€Y€
+]ЧШЩ[њЭ\ЧИ	‰€]ЧШЩ[њЭ\ЧЛO’\Ф™XЫЬ™[™К
+JHВ€›Ь€
+Z[ќМ—ЭЫЬ™Hљ\њЭЩ™]ЪЩЫЬ™ИЫЬ™H\ЭЩ™]ЪЩЫЬ™И
+КЩЫЬ™
+HВ€]ЧШЩ[њЭ\ЧЩ™]ЪЩ\ќWЦЩЫЬ™Џ€WHHRS•М—РКJH
+ЫЬ™	€МJNВ€B€B€Y€
+^\™WШШXЪWКHВ€^\™WШШXЪWЛO•^\™Q™]ЪЫЫњЭ[ќХЬљ][Љљ\њЭЩ™]ЪЩЫЬ™И‹\ЭЩ™]ЪЩЫЬ™ИЉNВ€B€[ќ[Y]U™\ќ^ќY™™\”™\ЪY[ЮT[™ЩJљ\њЭЩ™]ЪЩЫЬ™И‹\ЭЩ™]ЪЩЫЬ™ИЉNВ€™]\›ЋВ€B‚€ЫЫ[X[™›ШЩ\ЬЫЬЋЋ•Ьљ]T™YЪ\Э\њСњ›ЫSY[JЭ\ќЪ[™^\ЩKќ[WЬ™YЪ\Э\њКNВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ”Ь\њЩPљ[™ќY™™\ЉљРќY™™\€ќY™™\‹Z[ќМ—Эљ[™ШЫЭ[ќ€ЫЫњЭљФЬ\њЩSY[[ЬћPљ[™
+€љ[™Л€љФ\[[™TЭYЩQ›YЬИШZ]ЬЭYЩWЫX\ЪКHВ€Y€
+Xљ[™ШЫЭ[ќ
+HВ€™]\›ЋВ€B€Ь\њЩPќY™™\ђљ[™	€ќY™™\—Шљ[™HЬ\њЩWШќY™™\—Шљ[™ЧЛ™[\XЩWШXЪК
+NВ€ќY™™\—Шљ[™ќY™™\€HќY™™\ЋВ€ќY™™\—Шљ[™љ[™ЫЩ™њЩ]HЬ\њЩWЫY[[ЬћWШљ[™ЧЛњЪ^™J
+NВ€ќY™™\—Шљ[™љ[™ШЫЭ[ќHљ[™ШЫЭ[ќВ€Ь\њЩWЫY[[ЬћWШљ[™ЧЛњ™\Щ\ќ™JЬ\њЩWЫY[[ЬћWШљ[™ЧЛњЪ^™J
+H
+Иљ[™ШЫЭ[ќ
+NВ€Ь\њЩWЫY[[ЬћWШљ[™ЧЛљ[њЩ\ќ
+Ь\њЩWЫY[[ЬћWШљ[™ЧЛ™[™
+
+Kљ[™Лљ[™И
+Иљ[™ШЫЭ[ќ
+NВ€Ь\њЩWШљ[™ЭШZ]ЬЭYЩWЫX\ЪЧИHШZ]ЬЭYЩWЫX\ЪОВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ“Ы‘Ш[[XT[\ЌM‘[ќћUX›U[YUЬљ][Љ
+HВ€Ш[[XWЬ[\МЌM—Щ[ќћWЭX›WШЭ\њ™[ќЩњ[YWИHRS•М—УPVВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ“Ы‘Ш[[XT[\У[YUЬљ][Љ
+HВ€Ш[[XWЬ[\ЬЫШЭ\њ™[ќЩњ[YWИHRS•М—УPVВџB‚ќ›ЪYќ[Ш[ђЫЫ[X[™›ШЩ\ЬЫЬЋЋ’\ЬЭYTЭШ\
+Z[ќМ—Эњ›ЫќќY™™\—Ь‹Z[ќМ—Эњ›ЫќќY™™\—ЭЪY€Z[ќМ—Эњ›ЫќќY™™\—ЪZYЪ
+HВ€
+КЩ]ЧШЩ[њЭ\ЧЬЭШ\ЫЬ™[[ОВ€ЪY€‘VФU“Ф“WФХТUТ€™^ЭЪ]Ъ\™ђЫЭ[ќ
+
+NВ€ЛИЫЫ™љ\›HHќY™™\€HЭY\ЭXЭX[H™\Щ[ќЛ]\€[€[™™\њљ[™ИB€ЛИ™[™\€™\ЫЫ][Ы€њ›ЫHHЫЫ™љYЭ\™YљY[И[ЩHЬ€HЪ[™ЭИЪ^™K‚€Э]XИZ[ќМ—ЭЩЩЩYЬЭШ\ЭЪYHВ€Э]XИZ[ќМ—ЭЩЩЩYЬЭШ\ЪZYЪHВ€Y€
+]ЧШЩ[њЭ\ЧЬЭШ\ЫЬ™[[ИHњ›ЫќќY™™\—ЭЪYOHЩЩЩYЬЭШ\ЭЪY€њ›ЫќќY™™\—ЪZYЪOHЩЩЩYЬЭШ\ЪZYЪ
+HВ€‘VФWТS‘“К–ЩЫYњЪK]љY[ЧHXЭX[ЭY\ЭЭШ\Я^ЯHY™\ЬП^ОЊHЬ™[[^ЯH‹€њ›ЫќќY™™\—ЭЪYњ›ЫќќY™™\—ЪZYЪњ›ЫќќY™™\—Ь‹]ЧШЩ[њЭ\ЧЬЭШ\ЫЬ™[[КNВ€ЩЩЩYЬЭШ\ЭЪYHњ›ЫќќY™™\—ЭЪYВ€ЩЩЩYЬЭШ\ЪZYЪHњ›ЫќќY™™\—ЪZYЪВ€B€ЛИЫЩH\€њ[YN€YЩ\ИH][[™\€ЭЬYШ]Ъ[™И™XШ]\ЩH^HЩ\™B€ЛИ™XYЭ™\€[™Э™\€\™HЪXЪЩY›Ь€ФHЬљ]\И
+ЩYHY[[ЬћKЬ
+K‚€Y[[ЬћWЛO”ЭЪ]ЪЪXЪХ[ќШ]ЪYYЩ\К
+NВ€Щ[™Y‚€РУФWЬ›Щљ[WШЬWЩЉ™ЬHЉNВ€™\ќ^ШќY™™\њЧЪ[—ЬЮ[ЧЦМHHВ€™\ќ^ШќY™™\њЧЪ[—ЬЮ[ЧЦМWHHВ‚€ЛИњ[YH›Э[™\ћH›Ь€H]]™H™\ЪY[ЮH]€XЪИH\ШЪ[™]ЪB€ЛИЭ\њИ›Ь€Hњ[YH]\ИX›Э]ИЭ\ќ€Ы™H\™K[Ы™ЬЪYHHЭ\‚€ЛИ\‹Yњ[YH™\Щ]X›Э™H[™ZXYЩ€]™\ћ][™ИHЭY\ЭШ[€ШњЩ\ќ™KЫВ€ЛИ]HЭШ\Z[]Щ[€\И›ЭЭXЪY[™ЫИ]H[ЩHЭ[Щ]В€ЛИ]ЪYЫ€H]И™[ЭИ]™]\›€X\›K‚€]]™WЬ™\ЪY[ЮWЛO“]Ъњ[YS[ЩP]ЭШ\
+
+NВ‚€Y€
+]ЧШЩ[њЭ\ОЋ’\Ф[™[™Ф™\]Y\Э
+
+H€
+]ЧШЩ[њЭ\ЧИ	‰€]ЧШЩ[њЭ\ЧЛO’\УЬ[ђШ\\™J
+JJHВ€Y€
+Y]ЧШЩ[њЭ\ЧКHВ€]ЧШЩ[њЭ\ЧИHЭЋ›XZЩWЭ[љ\]YO]ЧШЩ[њЭ\ОЋ”™XЫЬ™\ЏЉ
+NВ€B€Z[ќМ—ЭЩ[њЭ\ЧЫ[ЩWЩ›YЬИHВ€Y€
+]]™WЬ™\ЪY[ЮWЛO›]]™WЩњ[YJ
+JHВ€Щ[њЭ\ЧЫ[ЩWЩ›YЬИH]ЧШЩ[њЭ\ОЋљУ[ЩS]]™Qњ[YNВ€B€Y€
+‘VХђT—ССU
+ЬWЫ]]™WЪ[™^
+JHВ€Щ[њЭ\ЧЫ[ЩWЩ›YЬИH]ЧШЩ[њЭ\ОЋљУ[ЩS]]™R[™^В€B€Y€
+‘VХђT—ССU
+ЬWЫ]]™WЭ™\ќ^
+JHВ€Щ[њЭ\ЧЫ[ЩWЩ›YЬИH]ЧШЩ[њЭ\ОЋљУ[ЩS]]™U™\ќ^В€B€Y€
+‘VХђT—ССU
+ЬWШЬЩ\Э]
+JHВ€Щ[њЭ\ЧЫ[ЩWЩ›YЬИH]ЧШЩ[њЭ\ОЋљУ[ЩPЬ\Э]В€B€Y€
+‘VХђT—ССU
+ЬWЬШ[\\—ЬЩ]Ь™]\ЩJJHВ€Щ[њЭ\ЧЫ[ЩWЩ›YЬИH]ЧШЩ[њЭ\ОЋљУ[ЩTШ[\\”Щ]™]\ЩNВ€B€Y€
+‘VХђT—ССU
+ЬWЭ^\™WЬ™\]Y\ЭЬ™]\ЩJJHВ€Щ[њЭ\ЧЫ[ЩWЩ›YЬИH]ЧШЩ[њЭ\ОЋљУ[ЩU^\™T™\]Y\Э™]\ЩNВ€B€ЫЫњЭ›ЫЫЩ[њЭ\ЧЬЭ\ќYH]ЧШЩ[њЭ\ЧЛO“Ы”ЭШ\
+€Щ\›™[ЬЭ]WИИЩ\›™[ЬЭ]WЛOќ]WЪY
+
+H€]ЧШЩ[њЭ\ЧЬЭШ\ЫЬ™[[ЛЫЭ[ќ\Љ
+K€Щ]Э\њ™[ќњ[YJ
+KЩ]Э\њ™[ќЭX›Z\ЬЪ[ЫЉ
+KЩ[њЭ\ЧЫ[ЩWЩ›YЬЛ€™^Ћњ\™ЋЋ‘Щ]Ы\ЪЭЫЭ[ќ\Љ™^Ћњ\™ЋЋђЫЭ[ќ\’YЋљС]РШ[КJNВ€Y€
+Щ[њЭ\ЧЬЭ\ќY
+HВ€ЭЋ›Y[\Щ]
+]ЧШЩ[њЭ\ЧЩ›Ш]Щ\ќWЛЪ^™[ЩЉ]ЧШЩ[њЭ\ЧЩ›Ш]Щ\ќWКJNВ€ЭЋ›Y[\Щ]
+]ЧШЩ[њЭ\ЧЩ™]ЪЩ\ќWЛЪ^™[ЩЉ]ЧШЩ[њЭ\ЧЩ™]ЪЩ\ќWКJNВ€]ЧШЩ[њЭ\ЧШ›ЫЫЫЬЩ\ќWЭЬљ]\ЧИHВ€B€B‚€Y€
+YЬ\XЬЧЬЮ\Э[WКB€™]\›ЋВ€ZNЋ”™\Щ[ќ\Љ€™\Щ[ќ\€HЬ\XЬЧЬЮ\Э[WЛOњ™\Щ[ќ\Љ
+NВ€Y€
+\™\Щ[ќ\ЉHВ€‘VФWСT”“ФЉ–SСЧСФH‘TСS•€“И‘TСS•T€ЉNВ€™]\›ЋВ€B‚€ЛИ[€Ш\ЩHHЭШ\ЫЫ[X[™\ИHЫ›HЫ™H[€Hњ[YK‚€Y€
+P™YЪ[”ЭX›Z\ЬЪ[ЫЉќYJJHВ€‘VФWСT”“ФЉ–SСЧСФH‘TСS•€™YЪ[”ЭX›Z\ЬЪ[Ы€ђRSQЉNВ€™]\›ЋВ€B€]]™WЬ™\ЪY[ЮWЛO”™Y™]Ъњ[YJ
+›Y[[ЬћWЛ
+њЪ\™YЫY[[ЬћWКNВ‚€›ЫЫЪЪ\Ь™\Щ[ќЩYWШ\Ю[ЧЬXЩZЫ\€H‘VХђT—ССU
+\Ю[ЧЬЪY\—ШЫЫ\[][ЫЉH	‰‚€‘VХђT—ССU
+ќ[Ш[—Ш\Ю[ЧЬЪЪ\Ъ[ЫЫ\]WЩњ[Y\КH	‰‚€њ[YWЭ\ЩYШ\Ю[ЧЬXЩZЫ\—Ь\[[™WОВ€Y€
+ЪЪ\Ь™\Щ[ќЩYWШ\Ю[ЧЬXЩZЫ\ЉHВ€ЛИ[њЭќ[Y[ќ][Ы‹ЊЌ‹LLЊ€\И]›ЬИHЪЫHњ[YIЬВ€ЛИ™\Щ[ќ][Ы‹[™HЭY\Э™]™\€X\›њО€]ЩY\ИЭШ\[™ЛЫИB€ЛИ\‹Yњ[YHФХ€™XЫЬ™ИH\™™XЭњ[YH[YHЪ[HH\Ь^HЫИB€ЛИ™]љ[Э\И[XYЩK€HЫЩK\\‹\›ШЩ\ЬИШ\›љ[™ИШ[››Э\Э[™ЭZ\ЪќЪXЩB€ЛИ\љ[™ИH]™[ШY€њ›ЫHЫЫњЭ[ќK[™]\ИHЭ]\€‹€™\Ьќ€ЛИH]H[њЭXY€Ы™H[™H\€ЩXЫЫ™Ъ[H]\И\[љ[™Л[™›Э[™В€ЛИ][Ъ[€]\И›Э‚€Э]XИЭЋ]ЫZXПZ[ќЌЭ€ЪЪ\YЩњ[Y\ЮМNВ€Э]XИЭЋ]ЫZXПZ[ќЌЭ€ЪЪ\YЩњ[Y\ЧЬ™\ЬќYМNВ€Э]XИЭЋ]ЫZXП[ќЌЭ€ЪЪ\Ь™\ЬќЩXY[™WЫњЮМNВ€Z[ќЌЭЭ[HЪЪ\YЩњ[Y\Л™™]ЪШY
+KЭЋ›Y[[ЬћWЫЬ™\—Ь™[^Y
+H
+ИNВ€]]И›ЭЧЫњИHЭЋЪ›Ы›ОЋ™\][Ы—ШШ\ЭЭЋЪ›Ы›ОЋ›[›ЬЩXЫЫ™ПЉ€ЭЋЪ›Ы›ОЋњЭXYWШЫШЪОЋ››ЭК
+Kќ[YWЬЪ[ЩWЩ\ШЪ
+
+JB€ЫЭ[ќ
+
+NВ€[ќЌЭXY[™HHЪЪ\Ь™\ЬќЩXY[™WЫњЛ›ШY
+ЭЋ›Y[[ЬћWЫЬ™\—Ь™[^Y
+NВ€Y€
+›ЭЧЫњИЏHXY[™H	‰‚€ЪЪ\Ь™\ЬќЩXY[™WЫњЛЫЫ\\™WЩ^Ъ[™ЩWЬЭ›Ы™КXY[™K›ЭЧЫњИ
+ИL€ЭЋ›Y[[ЬћWЫЬ™\—Ь™[^Y
+JHВ€Z[ќЌЭЪ[ЩHHЭ[HЪЪ\YЩњ[Y\ЧЬ™\ЬќY™^Ъ[™ЩJЭ[ЭЋ›Y[[ЬћWЫЬ™\—Ь™[^Y
+NВ€‘VФWХРT“Љ€”ЪЪ\YЯHќ[Ш[€њ[YH™\Щ[ќ][ЫњИ[€H\ЭЩXЫЫ™
+ЯHЭ[
+HHH]И‚€ќ\ЩY[€\Ю[ИXЩZЫ\€\[[™KЫИHЪЫHњ[YHШ\И›ЬY[™H‚€™\Ь^H\ИЪЭЪ[™ИHЭ[H[XYЩH‹€Ъ[ЩKЭ[
+NВ€B€[™ЭX›Z\ЬЪ[ЫЉќYJNВ€™]\›ЋВ€B‚€ЭШ\ЬЭY™™XЭЭШ\ЬЬЭЩY™™XЭHЩ]XЭX[ЭШ\ЬЭY™™XЭ
+
+NВ‚€ЛИШќZ[€HXЭX[ЭШ\ЫЭ\ЩH^\™HЪ^™H
+™\ЫЫ][Ы‹\ШШ[YY€]	ЬИB€ЛИ™\ЫЫ™H\Э[][Ы‹Ь€›ЭЭ\ќЪ\ЩJK‚€Z[ќМ—Эњ›ЫќќY™™\—ЭЪYЬШШ[Yњ›ЫќќY™™\—ЪZYЪЬШШ[YВ€Z[ќМ—Эњ›ЫќќY™™\—ЭЪYЭ[њШШ[YHњ›ЫќќY™™\—ЪZYЪЭ[њШШ[YHВ€[›ЬОЋ•^\™Q›Ь›X]њ›ЫќќY™™\—Щ›Ь›X]В€›ЫЫЭШ\ЬЫЭ\ЩWЫ™YYЧЬ—ЬЭШ\H[ЩNВ€љТ[XYЩUљY]ИЭШ\Э^\™WЭљY]ИH^\™WШШXЪWЛO”™\]Y\ЭЭШ\^\™J€њ›ЫќќY™™\—ЭЪYЬШШ[Yњ›ЫќќY™™\—ЪZYЪЬШШ[Yњ›ЫќќY™™\—Щ›Ь›X]€	™њ›ЫќќY™™\—ЭЪYЭ[њШШ[Y	™њ›ЫќќY™™\—ЪZYЪЭ[њШШ[Y	њЭШ\ЬЫЭ\ЩWЫ™YYЧЬ—ЬЭШ\
+NВ€Y€
+ЭШ\Э^\™WЭљY]ИOH’ЧУ•SТS‘JHВ€‘VФWСT”“ФЉ–SСЧСФH‘TСS•€ЭШ\Э^\™WЭљY]ПS•SЉNВ€™]\›ЋВ€B€ЛИHЭШ\Ш[[XHИ–PH\ЬИШ[\\ИЫЭ\ЩH^[ИћH^[[™^ќ]ЭШ\€ЛИ^\™\ИX^H™H[ШШ][Ы‹\YY€™Y™\€HXЭ]™Hњ›ЫќќY™™\€™YЪ[Ы‚€ЛИњ›ЫHHЭШ\XЪЩ]ШШ[Y›ЬЬќ[Ы[HИHXЭX[ЫЭ\ЩH^\™K‚€]]ИЩ]ШXЭ]™WЬЭШ\Щ[Y[њЪ[Ы€HЧJZ[ќМ—ЭXЪЩ]Э[њШШ[YZ[ќМ—ЭЫЭ\ЩWЭ[њШШ[Y€Z[ќМ—ЭЫЭ\ЩWЬШШ[Y
+HO€Z[ќМ—ЭВ€Y€
+\ЫЭ\ЩWЬШШ[Y
+HВ€™]\›€В€B€Z[ќМ—ЭXЭ]™WЭ[њШШ[YHXЪЩ]Э[њШШ[YИXЪЩ]Э[њШШ[Y€ЫЭ\ЩWЭ[њШШ[YВ€Y€
+XXЭ]™WЭ[њШШ[Y
+HВ€™]\›€ЫЭ\ЩWЬШШ[YВ€B€Y€
+ЫЭ\ЩWЭ[њШШ[Y
+HВ€XЭ]™WЭ[њШШ[YHЭЋ›Z[ЉXЭ]™WЭ[њШШ[YЫЭ\ЩWЭ[њШШ[Y
+NВ€Z[ќЌЭXЭ]™WЬШШ[YB€
+Z[ќЌЭ
+XЭ]™WЭ[њШШ[Y
+H
+€ЫЭ\ЩWЬШШ[Y
+И
+ЫЭ\ЩWЭ[њШШ[YЏ€JJHИЫЭ\ЩWЭ[њШШ[YВ€™]\›€Z[ќМ—Э
+ЭЋЫ[\Z[ќЌЭЉXЭ]™WЬШШ[YKЫЭ\ЩWЬШШ[Y
+JNВ€B€™]\›€ЭЋ›Z[ЉXЭ]™WЭ[њШШ[YЫЭ\ЩWЬШШ[Y
+NВ€NВ€Z[ќМ—ЭЭY\ЭЫЭ]]ЭЪYHЩ]ШXЭ]™WЬЭШ\Щ[Y[њЪ[ЫЉ€њ›ЫќќY™™\—ЭЪYњ›ЫќќY™™\—ЭЪYЭ[њШШ[Yњ›ЫќќY™™\—ЭЪYЬШШ[Y
+NВ€Z[ќМ—ЭЭY\ЭЫЭ]]ЪZYЪHЩ]ШXЭ]™WЬЭШ\Щ[Y[њЪ[ЫЉ€њ›ЫќќY™™\—ЪZYЪњ›ЫќќY™™\—ЪZYЪЭ[њШШ[Yњ›ЫќќY™™\—ЪZYЪЬШШ[Y
+NВ€Y€
+YЭY\ЭЫЭ]]ЭЪY
+HВ€ЭY\ЭЫЭ]]ЭЪYHњ›ЫќќY™™\—ЭЪYЬШШ[Y€Ињ›ЫќќY™™\—ЭЪYЬШШ[Y€€
+њ›ЫќќY™™\—ЭЪYИњ›ЫќќY™™\—ЭЪY€њ›ЫќќY™™\—ЭЪYЭ[њШШ[Y
+NВ€B€Y€
+YЭY\ЭЫЭ]]ЪZYЪ
+HВ€ЭY\ЭЫЭ]]ЪZYЪB€њ›ЫќќY™™\—ЪZYЪЬШШ[Y€Ињ›ЫќќY™™\—ЪZYЪЬШШ[Y€€
+њ›ЫќќY™™\—ЪZYЪИњ›ЫќќY™™\—ЪZYЪ€њ›ЫќќY™™\—ЪZYЪЭ[њШШ[Y
+NВ€B€›ЫЫЭШ\ЬЫЭ\ЩWЬШШ[YHњ›ЫќќY™™\—ЭЪYЭ[њШШ[Y	‰€њ›ЫќќY™™\—ЪZYЪЭ[њШШ[Y	‰‚€
+њ›ЫќќY™™\—ЭЪYЬШШ[YOHњ›ЫќќY™™\—ЭЪYЭ[њШШ[Y€њ›ЫќќY™™\—ЪZYЪЬШШ[YOHњ›ЫќќY™™\—ЪZYЪЭ[њШШ[Y
+NВ€Y€
+^\™WШШXЪWЛO’\С]Ф™\ЫЫ][Ы”ШШ[Y
+
+JHВ€Э]XИ›ЫЫ]ЧЬШШ[WШШXЪWЫZ\ЫX]ЪЫЩЩЩYH[ЩNВ€Z[ќМ—Э^\™WЬШШ[WЮH^\™WШШXЪWЛO™]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ
+
+NВ€Z[ќМ—Э^\™WЬШШ[WЮHH^\™WШШXЪWЛO™]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮJ
+NВ€Z[ќМ—ЭќЬШШ[WЮB€™[™\—Э\™Щ]ШШXЪWИИ™[™\—Э\™Щ]ШШXЪWЛO™]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮ
+
+H€^\™WЬШШ[WЮВ€Z[ќМ—ЭќЬШШ[WЮHB€™[™\—Э\™Щ]ШШXЪWИИ™[™\—Э\™Щ]ШШXЪWЛO™]ЧЬ™\ЫЫ][Ы—ЬШШ[WЮJ
+H€^\™WЬШШ[WЮNВ€Y€
+Y]ЧЬШШ[WШШXЪWЫZ\ЫX]ЪЫЩЩЩY	‰‚€
+^\™WЬШШ[WЮOHќЬШШ[WЮ^\™WЬШШ[WЮHOHќЬШШ[WЮJJHВ€]ЧЬШШ[WШШXЪWЫZ\ЫX]ЪЫЩЩЩYHќYNВ€‘VФWХРT“Љ€•ќ[Ш[€]Л\ШШ[HZ\ЫX]Ъ€^\™HШXЪH\ИЯ^ЯK™[™\€\™Щ]‚€ШXЪH\ИЯ^ЯH‹€^\™WЬШШ[WЮ^\™WЬШШ[WЮKќЬШШ[WЮќЬШШ[WЮJNВ€B€Э]XИ›ЫЫ]ЧЬШШ[WЬЭШ\ЬЪ^™\ЧЫЩЩЩYH[ЩNВ€Y€
+Y]ЧЬШШ[WЬЭШ\ЬЪ^™\ЧЫЩЩЩY
+HВ€]ЧЬШШ[WЬЭШ\ЬЪ^™\ЧЫЩЩЩYHќYNВ€‘VФWХРT“Љ€•ќ[Ш[€]Л\ШШ[HЭШ\Ъ^љ[™О€XЪЩ]^Я^ЯKЬЧЬШШ[Y^Я^ЯK‚€њЬЧЭ[њШШ[Y^Я^ЯKXЭ]™O^Я^ЯH‹€њ›ЫќќY™™\—ЭЪYњ›ЫќќY™™\—ЪZYЪњ›ЫќќY™™\—ЭЪYЬШШ[Y€њ›ЫќќY™™\—ЪZYЪЬШШ[Yњ›ЫќќY™™\—ЭЪYЭ[њШШ[Yњ›ЫќќY™™\—ЪZYЪЭ[њШШ[Y€ЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪ
+NВ€B€B€Y€
+^\™WШШXЪWЛO’\С]Ф™\ЫЫ][Ы”ШШ[Y
+
+H	‰€\ЭШ\ЬЫЭ\ЩWЬШШ[Y
+HВ€Э]XИ›ЫЫ]ЧЬШШ[WЬЭШ\Э[њШШ[YЫЩЩЩYH[ЩNВ€Y€
+Y]ЧЬШШ[WЬЭШ\Э[њШШ[YЫЩЩЩY
+HВ€]ЧЬШШ[WЬЭШ\Э[њШШ[YЫЩЩЩYHќYNВ€‘VФWХРT“Љ€•ќ[Ш[€]И™\ЫЫ][Ы€ШШ[[™И\И[X›Yќ]HЭШ\ЫЭ\ЩH\И‚€ќ[њШШ[Y
+Я^ЯJK€\И]HX^H™H™\Щ[ќ[™Ињ›ЫH[€[њШШ[Y‚€њ™\ЫЫ™H]€‹€њ›ЫќќY™™\—ЭЪYЬШШ[Yњ›ЫќќY™™\—ЪZYЪЬШШ[Y
+NВ€B€B€‘VФWСP•QК€–SСЧСФH‘TСS•€ЭШ\Э^\™WЭљY]П^ОњHXЪЩ]ЬЪ^™O^Я^ЯHЬЧЬЪ^™O^Я^ЯH‚€њЬЧЭ[њШШ[Y^Я^ЯHЭY\ЭЫЭ]]ЬЪ^™O^Я^ЯH›Ь›X]^ЯH‹€Э]XЧШШ\Э›ЪY
+ЏЉЭШ\Э^\™WЭљY]КKњ›ЫќќY™™\—ЭЪYњ›ЫќќY™™\—ЪZYЪ€њ›ЫќќY™™\—ЭЪYЬШШ[Yњ›ЫќќY™™\—ЪZYЪЬШШ[Yњ›ЫќќY™™\—ЭЪYЭ[њШШ[Y€њ›ЫќќY™™\—ЪZYЪЭ[њШШ[YЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪ€Э]XЧШШ\ЭZ[ќМ—ЭЉњ›ЫќќY™™\—Щ›Ь›X]
+JNВ‚€Ю\Э[NЋ–Х’QSЧУSСHљY[ЧЫ[ЩNВ€Щ\›™[Ћћ›ЮЬ››Ћ•™]Y\ћUљY[У[ЩJ	ќљY[ЧЫ[ЩJNВ€Z[ќМ—Э\Ь^WЭЪYHЭЋ›X^
+Z[ќМ—Э
+JKZ[ќМ—Э
+љY[ЧЫ[ЩK™\Ь^WЭЪY
+JNВ€Z[ќМ—Э\Ь^WЪZYЪHЭЋ›X^
+Z[ќМ—Э
+JKZ[ќМ—Э
+љY[ЧЫ[ЩK™\Ь^WЪZYЪ
+JNВ‚€™\Щ[ќ\‹O”™Yњ™\ЪЭY\ЭЭ]]
+€ЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪ\Ь^WЭЪY\Ь^WЪZYЪ€Э\ЛЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪњ›ЫќќY™™\—Щ›Ь›X]ЭШ\Э^\™WЭљY]Л€ЭШ\ЬЬЭЩY™™XЭ€ЭШ\ЬЫЭ\ЩWЫ™YYЧЬ—ЬЭШ\JZNЋ”™\Щ[ќ\ЋЋ‘ЭY\ЭЭ]]™Yњ™\ЪЫЫќ^	€ЫЫќ^
+HO€›ЫЫВ€ЛИ[€Ш\ЩHHЭШ\ЫЫ[X[™\ИHЫ›HЫ™H[€Hњ[YK‚€Y€
+P™YЪ[”ЭX›Z\ЬЪ[ЫЉќYJJHВ€™]\›€[ЩNВ€B‚€]]Й€ќ[Ш[—ШЫЫќ^B€Э]XЧШШ\ЭZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋ•ќ[Ш[‘ЭY\ЭЭ]]™Yњ™\ЪЫЫќ^	ЏЉЫЫќ^
+NВ€Z[ќЌЭЭY\ЭЫЭ]]Ъ[XYЩWЭ™\њЪ[Ы€Hќ[Ш[—ШЫЫќ^љ[XYЩWЭ™\њЪ[ЫЉ
+NВ‚€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩJ€ЫЫњЭќ[Ш[—Щ]љXЩHHЩ]ќ[Ш[‘]љXЩJ
+NВ€ЫЫњЭZNЋќќ[Ш[ЋЋ•ќ[Ш[‘]љXЩNЋ‘ќ[Э[ЫњЙ€›€Hќ[Ш[—Щ]љXЩKO™ќ[Э[ЫњК
+NВ€ЫЫњЭљС]љXЩH]љXЩHHќ[Ш[—Щ]љXЩKO™]љXЩJ
+NВ‚€Z[ќМ—ЭЭШ\Щњ[YWЪ[™^HZ[ќМ—Э
+њ[YWШЭ\њ™[ќИ	HУX^њ[Y\Т[‘›YЪ
+NВ€›ЫЫ\ЩWЩћXHHЭШ\ЬЬЭЩY™™XЭOHЭШ\ЬЭY™™XЭЋљСћXH€ЭШ\ЬЬЭЩY™™XЭOHЭШ\ЬЭY™™XЭЋљСћXQ^™[YNВ‚€ЛИ\И\ИXШЫЬ™[™ИИСЋ’[љ]X[^™T™\Щ[ќ][Ы”\[Y]\њИњ›ЫHB€ЛИШ[YH^XЭ]X›KЪXЪ[љ]X[^™\ИHЌM‹Y[ќћHX›HШ[[XH[\›Ь‚€ЛИОООЭ]][™HУШ[[XH[\›Ь€—МLМLМL‚€ЛИСКљX[™МЫ
+N€ЪЫЬЩH™]ЩY[€HX›H[™У\ЩYЫ‚€ЛИЧУUWРУУ•“УЭ\Ьќ›Э›Ь€[›Ь›X]И
+[™[ЫИY™™\™[ќ€ЛИ[Ь™[Y[ќИ›Ь€У
+K‚€›ЫЫ\ЩWЬЫЩШ[[XWЬ[\B€њ›ЫќќY™™\—Щ›Ь›X]OH[›ЬОЋ•^\™Q›Ь›X]ЋљЧМ—МLМLМL€њ›ЫќќY™™\—Щ›Ь›X]OH[›ЬОЋ•^\™Q›Ь›X]ЋљЧМ—МLМLМLРTЧМM—МM—МM—МMЋВ€›ЫЫЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\B€]ќ[Ш[—Щ]љXЩKOњ›Ь\ќY\К
+Kљ[XYЩUљY]С›Ь›X]ЭЪ^ћ›H	‰€ЭШ\ЬЫЭ\ЩWЫ™YYЧЬ—ЬЭШ\В€]]ИЩ[XЭЬЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™HHЙ—J›ЫЫ\ЩWЬЫ€›ЫЫ\ЩWЩћXWЫ[XJHO€љФ\[[™HВ€Y€
+\ЩWЬЫ
+HВ€Y€
+\ЩWЩћXWЫ[XJHВ€™]\›€ЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\€ИЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ—ЬЭШ\Ь\[[™WВ€€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЩћXWЫ[XWЬ\[[™WОВ€B€™]\›€ЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\€ИЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ—ЬЭШ\Ь\[[™WВ€€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬЫЬ\[[™WОВ€B€Y€
+\ЩWЩћXWЫ[XJHВ€™]\›€ЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\€ИЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ—ЬЭШ\Ь\[[™WВ€€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЩћXWЫ[XWЬ\[[™WОВ€B€™]\›€ЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\€ИЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ—ЬЭШ\Ь\[[™WВ€€ЭШ\Ш\WЩШ[[XWШЫЫ\]WМЌM—Щ[ќћWЭX›WЬ\[[™WОВ€NВ€љФ\[[™HЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™HB€Щ[XЭЬЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™J\ЩWЬЫЩШ[[XWЬ[\\ЩWЩћXJNВ‚€Y€
+\ЩWЩћXJHВ€Y€
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™HOH’ЧУ•SТS‘H€ЭШ\ЩћXWЬ\[[™WИOH’ЧУ•SТS‘H€ЭШ\ЩћXWЩ^™[YWЬ\[[™WИOH’ЧУ•SТS‘JHВ€Э]XИ›ЫЫћXWЬ\[[™\ЧЭ[]Z[X›WЫЩЩЩYH[ЩNВ€Y€
+YћXWЬ\[[™\ЧЭ[]Z[X›WЫЩЩЩY
+HВ€Y€
+ЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\
+HВ€‘VФWХРT“Љ€•ќ[Ш[€–PHЭШ\Y™™XЭ™\]Y\ЭYќ]–PHЫЫ\]H‚€њ\[[™\И
+[ЫY[™Иђ‹\ЭШ\[XЪКH\™H[]Z[X›K‚€™[[™ИXЪИИШ[[XHЫ›HЉNВ€H[ЩHВ€‘VФWХРT“Љ€•ќ[Ш[€–PHЭШ\Y™™XЭ™\]Y\ЭYќ]–PHЫЫ\]H‚€њ\[[™\И\™H[]Z[X›K[[™ИXЪИИШ[[XHЫ›HЉNВ€B€ћXWЬ\[[™\ЧЭ[]Z[X›WЫЩЩЩYHќYNВ€B€\ЩWЩћXHH[ЩNВ€H[ЩHY€
+Q[њЭ\™TЭШ\ћXTЫЭ\ЩR[XYЩJЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪ
+JHВ€Э]XИ›ЫЫћXWЬЫЭ\ЩWЪ[XYЩWЩZ[YЫЩЩЩYH[ЩNВ€Y€
+YћXWЬЫЭ\ЩWЪ[XYЩWЩZ[YЫЩЩЩY
+HВ€‘VФWХРT“Љ€‘Z[YИЬ™X]HHќ[Ш[€–PHЫЭ\ЩH[XYЩK[[™И‚€XЪИИШ[[XK[Ы›H™\Щ[ќ][Ы€ЉNВ€ћXWЬЫЭ\ЩWЪ[XYЩWЩZ[YЫЩЩЩYHќYNВ€B€\ЩWЩћXHH[ЩNВ€B€B€Y€
+]\ЩWЩћXJHВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™HB€Щ[XЭЬЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™J\ЩWЬЫЩШ[[XWЬ[\[ЩJNВ€B€Y€
+ЭШ\ЬЫЭ\ЩWЬ™\]Z\™\ЧШЫЫ\]WЬ—ЬЭШ\	‰‚€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™HOH’ЧУ•SТS‘JHВ€Э]XИ›ЫЫЫЫ\]WЬ—ЬЭШ\Щ[XЪЧЫZ\ЬЪ[™ЧЫЩЩЩYH[ЩNВ€Y€
+XЫЫ\]WЬ—ЬЭШ\Щ[XЪЧЫZ\ЬЪ[™ЧЫЩЩЩY
+HВ€ЫЫ\]WЬ—ЬЭШ\Щ[XЪЧЫZ\ЬЪ[™ЧЫЩЩЩYHќYNВ€‘VФWХРT“Љ€•ќ[Ш[€[XYЩUљY]С›Ь›X]ЭЪ^ћ›H\И[]Z[X›H[™HЭШ\‚€њЫЭ\ЩH™YYИ™YШ›YHЭЪ^ћ›Kќ]HЫЫ\]H[XЪИ‚€њ\[[™H\И[]Z[X›NИ[[™ИXЪИИЬ\XЬИ‚€њ™\Щ[ќ][Ы€]ЉNВ€B€B€›ЫЫ\ЩWШЫЫ\]WЩШ[[XHHЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™HOH’ЧУ•SТS‘NВ‚€ЛИСКљX[™МЫ
+N€–PHШ[€™\Э[[€[Ь™H[€љ]ИЩ€™XЪ\Ъ[Ы‹‚€ЫЫќ^”Щ]\ОњК]\ЩWЬЫЩШ[[XWЬ[\	‰€]\ЩWЩћXJNВ‚€ЛИ\]HHШ[[XH[\Y€]	ЬИЭ]Щ€]K‚€Z[ќМ—Э	€Ш[[XWЬ[\Щњ[YWЪ[™^Ь™Y€H\ЩWЬЫЩШ[[XWЬ[\€ИШ[[XWЬ[\ЬЫШЭ\њ™[ќЩњ[YWВ€€Ш[[XWЬ[\МЌM—Щ[ќћWЭX›WШЭ\њ™[ќЩњ[YWОВ€Y€
+Ш[[XWЬ[\Щњ[YWЪ[™^Ь™Y€OHRS•М—УPV
+HВ€ЫЫњЭ^€Z[ќМ—ЭСШ[[XT[\Ъ^™LЌM‘[ќћUX›HHЪ^™[ЩЉZ[ќМ—Э
+H
+€ЌMЋВ€ЫЫњЭ^€Z[ќМ—ЭСШ[[XT[\Ъ^™TУHЪ^™[ЩЉZ[ќM—Э
+H
+€€
+€И
+€LЋВ€ЫЫњЭ^€Z[ќМ—ЭСШ[[XT[\Ъ^™HHСШ[[XT[\Ъ^™LЌM‘[ќћUX›H
+ИСШ[[XT[\Ъ^™TУВ€Z[ќМ—ЭШ[[XWЬ[\ЫЩ™њЩ]Ъ[—Щњ[YHB€\ЩWЬЫЩШ[[XWЬ[\ИСШ[[XT[\Ъ^™LЌM‘[ќћUX›H€В€Z[ќМ—ЭШ[[XWЬ[\Э\ШYЫЩ™њЩ]B€СШ[[XT[\Ъ^™H
+€ЭШ\Щњ[YWЪ[™^
+ИШ[[XWЬ[\ЫЩ™њЩ]Ъ[—Щњ[YNВ€Z[ќМ—ЭШ[[XWЬ[\ЬЪ^™HB€\ЩWЬЫЩШ[[XWЬ[\ИСШ[[XT[\Ъ^™TУ€СШ[[XT[\Ъ^™LЌM‘[ќћUX›NВ€›ЪY
+€Ш[[XWЬ[\Щњ[YWЭ\ШYB€™Z[ќ\њ™]ШШ\ЭZ[ќЭ
+ЏЉШ[[XWЬ[\Э\ШYЫX\[™ЧКH
+ИШ[[XWЬ[\Э\ШYЫЩ™њЩ]В€Y€
+ЭЋ™[™X[ЋЋ›]]™HOHЭЋ™[™X[ЋЋ›]H	‰€\ЩWЬЫЩШ[[XWЬ[\
+HВ€ЛИЊM‘МM€\Иљ\њЭЊM‹Ъ\™HHЪY\€^XЭИH\ЩK[™€ЛИЩXЫЫ™МM‹Ъ\™HH[HЪЭ[™Kќ]Ш[[XWЬ[\ЬЫЬ™ШЉ
+B€ЛИ\И[€\њ^HЩ€М‹Xљ]ЧУUФУСUH™YЪ\Э\њИHЭШ\M€љ]И[‚€ЛИXXЪМ‹‚€]]ИШ[[XWЬ[\ЬЫЭ\ШYB€™Z[ќ\њ™]ШШ\Э™YОЋ‘ЧУUФУСUJЏЉШ[[XWЬ[\Щњ[YWЭ\ШY
+NВ€ЫЫњЭ™YОЋ‘ЧУUФУСUJ€Ш[[XWЬ[\ЬЫHШ[[XWЬ[\ЬЫЬ™ШЉ
+NВ€›Ь€
+Ъ^™WЭHHИHLЋ
+€ОИ
+КЪJHВ€™YОЋ‘ЧУUФУСUI€Ш[[XWЬ[\ЬЫЭ\ШYЩ[ќћHHШ[[XWЬ[\ЬЫЭ\ШYЪWNВ€™YОЋ‘ЧУUФУСUHШ[[XWЬ[\ЬЫЩ[ќћHHШ[[XWЬ[\ЬЫЪWNВ€Ш[[XWЬ[\ЬЫЭ\ШYЩ[ќћK\ЩHHШ[[XWЬ[\ЬЫЩ[ќћK™[NВ€Ш[[XWЬ[\ЬЫЭ\ШYЩ[ќћK™[HHШ[[XWЬ[\ЬЫЩ[ќћK\ЩNВ€B€H[ЩHВ€ЭЋ›Y[XЬJШ[[XWЬ[\Щњ[YWЭ\ШY€\ЩWЬЫЩШ[[XWЬ[\ИЭ]XЧШШ\ЭЫЫњЭ›ЪY
+ЏЉШ[[XWЬ[\ЬЫЬ™ШЉ
+JB€€Э]XЧШШ\ЭЫЫњЭ›ЪY
+ЏЉШ[[XWЬ[\МЌM—Щ[ќћWЭX›J
+JK€Ш[[XWЬ[\ЬЪ^™JNВ€B€›ЫЫШ[[XWЬ[\Ъ\ЧЭ\ШYШќY™™\€HШ[[XWЬ[\Э\ШYШќY™™\—ЫY[[ЬћWИOH’ЧУ•SТS‘NВ€љФ\[[™TЭYЩQ›YЬИШ[[XWЬ[\Ь™XYЬЭYЩWЫX\ЪИB€’ЧФTSS‘WФХQСWС”ђQУQS•ФТQT—Р’U’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’UВ€ZNЋќќ[Ш[ЋЋќ][Ћ‘›\ЪX\YY[[ЬћT[™ЩJ€ќ[Ш[—Щ]љXЩK€Ш[[XWЬ[\Ъ\ЧЭ\ШYШќY™™\€ИШ[[XWЬ[\Э\ШYШќY™™\—ЫY[[ЬћWВ€€Ш[[XWЬ[\ШќY™™\—ЫY[[ЬћWЛ€Ш[[XWЬ[\Э\ШYЫY[[ЬћWЭ\WЛШ[[XWЬ[\Э\ШYЫЩ™њЩ]€Ш[[XWЬ[\Э\ШYЫY[[ЬћWЬЪ^™WЛШ[[XWЬ[\ЬЪ^™JNВ€Y€
+Ш[[XWЬ[\Ъ\ЧЭ\ШYШќY™™\ЉHВ€ЛИЫЬHњ›ЫHHЬЭ]љ\ЪX›HќY™™\€ИH]љXЩK[ШШ[Ы™K‚€\ЪќY™™\“Y[[ЬћP\њљY\ЉШ[[XWЬ[\ШќY™™\—ЛШ[[XWЬ[\ЫЩ™њЩ]Ъ[—Щњ[YKШ[[XWЬ[\ЬЪ^™K€Ш[[XWЬ[\Ь™XYЬЭYЩWЫX\ЪЛ’ЧФTSS‘WФХQСWХђS”С‘T—Р’U€’ЧРPРСTФЧФТQT—Ф‘PQР’U’ЧРPРСTФЧХђS”С‘T—ХФ’UWР’U€’ЧФUQUQWСђSRSWТQУ“Ф‘Q’ЧФUQUQWСђSRSWТQУ“Ф‘Q[ЩJNВ€ЭX›Z]\њљY\њКќYJNВ€љРќY™™\ђЫЬHШ[[XWЬ[\ШќY™™\—ШЫЬNВ€Ш[[XWЬ[\ШќY™™\—ШЫЬKњЬУЩ™њЩ]HШ[[XWЬ[\Э\ШYЫЩ™њЩ]В€Ш[[XWЬ[\ШќY™™\—ШЫЬK™ЭЩ™њЩ]HШ[[XWЬ[\ЫЩ™њЩ]Ъ[—Щњ[YNВ€Ш[[XWЬ[\ШќY™™\—ШЫЬKњЪ^™HHШ[[XWЬ[\ЬЪ^™NВ€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљРЫЬPќY™™\ЉШ[[XWЬ[\Э\ШYШќY™™\—ЛШ[[XWЬ[\ШќY™™\—Л€K	™Ш[[XWЬ[\ШќY™™\—ШЫЬJNВ€\ЪќY™™\“Y[[ЬћP\њљY\ЉШ[[XWЬ[\ШќY™™\—ЛШ[[XWЬ[\ЫЩ™њЩ]Ъ[—Щњ[YKШ[[XWЬ[\ЬЪ^™K€’ЧФTSS‘WФХQСWХђS”С‘T—Р’UШ[[XWЬ[\Ь™XYЬЭYЩWЫX\ЪЛ€’ЧРPРСTФЧХђS”С‘T—ХФ’UWР’U’ЧРPРСTФЧФТQT—Ф‘PQР’U€’ЧФUQUQWСђSRSWТQУ“Ф‘Q’ЧФUQUQWСђSRSWТQУ“Ф‘Q[ЩJNВ€B€ЛИH]љXЩK[ШШ[ќ]›ЭЬЭ]љ\ЪX›KШ[[XH[\ќY™™\€Щ\Ы‰Э€ЛИ]™H\‹Yњ[YHЩ]ИЩ€Ш[[XH[\Л‚€Ш[[XWЬ[\Щњ[YWЪ[™^Ь™Y€HШ[[XWЬ[\Ъ\ЧЭ\ШYШќY™™\€И€ЭШ\Щњ[YWЪ[™^В€B‚€љС\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩHHЭШ\Щ\ШЬљ\ЬњЧЬЫЭ\ЩWЦЬЭШ\Щњ[YWЪ[™^NВ€љС\ШЬљ\Ь’[XYЩR[™›ИЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЪ[XYЩWЪ[™›ЛњШ[\\€H’ЧУ•SТS‘NВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЪ[XYЩWЪ[™›Лљ[XYЩUљY]ИHЭШ\Э^\™WЭљY]ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЪ[XYЩWЪ[™›Лљ[XYЩS^[Э]H’ЧТSPQСWУVSХUФТQT—Ф‘PQУУ“WУФSPSВ€љХЬљ]Q\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]NВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]KњХ\HH’ЧФХ•PХT‘WХTWХФ’UWСTРФ’TФ—ФСUВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]Kњ™^Hќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]K™ЭЩ]HЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]K™Эљ[™[™ИHВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]K™Э\њ^Q[[Y[ќHВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]K™\ШЬљ\ЬђЫЭ[ќHNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]K™\ШЬљ\Ь•\HH’ЧСTРФ’TФ—ХTWФРSTQТSPQСNВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]Kњ[XYЩR[™›ИH	њЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]KњќY™™\’[™›ИHќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]Kњ^[ќY™™\•љY]ИHќ[ЋВ€›‹ќљХ\]Q\ШЬљ\Ь”Щ]К]љXЩKK	њЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩWЭЬљ]Kќ[ЉNВ‚€љТ[XYЩTЭXњ™\ЫЭ\ЩT[™ЩHЭY\ЭЫЭ]]ЬЭXњ™\ЫЭ\ЩWЬ[™ЩHB€ZNЋќќ[Ш[ЋЋќ][Ћ’[љ]X[^™TЭXњ™\ЫЭ\ЩT[™ЩJ
+NВ€Y€
+\ЩWШЫЫ\]WЩШ[[XJHВ€ЛИ[њЪ][Ы€H\Э[][Ы€[XYЩH›Ь€ЫЫ\]HЬљ]\Л€ЫЫќ[ќИ\™B€ЛИќ[HЭ™\ќЬљ][‹ЫИЫ^[Э]Ш[€[Ш^\И™HS‘Q’S‘Q‚€\Ъ[XYЩSY[[ЬћP\њљY\Љќ[Ш[—ШЫЫќ^љ[XYЩJ
+KЭY\ЭЫЭ]]ЬЭXњ™\ЫЭ\ЩWЬ[™ЩK€ќ[Ш[—ШЫЫќ^љ[XYЩWЩ]™\—ЭЬљ][—Ь™]љ[Э\ЫJ
+B€ИZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋљСЭY\ЭЭ]][ќ\›[ЭYЩSX\ЪВ€€’ЧФTSS‘WФХQСWХФУС—ФTWР’U€’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’U€ќ[Ш[—ШЫЫќ^љ[XYЩWЩ]™\—ЭЬљ][—Ь™]љ[Э\ЫJ
+B€ИZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋљСЭY\ЭЭ]][ќ\›[XШЩ\ЬУX\ЪВ€€€’ЧРPРСTФЧФТQT—ХФ’UWР’U’ЧТSPQСWУVSХUХS‘Q’S‘Q€’ЧТSPQСWУVSХUССS‘TђS
+NВ€Y€
+\ЩWЩћXJHВ€\Ъ[XYЩSY[[ЬћP\њљY\ЉЭШ\ЩћXWЬЫЭ\ЩWЪ[XYЩWЛЭY\ЭЫЭ]]ЬЭXњ™\ЫЭ\ЩWЬ[™ЩK€ЭШ\ЩћXWЬЫЭ\ЩWЬЭYЩWЫX\ЪЧИИЭШ\ЩћXWЬЫЭ\ЩWЬЭYЩWЫX\ЪЧВ€€’ЧФTSS‘WФХQСWХФУС—ФTWР’U€’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’U€ЭШ\ЩћXWЬЫЭ\ЩWШXШЩ\ЬЧЫX\ЪЧЛ’ЧРPРСTФЧФТQT—ХФ’UWР’U€ЭШ\ЩћXWЬЫЭ\ЩWЫ^[Э]Л’ЧТSPQСWУVSХUССS‘TђS
+NВ€B€ЭX›Z]\њљY\њКќYJNВ‚€Y€
+\ЩWЩћXJHВ€ЭШ\ЩћXWЬЫЭ\ЩWЬЭYЩWЫX\ЪЧИH’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’UВ€ЭШ\ЩћXWЬЫЭ\ЩWШXШЩ\ЬЧЫX\ЪЧИH’ЧРPРСTФЧФТQT—ХФ’UWР’UВ€ЭШ\ЩћXWЬЫЭ\ЩWЫ^[Э]ИH’ЧТSPQСWУVSХUССS‘TђSВ€ЭШ\ЩћXWЬЫЭ\ЩWЪ[XYЩWЬЭX›Z\ЬЪ[Ы—ИHЩ]Э\њ™[ќЭX›Z\ЬЪ[ЫЉ
+NВ€B‚€љС\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩHB€ЭШ\Щ\ШЬљ\ЬњЧЩ\Э[][Ы—ЬЭЬYЩWЦЬЭШ\Щњ[YWЪ[™^NВ€љС\ШЬљ\Ь’[XYЩR[™›ИЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›ЛњШ[\\€H’ЧУ•SТS‘NВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›Лљ[XYЩUљY]ИB€\ЩWЩћXHИЭШ\ЩћXWЬЫЭ\ЩWЪ[XYЩWЭљY]ЧИ€ќ[Ш[—ШЫЫќ^љ[XYЩWЭљY]К
+NВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›Лљ[XYЩS^[Э]H’ЧТSPQСWУVSХUССS‘TђSВ€љХЬљ]Q\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]NВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]KњХ\HH’ЧФХ•PХT‘WХTWХФ’UWСTРФ’TФ—ФСUВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]Kњ™^Hќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]K™ЭЩ]HЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩNВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]K™Эљ[™[™ИHВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]K™Э\њ^Q[[Y[ќHВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]K™\ШЬљ\ЬђЫЭ[ќHNВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]K™\ШЬљ\Ь•\HB€’ЧСTРФ’TФ—ХTWФХФђQСWТSPQСNВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]Kњ[XYЩR[™›ИB€	њЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]KњќY™™\’[™›ИHќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]Kњ^[ќY™™\•љY]ИHќ[ЋВ€›‹ќљХ\]Q\ШЬљ\Ь”Щ]К]љXЩKK	њЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]K€ќ[ЉNВ‚€ЭЋ\њ^OљС\ШЬљ\Ь”Щ]ФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ]ЫЭ[ќ‚€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]ЮЯNВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]ЦЪФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ][\HB€ЭШ\Щ\ШЬљ\ЬњЧЩШ[[XWЬ[\ЦМ€
+€Ш[[XWЬ[\Щњ[YWЪ[™^Ь™Y€
+В€Z[ќМ—Э
+\ЩWЬЫЩШ[[XWЬ[\
+WNВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]ЦЪФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ]ЫЭ\ЩWHB€ЭШ\Щ\ШЬљ\Ь—ЬЫЭ\ЩNВ€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]ЦЪФЭШ\\QШ[[XPЫЫ\]Q\ШЬљ\Ь”Щ]\Э[][Ы—HB€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩNВ€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљРљ[™\ШЬљ\Ь”Щ]К€’ЧФTSS‘WР’S‘ФТS•РУУTUKЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]Л€Z[ќМ—Э
+ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]ЛњЪ^™J
+JK€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЩ\ШЬљ\Ь—ЬЩ]Л™]J
+Kќ[ЉNВ€ЭШ\\QШ[[XPЫЫњЭ[ќИЭШ\Ш\WЩШ[[XWШЫЫњЭ[ќИHВ€ЩЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪ_NВ€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљФ\ЪЫЫњЭ[ќК€ЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™WЫ^[Э]Л’ЧФТQT—ФХQСWРУУTUWР’U€Ъ^™[ЩЉЭШ\Ш\WЩШ[[XWШЫЫњЭ[ќКK	њЭШ\Ш\WЩШ[[XWШЫЫњЭ[ќКNВ€љ[™^\›[ЫЫ\]T\[[™JЭШ\Ш\WЩШ[[XWШЫЫ\]WЬ\[[™JNВ€Z[ќМ—ЭЬ›Э\ШЫЭ[ќЮH
+ЭY\ЭЫЭ]]ЭЪY
+ИMJHИMЋВ€Z[ќМ—ЭЬ›Э\ШЫЭ[ќЮHH
+ЭY\ЭЫЭ]]ЪZYЪ
+ИКHИВ€ЪY€‘VФU“Ф“WФХТUТ€Y€
+T™^ЭЪ]Ъ\™”ЪЪ\
+MЉJB€Щ[™Y‚€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљС\Ь]Ъ
+Ь›Э\ШЫЭ[ќЮЬ›Э\ШЫЭ[ќЮKJNВ‚€Y€
+\ЩWЩћXJHВ€ЛИXZЩHH–PHЫЭ\ЩH[XYЩH™XYX›H[™љ[™HЩ\\]B€ЛИ\Э[][Ы€ЭЬYЩH\ШЬљ\Ь€\™Щ][™ИHЭY\ЭЭ]][XYЩK‚€\Ъ[XYЩSY[[ЬћP\њљY\ЉЭШ\ЩћXWЬЫЭ\ЩWЪ[XYЩWЛЭY\ЭЫЭ]]ЬЭXњ™\ЫЭ\ЩWЬ[™ЩK€’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’U€’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’U’ЧРPРСTФЧФТQT—ХФ’UWР’U€’ЧРPРСTФЧФТQT—Ф‘PQР’U’ЧТSPQСWУVSХUССS‘TђS€’ЧТSPQСWУVSХUФТQT—Ф‘PQУУ“WУФSPS
+NВ€ЭX›Z]\њљY\њКќYJNВ€ЭШ\ЩћXWЬЫЭ\ЩWЬЭYЩWЫX\ЪЧИH’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’UВ€ЭШ\ЩћXWЬЫЭ\ЩWШXШЩ\ЬЧЫX\ЪЧИH’ЧРPРСTФЧФТQT—Ф‘PQР’UВ€ЭШ\ЩћXWЬЫЭ\ЩWЫ^[Э]ИH’ЧТSPQСWУVSХUФТQT—Ф‘PQУУ“WУФSPSВ€ЭШ\ЩћXWЬЫЭ\ЩWЪ[XYЩWЬЭX›Z\ЬЪ[Ы—ИHЩ]Э\њ™[ќЭX›Z\ЬЪ[ЫЉ
+NВ‚€љС\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩHB€ЭШ\Щ\ШЬљ\ЬњЧЩћXWЬЫЭ\ЩWЦЬЭШ\Щњ[YWЪ[™^NВ€љС\ШЬљ\Ь’[XYЩR[™›ИЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЪ[XYЩWЪ[™›ЛњШ[\\€HЭШ\ЬШ[\\—Ы[™X\—ШЫ[\ОВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЪ[XYЩWЪ[™›Лљ[XYЩUљY]ИHЭШ\ЩћXWЬЫЭ\ЩWЪ[XYЩWЭљY]ЧОВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЪ[XYЩWЪ[™›Лљ[XYЩS^[Э]B€’ЧТSPQСWУVSХUФТQT—Ф‘PQУУ“WУФSPSВ€љХЬљ]Q\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]NВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]KњХ\HH’ЧФХ•PХT‘WХTWХФ’UWСTРФ’TФ—ФСUВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]Kњ™^Hќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]K™ЭЩ]HЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩNВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]K™Эљ[™[™ИHВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]K™Э\њ^Q[[Y[ќHВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]K™\ШЬљ\ЬђЫЭ[ќHNВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]K™\ШЬљ\Ь•\HB€’ЧСTРФ’TФ—ХTWРУУP’S‘QТSPQСWФРSTTЋВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]Kњ[XYЩR[™›ИH	њЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]KњќY™™\’[™›ИHќ[ЋВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]Kњ^[ќY™™\•љY]ИHќ[ЋВ€›‹ќљХ\]Q\ШЬљ\Ь”Щ]К]љXЩKK	њЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩWЭЬљ]Kќ[ЉNВ‚€љС\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩHB€ЭШ\Щ\ШЬљ\ЬњЧЩћXWЩ\Э[][Ы—ЬЭЬYЩWЦЬЭШ\Щњ[YWЪ[™^NВ€љС\ШЬљ\Ь’[XYЩR[™›ИЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›ОВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›ЛњШ[\\€H’ЧУ•SТS‘NВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›Лљ[XYЩUљY]ИB€ќ[Ш[—ШЫЫќ^љ[XYЩWЭљY]К
+NВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›Лљ[XYЩS^[Э]B€’ЧТSPQСWУVSХUССS‘TђSВ€љХЬљ]Q\ШЬљ\Ь”Щ]ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЭЬљ]HB€ЭШ\Щ\ШЬљ\Ь—Щ\Э[][Ы—ЬЭЬYЩWЭЬљ]NВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЭЬљ]K™ЭЩ]B€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩNВ€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЭЬљ]Kњ[XYЩR[™›ИB€	њЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЪ[XYЩWЪ[™›ОВ€›‹ќљХ\]Q\ШЬљ\Ь”Щ]К]љXЩKK	њЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩWЭЬљ]K€ќ[ЉNВ‚€ЭЋ\њ^OљС\ШЬљ\Ь”Щ]ФЭШ\ћXQ\ШЬљ\Ь”Щ]ЫЭ[ќ€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]ЮЯNВ€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]ЦЪФЭШ\ћXQ\ШЬљ\Ь”Щ]ЫЭ\ЩWHHЭШ\Щ\ШЬљ\Ь—ЩћXWЬЫЭ\ЩNВ€ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]ЦЪФЭШ\ћXQ\ШЬљ\Ь”Щ]\Э[][Ы—HB€ЭШ\Щ\ШЬљ\Ь—ЩћXWЩ\Э[][Ы—ЬЭЬYЩNВ€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљРљ[™\ШЬљ\Ь”Щ]К€’ЧФTSS‘WР’S‘ФТS•РУУTUKЭШ\ЩћXWЬ\[[™WЫ^[Э]Л€Z[ќМ—Э
+ЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]ЛњЪ^™J
+JKЭШ\ЩћXWЩ\ШЬљ\Ь—ЬЩ]Л™]J
+K€ќ[ЉNВ€ЭШ\ћXPЫЫњЭ[ќИЭШ\ЩћXWШЫЫњЭ[ќИHВ€ЩЭY\ЭЫЭ]]ЭЪYЭY\ЭЫЭ]]ЪZYЪK€МKЊ€И›Ш]
+ЭY\ЭЫЭ]]ЭЪY
+KKЊ€И›Ш]
+ЭY\ЭЫЭ]]ЪZYЪ
+__NВ€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљФ\ЪЫЫњЭ[ќК€ЭШ\ЩћXWЬ\[[™WЫ^[Э]Л’ЧФТQT—ФХQСWРУУTUWР’U€Ъ^™[ЩЉЭШ\ЩћXWШЫЫњЭ[ќКK	њЭШ\ЩћXWШЫЫњЭ[ќКNВ€љ[™^\›[ЫЫ\]T\[[™JЭШ\ЬЬЭЩY™™XЭOHЭШ\ЬЭY™™XЭЋљСћXQ^™[YB€ИЭШ\ЩћXWЩ^™[YWЬ\[[™WВ€€ЭШ\ЩћXWЬ\[[™WКNВ€ЪY€‘VФU“Ф“WФХТUТ€Y€
+T™^ЭЪ]Ъ\™”ЪЪ\
+MЉJB€Щ[™Y‚€Y™\њ™YШЫЫ[X[™ШќY™™\—ЛђЫYљС\Ь]Ъ
+Ь›Э\ШЫЭ[ќЮЬ›Э\ШЫЭ[ќЮKJNВ€B‚€ЛИ[њЩ\ќH™[X\ЩH\њљY\‹‚€\Ъ[XYЩSY[[ЬћP\њљY\Љќ[Ш[—ШЫЫќ^љ[XYЩJ
+KЭY\ЭЫЭ]]ЬЭXњ™\ЫЭ\ЩWЬ[™ЩK€’ЧФTSS‘WФХQСWРУУTUWФТQT—Р’U€ZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋљСЭY\ЭЭ]][ќ\›[ЭYЩSX\ЪЛ€’ЧРPРСTФЧФТQT—ХФ’UWР’U€ZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋљСЭY\ЭЭ]][ќ\›[XШЩ\ЬУX\ЪЛ€’ЧТSPQСWУVSХUССS‘TђS€ZNЋќќ[Ш[ЋЋ•ќ[Ш[”™\Щ[ќ\ЋЋљСЭY\ЭЭ]][ќ\›[^[Э]
+NВ€H[ЩHВ€ЛИXZЩHЭ\™HHњ[YXќY™™\€\И]Z[X›H›Ь€HЭ\њ™[ќЭY\ЭЭ]]€ЛИ[XYЩH™\њЪ[Ы‹‚€Ъ^™WЭЭШ\Щњ[YXќY™™\—Ъ[™^HТV‘WУPVВ€Ъ^™WЭЭШ\Щњ[YXќY™™\—Ы™]ЧЪ[™^HТV‘WУPVВ€ЛИћHИљ[™Hvлћt¶‰ћЛkєwµзA•бБЅЙРЃЭ…МЃ‘Ѕ№”ЃҐёЃСЎ”ЃБЙ•ЩҐЅХМЃ‘Й…Ьь(ЂЃҐЂЎµ•µ•бБЅЙС}•бС•№С}НС…ЙРЂрЃµ•µ•бБЅЙС}•бС•№С}•№ђ¤Ѓм(ЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщUН” (ЂЂЂЂЂЂЂЃYХ±­…№MЎ…Й•‘5•µЅЙдийUН…ќ”ий­Х•НСЙ…ЭI•…‘]ЙҐС”°(ЂЂЂЂЂЂЂЃНСђийµ…­•}Б…ҐИЎµ•µ•бБЅЙС}•бС•№С}НС…ЙР°Ѓµ•µ•бБЅЙС}•бС•№С}•№ђЂґЃµ•µ•бБЅЙС}•бС•№С}НС…ЙР¤¤м(ЂЃфЃ•±Н”ЃҐЂЎµ•µ•бБЅЙС}ЭЙҐС•Н}БЅННҐ‰±”¤Ѓм(ЂЂЂЂјјЃMСЙ•…ґЃЌЅ№НС…№СМЃЌ…ёЃ‰”ЃҐ№Щ…±ҐђЃЅИЃ‘е№…µҐЊ°Ѓµ…­Ґ№њЃСЎ”Ѓ•б…ЌРЃ‘•НСҐ№…СҐЅё(ЂЂЂЂјјЃХ№­№ЅЭёёЃ-••АЃНе№ЌЎЙЅ№Ґй…СҐЅёЃЌЅ№Н•ЙЩ…СҐЩ”ЃНҐµҐ±…Й±дЃСјЃНДИЃUX(ЂЂЂЂјјЃЎ…№‘±Ґ№њЃ™ЅИЃµ•µ•бБЅЙРµЌ…Б…‰±”Ѓ‘Й…ЭМё(ЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщUН”ЎYХ±­…№MЎ…Й•‘5•µЅЙдийUН…ќ”ий­Х•НСЙ…ЭI•…‘]ЙҐС”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНСђийµ…­•}Б…ҐИ БФ°ЃMЎ…Й•‘5•µЅЙдий­	Х™™•ЙMҐй”¤¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщUН”ЎYХ±­…№MЎ…Й•‘5•µЅЙдийUН…ќ”ий­I•…ђ¤м(ЂЃф((ЂЂјјЃ™С•ИЃ…±°ЃЌЅµµ…№‘МЃСЎ…РЃµ…дЃ‘ҐНБ…СЌ °ЃЌЅБдЃЅИЃҐ№Н•ЙРЃ‰…ЙЙҐ•ЙМ°ЃНХ‰µҐР(ЂЂјјЃСЎ”Ѓ‰…ЙЙҐ•ЙМЂЎµ…дЃ•№ђЃСЎ”ЃЙ•№‘•ИЃБ…НМ¤°Ѓ…№ђЂЎЙ”Ґ•№С•ИЃСЎ”ЃЙ•№‘•ИЃБ…НМ(ЂЂјјЃ‰•™ЅЙ”Ѓ‘Й…ЭҐ№њё(ЂЃMХ‰µҐС	…ЙЙҐ•ЙН№‘№С•ЙI•№‘•ЙQ…Йќ•С…ЌЎ•I•№‘•ЙA…НМ (ЂЂЂЂЂЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ±…НС}ХБ‘…С•}Й•№‘•Й}Б…НМ ¤°(ЂЂЂЂЂЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ±…НС}ХБ‘…С•}™Й…µ•‰Х™™•И ¤¤м((ЂЃ…ХСјЃЌЅµµҐС}Ќ•№НХН}‘Й…ЬЂфЃl™t ¤Ѓм(ЂЂЂЃҐЂ …Ќ•№НХМ¤Ѓм(ЂЂЂЂЂЃЙ•СХЙём(ЂЂЂЃф(ЂЂЂЃЌ•№НХН}‘Й…Ь№Щ­}НХ‰µҐННҐЅёЂфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤м(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}НХЙ™…Ќ•}Ґ№™јЂфЃЙ•ќНma}AU}I}I	}MUI}%9=tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}µЅ‘•ЌЅ№СЙЅ°ЂфЃЙ•ќНma}AU}I}I	}5==9QI=1tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}ЌЅ±ЅЙЌЅ№СЙЅ°ЂфЃЙ•ќНma}AU}I}I	}=1=I=9QI=1tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}‘•БСЎЌЅ№СЙЅ±}№ЅЙµ…±Ґй•ђЂфЃ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№Щ…±Х”м(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}ЌЅ±ЅЙ}µ…Н­}№ЅЙµ…±Ґй•ђЂфЃ№ЅЙµ…±Ґй•‘}ЌЅ±ЅЙ}µ…Н¬м(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂРмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}ЌЅ±ЅЙ}Ґ№™ЅmҐtЂфЃЙ•ќНmЙ•њийI	}=1=I}%9<ийЙС}Й•ќҐНС•Й}Ґ№‘ҐЌ•НmҐutм(ЂЂЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}‰±•№‘ЌЅ№СЙЅ±mҐtЂфЃЙ•ќНmЙ•њийI	}	19=9QI=0ийЙС}Й•ќҐНС•Й}Ґ№‘ҐЌ•НmҐutм(ЂЂЂЃф(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}‘•БСЎ}Ґ№™јЂфЃЙ•ќНma}AU}I}I	}AQ!}%9=tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}НС•№ЌҐ±Й•™µ…Н¬ЂфЃЙ•ќНma}AU}I}I	}MQ9%1I5M-tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}НС•№ЌҐ±Й•™µ…Н­}‰ЂфЃЙ•ќНma}AU}I}I	}MQ9%1I5M-}	tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Й‰}…±БЎ…}Й•™}‰ҐСМЂфЃЙ•ќНma}AU}I}I	}1A!}Itм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Б…}НХ}НЌ}µЅ‘•}Ќ№С°ЂфЃЙ•ќНma}AU}I}A}MU}M}5=}9Q1tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Б…}Ќ±}ЩС•}Ќ№С°ЂфЃЙ•ќНma}AU}I}A}1}YQ}9Q1tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Б…}НЌ}ЭҐ№‘ЅЭ}НЌҐННЅЙ}С°ЂфЃЙ•ќНma}AU}I}A}M}]%9=]}M%MM=I}Q1tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№Б…}НЌ}ЭҐ№‘ЅЭ}НЌҐННЅЙ}‰ИЂфЃЙ•ќНma}AU}I}A}M}]%9=]}M%MM=I}	Itм(ЂЂЂЃЌ•№НХН}‘Й…Ь№НЕ}БЙЅќЙ…µ}Ќ№С°ЂфЃЙ•ќНma}AU}I}ME}AI=I5}9Q1tм(ЂЂЂЃЌ•№НХН}‘Й…Ь№НЕ}ЌЅ№С•бС}µҐНЊЂфЃЙ•ќНma}AU}I}ME}=9QaQ}5%Mtм(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂИмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃЌ•№НХН}‘Й…Ь№ЩБ}бе}Ѕ™™Н•СmҐtЂфЃ™±Ѕ…РЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}Ѕ™™Н•СmҐt¤м(ЂЂЂЂЂЃЌ•№НХН}‘Й…Ь№ЩБ}бе}•бС•№СmҐtЂфЃ™±Ѕ…РЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СmҐt¤м(ЂЂЂЃф(ЂЂЂЃЌ•№НХН}‘Й…Ь№ЩБ}й}µҐёЂфЃЩҐ•ЭБЅЙС}Ґ№™ј№й}µҐём(ЂЂЂЃЌ•№НХН}‘Й…Ь№ЩБ}й}µ…аЂфЃЩҐ•ЭБЅЙС}Ґ№™ј№й}µ…ам(ЂЂЂЃ‘Й…Э}ХСҐ°ийMЌҐННЅИЃЌ•№НХН}НЌҐННЅИм(ЂЂЂЃ‘Й…Э}ХСҐ°ий•СMЌҐННЅИЎЙ•ќМ°ЃЌ•№НХН}НЌҐННЅИ¤м(ЂЂЂЃНСђийµ•µЌБдЎЌ•№НХН}‘Й…Ь№НЌ}Ѕ™™Н•Р°ЃЌ•№НХН}НЌҐННЅИ№Ѕ™™Н•Р°ЃНҐй•ЅЎЌ•№НХН}‘Й…Ь№НЌ}Ѕ™™Н•Р¤¤м(ЂЂЂЃНСђийµ•µЌБдЎЌ•№НХН}‘Й…Ь№НЌ}•бС•№Р°ЃЌ•№НХН}НЌҐННЅИ№•бС•№Р°ЃНҐй•ЅЎЌ•№НХН}‘Й…Ь№НЌ}•бС•№Р¤¤м(ЂЂЂЃНСђийµ•µЌБдЎЌ•№НХН}‘Й…Ь№™±Ѕ…С}‘ҐЙСд°Ѓ‘Й…Э}Ќ•№НХН}™±Ѕ…С}‘ҐЙСе|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎЌ•№НХН}‘Й…Ь№™±Ѕ…С}‘ҐЙСд¤¤м(ЂЂЂЃНСђийµ•µЌБдЎЌ•№НХН}‘Й…Ь№™•СЌЎ}‘ҐЙСд°Ѓ‘Й…Э}Ќ•№НХН}™•СЌЎ}‘ҐЙСе|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎЌ•№НХН}‘Й…Ь№™•СЌЎ}‘ҐЙСд¤¤м(ЂЂЂЃЌ•№НХН}‘Й…Ь№‰ЅЅ±±ЅЅБ}‘ҐЙСе}ЭЙҐС•МЂфЃ‘Й…Э}Ќ•№НХН}‰ЅЅ±±ЅЅБ}‘ҐЙСе}ЭЙҐС•Н|м((ЂЂЂЃЌЅ№НРЃХҐ№РМЙ}РЁЃЩН}ЌЅ№НС…№СМЂфЂ™Й•ќНma}AU}I}M!I}=9MQ9Q|ААБ}atм(ЂЂЂЃЌЅ№НРЃХҐ№РМЙ}РЁЃБН}ЌЅ№НС…№СМЂфЂ™Й•ќНma}AU}I}M!I}=9MQ9Q|ИФЩ}atм(ЂЂЂЃЌЅ№НС•бБИЃНҐй•}РЃ­Ѕ№НС…№С	±ЅЌ­	еС•МЂфЂИФШЂЁЂРЂЁЃНҐй•ЅЎХҐ№РМЙ}Р¤м(ЂЂЂЃЌ•№НХН}‘Й…Ь№ЩН}ЌЅ№НС}‰±ЅЌ­}Ў…Н ЂфЃaa Н|ШС‰ҐСМЎЩН}ЌЅ№НС…№СМ°Ѓ­Ѕ№НС…№С	±ЅЌ­	еС•М¤м(ЂЂЂЃЌ•№НХН}‘Й…Ь№БН}ЌЅ№НС}‰±ЅЌ­}Ў…Н ЂфЃaa Н|ШС‰ҐСМЎБН}ЌЅ№НС…№СМ°Ѓ­Ѕ№НС…№С	±ЅЌ­	еС•М¤м(ЂЂЂЃЌЅ№НРЃMЎ…‘•ИийЅ№НС…№СI•ќҐНС•Й5…АЃЩН}µ…АЂфЃЩ•ЙС•б}НЎ…‘•ИґщЌЅ№НС…№С}Й•ќҐНС•Й}µ…А ¤м(ЂЂЂЃЌЅ№НРЃMЎ…‘•ИийЅ№НС…№СI•ќҐНС•Й5…АЁЃБН}µ…АЂф(ЂЂЂЂЂЂЂЃБҐб•±}НЎ…‘•ИЂьЂ™БҐб•±}НЎ…‘•ИґщЌЅ№НС…№С}Й•ќҐНС•Й}µ…А ¤ЂиЃ№Х±±БСИм(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂИФШмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃҐЂЎЩН}µ…А№™±Ѕ…С}‰ҐСµ…Бm¤ЂшшЂЩtЂЂЎU%9PШС} Д¤ЂррЂЎ¤ЂЂШМ¤¤¤Ѓм(ЂЂЂЂЂЂЂЃЌ•№НХН}‘Й…Ь№ЩН}Й•ќ}Ў…НЎmҐtЂфЃХҐ№РМЙ}РЎaa Н|ШС‰ҐСМЎЩН}ЌЅ№НС…№СМЂ¬Ѓ¤ЂЁЂР°ЂДШ¤¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎБН}µ…АЂЂЎБН}µ…Аґщ™±Ѕ…С}‰ҐСµ…Бm¤ЂшшЂЩtЂЂЎU%9PШС} Д¤ЂррЂЎ¤ЂЂШМ¤¤¤¤Ѓм(ЂЂЂЂЂЂЂЃЌ•№НХН}‘Й…Ь№БН}Й•ќ}Ў…НЎmҐtЂфЃХҐ№РМЙ}РЎaa Н|ШС‰ҐСМЎБН}ЌЅ№НС…№СМЂ¬Ѓ¤ЂЁЂР°ЂДШ¤¤м(ЂЂЂЂЂЃф(ЂЂЂЃф((ЂЂЂЃЌЅ№НРЃ‰ЅЅ°ЃЙ•ЌЅЙ‘•ђЂфЃЌ•№НХМґщI•ЌЅЙ‘Й…ЬЎЌ•№НХН}‘Й…Ь¤м(ЂЂЂЃЌ•№НХН}…СС•µБР№ЅµµҐР ¤м(ЂЂЂЃҐЂЎЙ•ЌЅЙ‘•ђ¤Ѓм(ЂЂЂЂЂЃНСђийµ•µН•РЎ‘Й…Э}Ќ•№НХН}™±Ѕ…С}‘ҐЙСе|°ЂА°ЃНҐй•ЅЎ‘Й…Э}Ќ•№НХН}™±Ѕ…С}‘ҐЙСе|¤¤м(ЂЂЂЂЂЃНСђийµ•µН•РЎ‘Й…Э}Ќ•№НХН}™•СЌЎ}‘ҐЙСе|°ЂА°ЃНҐй•ЅЎ‘Й…Э}Ќ•№НХН}™•СЌЎ}‘ҐЙСе|¤¤м(ЂЂЂЂЂЃ‘Й…Э}Ќ•№НХН}‰ЅЅ±±ЅЅБ}‘ҐЙСе}ЭЙҐС•Н|ЂфЂАм(ЂЂЂЃф(ЂЃфм((ЂЂјјЃЙ…Ьё(ЌҐЃIa}A1Q=I5}M]%Q (ЂЃI•бMЭҐСЌЎA•Й™ЅХ№Р Ф¤м(ЂЃI•бMЭҐСЌЎA•Й™‘ђ Ш°ЃХҐ№РШС}РЎ‘е№…µҐЌ}НЌҐННЅЙ|№•бС•№Р№ЭҐ‘С ¤ЂЁЃ‘е№…µҐЌ}НЌҐННЅЙ|№•бС•№Р№Ў•ҐќЎР¤м(ЂЃм(ЂЂЂЂјјЃЙ…ЭМЃБ•ИЃНХЙ™…Ќ”ЃЭҐ‘С ЂЎI	}MUI}%9<ийНХЙ™…Ќ•}БҐСЌ ¤иЃНБ±ҐСМЃСЎ”ЃЭЅЙ¬(ЂЂЂЂјјЃ…µЅ№њЃСЎ”Ѓќ…µ”ќМЃБ…НН•МЃ‰дЃСЎ”ЃНҐй”ЃЅЃСЎ•ҐИЃЙ•№‘•ИЃС…Йќ•РЂ ДШААЃНЎ…‘ЅЭМ°(ЂЂЂЂјјЂДИаАЃНЌ•№”Ѓ…№ђЃБЅНРµБЙЅЌ•ННҐ№њ°ЂШРАЃЙ•™±•ЌСҐЅё°ЂИФШЃЌ…ИЃЌХ‰•µ…А¤ёЃЅХ№С•ЙМ(ЂЂЂЂјјЂИаёёМИЃЅЃНЭҐСЌЎ}Б•Й№ЌБАё(ЂЂЂЃЌЅ№НРЃХҐ№РМЙ}РЃ…№ЌЎЅ}НХБ•Й™ҐЌҐ”ЂфЃЙ•ќМ№•РсЙ•њийI	}MUI}%9<ш ¤№НХЙ™…Ќ•}БҐСЌ м(ЂЂЂЃI•бMЭҐСЌЎA•Й™ЅХ№РЎ…№ЌЎЅ}НХБ•Й™ҐЌҐ”ЂшфЂДШААЂЂЂьЂИбФ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃ…№ЌЎЅ}НХБ•Й™ҐЌҐ”ЂшфЂДИаАЂьЂИеФ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃ…№ЌЎЅ}НХБ•Й™ҐЌҐ”ЂшфЂШРАЂЂьЂМБФ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃ…№ЌЎЅ}НХБ•Й™ҐЌҐ”ЂшфЂИФШЂЂьЂМЕФ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЂМЙФ¤м(ЂЃф(Ќ•№‘Ґ(ЂЃҐЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№Ґ№‘•б}‰Х™™•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­9Ѕ№”Ѓср(ЂЂЂЂЂЃНЎ…‘•Й|МЙ‰ҐС}Ґ№‘•б}‘µ„¤Ѓм(ЂЂЂЂјјЃ­Й…Э…±±МЂјЃ­Y•ЙСҐЌ•НAЙЅЌ•НН•ђЃ…Й”ЃСЎ”Ѓ‰…Ќ­•№ђµ…ќ№ЅНСҐЊЃ‘Й…ЬЃЌЅХ№С•ЙМ(ЂЂЂЂјјЃСЎ”Ѓ‘•‰ХњЃЅЩ•Й±…дЃЙ•…‘М°Ѓ…№ђЃХ№СҐ°Ѓ№ЅЬЃЅ№±дЃСЎ”ЃНДИЃ‰…Ќ­•№ђ(ЂЂЂЂјјЃҐ№ЌЙ•µ•№С•ђЃСЎ•ґЂґЃСЎ”ЃЅЩ•Й±…дЃНЎЅЭ•ђЂ‰Й…ЬиЂА€Ѓ™ЅИЃ•Щ•ЙдЃYХ±­…ёЃЙХёё(ЂЂЂЂјјЃ5ҐЙЙЅЙМЃђНђДИЅЌЅµµ…№‘}БЙЅЌ•ННЅИ№ЌБАЃ•б…ЌС±д°Ѓ…РЃСЎ”ЃН…µ”ЃБЅҐ№РЃҐёЃСЎ”(ЂЂЂЂјјЃН•ЕХ•№Ќ”ЂЎ…™С•ИЃСЎ”Ѓ‰…ЙЙҐ•ЙМ°ЃЅёЃСЎ”ЃҐ№НСЙХЌСҐЅёЃСЎ…РЃҐННХ•МЃСЎ”Ѓ‘Й…Ь¤ё(ЂЂЂЃЌЅµµҐС}Ќ•№НХН}‘Й…Ь ¤м(ЂЂЂЃAI=%1}I]}10 ¤м(ЂЂЂЃAI=%1}YIQ%LЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}‘Й…Э}Щ•ЙС•б}ЌЅХ№Р¤м(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЃҐЂ …I•бMЭҐСЌЎA•Й™M­ҐА Д¤¤(Ќ•№‘Ґ(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­Й…ЬЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}‘Й…Э}Щ•ЙС•б}ЌЅХ№Р°ЂД°ЂА°ЂА¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃНСђийБ…ҐИсY­	Х™™•И°ЃY­•ЩҐЌ•MҐй”шЃҐ№‘•б}‰Х™™•Им(ЂЂЂЃНЭҐСЌ ЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№Ґ№‘•б}‰Х™™•Й}СеБ”¤Ѓм(ЂЂЂЂЂЃЌ…Н”ЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­Х•НС5и(ЂЂЂЂЂЂЂЃҐЂЎќХ•НС}‘µ…}Ґ№‘•б}НЌЙ…СЌЎ}‰Х™™•И№‰Х™™•И ¤Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•И№™ҐЙНРЂфЃќХ•НС}‘µ…}Ґ№‘•б}НЌЙ…СЌЎ}‰Х™™•И№‰Х™™•И ¤м(ЂЂЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•И№Н•ЌЅ№ђЂфЂАм(ЂЂЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•И№™ҐЙНРЂфЃНЎ…Й•‘}µ•µЅЙе|ґщ‰Х™™•И ¤м(ЂЂЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•И№Н•ЌЅ№ђЂфЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ќХ•НС}Ґ№‘•б}‰…Н”м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃЌ…Н”ЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­!ЅНСЅ№Щ•ЙС•ђи(ЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•ИЂфЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ•СЅ№Щ•ЙС•‘%№‘•б	Х™™•И (ЂЂЂЂЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Ґ№‘•б}‰Х™™•Й}Ў…№‘±”¤м(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃЌ…Н”ЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­!ЅНС	ХҐ±СҐ№ЅЙХСји(ЂЂЂЂЂЃЌ…Н”ЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­!ЅНС	ХҐ±СҐ№ЅЙ5и(ЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•ИЂфЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ•С	ХҐ±СҐ№%№‘•б	Х™™•И (ЂЂЂЂЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Ґ№‘•б}‰Х™™•Й}Ў…№‘±”¤м(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃ‘•™…Х±Ри(ЂЂЂЂЂЂЂЃ…НН•ЙС}Х№Ў…№‘±•‘}Ќ…Н”ЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№Ґ№‘•б}‰Х™™•Й}СеБ”¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ‘Й…Э}™…Ґ° ‰Х№•бБ•ЌС•‘}Ґ№‘•б}‰Х™™•Й}СеБ”€¤м(ЂЂЂЃф(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­	Ґ№‘%№‘•б	Х™™•И (ЂЂЂЂЂЂЂЃҐ№‘•б}‰Х™™•И№™ҐЙНР°ЃҐ№‘•б}‰Х™™•И№Н•ЌЅ№ђ°(ЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Ґ№‘•б}™ЅЙµ…РЂффЃб•№ЅМий%№‘•бЅЙµ…Рий­%№РДШ(ЂЂЂЂЂЂЂЂЂЂЂЂьЃY-}%9a}QeA}U%9PДШ(ЂЂЂЂЂЂЂЂЂЂЂЂиЃY-}%9a}QeA}U%9PМИ¤м(ЂЂЂЃЌЅµµҐС}Ќ•№НХН}‘Й…Ь ¤м(ЂЂЂЃAI=%1}I]}10 ¤м(ЂЂЂЃAI=%1}YIQ%LЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}‘Й…Э}Щ•ЙС•б}ЌЅХ№Р¤м(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЃҐЂ …I•бMЭҐСЌЎA•Й™M­ҐА Д¤¤(Ќ•№‘Ґ(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­Й…Э%№‘•б•ђЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}‘Й…Э}Щ•ЙС•б}ЌЅХ№Р°ЂД°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂА°ЂА°ЂА¤м(ЂЃф((ЂЂјјЃ%№Щ…±Ґ‘…С”ЃС•бСХЙ•МЃҐёЃµ•µ•бБЅЙС•ђЃµ•µЅЙдЃ…№ђЃЭ…СЌ Ѓ™ЅИЃЌЎ…№ќ•Мё(ЂЃҐЂ …µ•µ•бБЅЙС}Й…№ќ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЃ™ЅИЂЎЌЅ№НРЃ‘Й…Э}ХСҐ°ий5•µбБЅЙСI…№ќ”Ѓµ•µ•бБЅЙС}Й…№ќ”ЂиЃµ•µ•бБЅЙС}Й…№ќ•Н|¤Ѓм(ЂЂЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщI…№ќ•]ЙҐСС•№	еБФЎµ•µ•бБЅЙС}Й…№ќ”№‰…Н•}…‘‘Й•НН}‘ЭЅЙ‘МЂррЂИ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•М¤м(ЂЂЂЃф(ЂЃфЃ•±Н”ЃҐЂЎµ•µ•бБЅЙС}ЭЙҐС•Н}БЅННҐ‰±”¤Ѓм(ЂЂЂЂјјЃMСЙ•…ґЃЌЅ№НС…№СМЃЌ…ёЃ‰”ЃҐ№Щ…±ҐђЃЅИЃ‘е№…µҐЊ°ЃНјЃ•б…ЌРЃ‘•НСҐ№…СҐЅ№МЃµ…дЃ‰”(ЂЂЂЂјјЃХ№­№ЅЭёёЃ-••АЃҐ№Щ…±Ґ‘…СҐЅёЃЌЅ№Н•ЙЩ…СҐЩ”ЃҐёЃСЎҐМЃЌ…Н”ё(ЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщI…№ќ•]ЙҐСС•№	еБФ А°ЃMЎ…Й•‘5•µЅЙдий­	Х™™•ЙMҐй”¤м(ЂЃф((ЂЃҐЂЎ%НI•…‘‰…Ќ­5•µ•бБЅЙС№…‰±•ђЎIaYI}PЎЩХ±­…№}Й•…‘‰…Ќ­}µ•µ•бБЅЙР¤¤Ђ(ЂЂЂЂЂЂ…µ•µ•бБЅЙС}Й…№ќ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЃХҐ№РМЙ}РЃµ•µ•бБЅЙС}СЅС…±}НҐй”ЂфЂАм(ЂЂЂЃ™ЅИЂЎЌЅ№НРЃ‘Й…Э}ХСҐ°ий5•µбБЅЙСI…№ќ”Ѓµ•µ•бБЅЙС}Й…№ќ”ЂиЃµ•µ•бБЅЙС}Й…№ќ•Н|¤Ѓм(ЂЂЂЂЂЃµ•µ•бБЅЙС}СЅС…±}НҐй”Ђ¬фЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЂЂЃф(ЂЂЂЃҐЂЎµ•µ•бБЅЙС}СЅС…±}НҐй”¤Ѓм(ЂЂЂЂЂЃҐЂЎIaYI}PЎЙ•…‘‰…Ќ­}µ•µ•бБЅЙС}™…НР¤¤Ѓм(ЂЂЂЂЂЂЂЃ%ННХ•Й…Э}5•µ•бБЅЙСI•…‘‰…Ќ­…НСA…С Ўµ•µ•бБЅЙС}СЅС…±}НҐй”¤м(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃ%ННХ•Й…Э}5•µ•бБЅЙСI•…‘‰…Ќ­Х±±A…С Ўµ•µ•бБЅЙС}СЅС…±}НҐй”¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф((ЂЃЙ•СХЙёЃСЙХ”м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий%ННХ•Й…Э}5•µ•бБЅЙСI•…‘‰…Ќ­Х±±A…С ЎХҐ№РМЙ}РЃСЅС…±}НҐй”¤Ѓм(ЂЃҐЂ …СЅС…±}НҐй”ЃсрЃµ•µ•бБЅЙС}Й…№ќ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃY­	Х™™•ИЃЙ•…‘‰…Ќ­}‰Х™™•ИЂфЃY-}9U11}!91м(ЂЃY­•ЩҐЌ•5•µЅЙдЃЙ•…‘‰…Ќ­}µ•µЅЙдЂфЃY-}9U11}!91м(ЂЃХҐ№РМЙ}РЃЙ•…‘‰…Ќ­}µ•µЅЙе}СеБ”ЂфЃU%9PМЙ}5`м(ЂЃY­•ЩҐЌ•MҐй”ЃЙ•…‘‰…Ќ­}µ•µЅЙе}НҐй”ЂфЂАм(ЂЃҐЂ …Х¤ийЩХ±­…ёийХСҐ°ийЙ•…С••‘ҐЌ…С•‘±±ЅЌ…СҐЅ№	Х™™•И (ЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”°ЃСЅС…±}НҐй”°ЃY-}	UI}UM}QI9MI}MQ}	%P°(ЂЂЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий5•µЅЙеAХЙБЅН”ий­I•…‘‰…Ќ¬°ЃЙ•…‘‰…Ќ­}‰Х™™•И°ЃЙ•…‘‰…Ќ­}µ•µЅЙд°(ЂЂЂЂЂЂЂЂЂЂ™Й•…‘‰…Ќ­}µ•µЅЙе}СеБ”°Ђ™Й•…‘‰…Ќ­}µ•µЅЙе}НҐй”¤¤Ѓм(ЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”Ѓ„ЃYХ±­…ёЃµ•µ•бБЅЙРЃЙ•…‘‰…Ќ¬Ѓ‰Х™™•И€¤м(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃНЎ…Й•‘}µ•µЅЙе|ґщUН”ЎYХ±­…№MЎ…Й•‘5•µЅЙдийUН…ќ”ий­I•…ђ¤м(ЂЃMХ‰µҐС	…ЙЙҐ•ЙМЎСЙХ”¤м((ЂЃХҐ№РМЙ}РЃЙ•…‘‰…Ќ­}Ѕ™™Н•РЂфЂАм(ЂЃ™ЅИЂЎЌЅ№НРЃ‘Й…Э}ХСҐ°ий5•µбБЅЙСI…№ќ”Ѓµ•µ•бБЅЙС}Й…№ќ”ЂиЃµ•µ•бБЅЙС}Й…№ќ•Н|¤Ѓм(ЂЂЂЃY­	Х™™•ЙЅБдЃЙ•…‘‰…Ќ­}Й•ќҐЅёЂфЃнфм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НЙЌ=™™Н•РЂфЃµ•µ•бБЅЙС}Й…№ќ”№‰…Н•}…‘‘Й•НН}‘ЭЅЙ‘МЂррЂИм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№‘НС=™™Н•РЂфЃЙ•…‘‰…Ќ­}Ѕ™™Н•Рм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НҐй”ЂфЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­ЅБе	Х™™•ИЎНЎ…Й•‘}µ•µЅЙе|ґщ‰Х™™•И ¤°ЃЙ•…‘‰…Ќ­}‰Х™™•И°ЂД°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™Й•…‘‰…Ќ­}Й•ќҐЅё¤м(ЂЂЂЃЙ•…‘‰…Ќ­}Ѕ™™Н•РЂ¬фЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЃф(ЂЃAХНЎ	Х™™•Й5•µЅЙе	…ЙЙҐ•ИЎЙ•…‘‰…Ќ­}‰Х™™•И°ЂА°ЃСЅС…±}НҐй”°ЃY-}A%A1%9}MQ}QI9MI}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}!=MQ}	%P°ЃY-}MM}QI9MI}]I%Q}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}MM}!=MQ}I}	%P¤м((ЂЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃ…Э…ҐРЃЌЅµБ±•СҐЅёЃЅЃYХ±­…ёЃµ•µ•бБЅЙРЃЙ•…‘‰…Ќ¬€¤м(ЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃЩЅҐђЁЃЙ•…‘‰…Ќ­}µ…ББҐ№њЂфЃ№Х±±БСИм(ЂЃҐЂЎ‘™ё№Щ­5…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}µ•µЅЙд°ЂА°ЃY-}]!=1}M%i°ЂА°Ђ™Й•…‘‰…Ќ­}µ…ББҐ№њ¤Ђ„ф(ЂЂЂЂЂЃY-}MUML¤Ѓм(ЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃµ…АЃ„ЃYХ±­…ёЃµ•µ•бБЅЙРЃЙ•…‘‰…Ќ¬Ѓ‰Х™™•И€¤м(ЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃҐЂ „ЎЩХ±­…№}‘•ЩҐЌ”ґщµ•µЅЙе}СеБ•М ¤№ЎЅНС}ЌЅЎ•Й•№РЂЂЎХҐ№РМЙ}Р Д¤ЂррЃЙ•…‘‰…Ќ­}µ•µЅЙе}СеБ”¤¤¤Ѓм(ЂЂЂЃY­5…ББ•‘5•µЅЙеI…№ќ”ЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”ЂфЃнфм(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№НQеБ”ЂфЃY-}MQIUQUI}QeA}5AA}55=Ie}I9м(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№µ•µЅЙдЂфЃЙ•…‘‰…Ќ­}µ•µЅЙдм(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№Ѕ™™Н•РЂфЂАм(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№НҐй”ЂфЃНСђийµҐё (ЂЂЂЂЂЂЂЃЙ•аийЙЅХ№‘}ХАЎY­•ЩҐЌ•MҐй”ЎСЅС…±}НҐй”¤°ЃЩХ±­…№}‘•ЩҐЌ”ґщБЙЅБ•ЙСҐ•М ¤№№Ѕ№ЅЎ•Й•№ССЅµMҐй”¤°(ЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}НҐй”¤м(ЂЂЂЃ‘™ё№Щ­%№Щ…±Ґ‘…С•5…ББ•‘5•µЅЙеI…№ќ•МЎ‘•ЩҐЌ”°ЂД°Ђ™Й•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”¤м(ЂЃф((ЂЃЌЅ№НРЃХҐ№Рб}РЁЃЙ•…‘‰…Ќ­}‰еС•МЂфЃЙ•Ґ№С•ЙБЙ•С}Ќ…НРсЌЅ№НРЃХҐ№Рб}РЁшЎЙ•…‘‰…Ќ­}µ…ББҐ№њ¤м(ЂЃ™ЅИЂЎЌЅ№НРЃ‘Й…Э}ХСҐ°ий5•µбБЅЙСI…№ќ”Ѓµ•µ•бБЅЙС}Й…№ќ”ЂиЃµ•µ•бБЅЙС}Й…№ќ•Н|¤Ѓм(ЂЂЂЃНСђийµ•µЌБдЎµ•µЅЙе|ґщQЙ…№Н±…С•AЎеНҐЌ…°Ўµ•µ•бБЅЙС}Й…№ќ”№‰…Н•}…‘‘Й•НН}‘ЭЅЙ‘МЂррЂИ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ­}‰еС•М°Ѓµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•М¤м(ЂЂЂЃЙ•…‘‰…Ќ­}‰еС•МЂ¬фЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЃф(ЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}µ•µЅЙд¤м(ЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ­}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЃЙ•СХЙёЃСЙХ”м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий%ННХ•Й…Э}5•µ•бБЅЙСI•…‘‰…Ќ­…НСA…С ЎХҐ№РМЙ}РЃСЅС…±}НҐй”¤Ѓм(ЂЃҐЂ …СЅС…±}НҐй”ЃсрЃµ•µ•бБЅЙС}Й…№ќ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃЌЅ№НРЃХҐ№РШС}РЃЙ•…‘‰…Ќ­}­•дЂф(ЂЂЂЂЂЃ5…­•5•µ•бБЅЙСI•…‘‰…Ќ­-•дЎµ•µ•бБЅЙС}Й…№ќ•Н|№™ЙЅ№Р ¤№‰…Н•}…‘‘Й•НН}‘ЭЅЙ‘М°ЃСЅС…±}НҐй”¤м(ЂЃI•…‘‰…Ќ­	Х™™•ИЃЙ•…‘‰…Ќ¬ЂфЃµ•µ•бБЅЙС}Й•…‘‰…Ќ­}‰Х™™•ЙН}mЙ•…‘‰…Ќ­}­•еtм(ЂЃЙ•…‘‰…Ќ¬№±…НС}ХН•‘}™Й…µ”ЂфЃ™Й…µ•}ЌХЙЙ•№С|м((ЂЃ…ХСјЃ•№НХЙ•}Й•…‘‰…Ќ­}Н±ЅРЂфЃl™tЎХҐ№РМЙ}РЃҐ№‘•а°ЃХҐ№РМЙ}РЃНҐй”¤ЂґшЃ‰ЅЅ°Ѓм(ЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂ„фЃY-}9U11}!91ЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91Ђ(ЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐ№‘•бtЂ„фЃ№Х±±БСИЂЃНҐй”ЂрфЃЙ•…‘‰…Ќ¬№НҐй•НmҐ№‘•бt¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃY­	Х™™•ИЃ№•Э}‰Х™™•ИЂфЃY-}9U11}!91м(ЂЂЂЃY­•ЩҐЌ•5•µЅЙдЃ№•Э}µ•µЅЙдЂфЃY-}9U11}!91м(ЂЂЂЃҐЂ …Х¤ийЩХ±­…ёийХСҐ°ийЙ•…С••‘ҐЌ…С•‘±±ЅЌ…СҐЅ№	Х™™•И (ЂЂЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”°ЃНҐй”°ЃY-}	UI}UM}QI9MI}MQ}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий5•µЅЙеAХЙБЅН”ий­I•…‘‰…Ќ¬°Ѓ№•Э}‰Х™™•И°Ѓ№•Э}µ•µЅЙд¤¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЃЩЅҐђЁЃ№•Э}µ…ББҐ№њЂфЃ№Х±±БСИм(ЂЂЂЃҐЂЎ‘™ё№Щ­5…Б5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°ЂА°ЃY-}]!=1}M%i°ЂА°Ђ™№•Э}µ…ББҐ№њ¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°Ѓ№•Э}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂ„фЃY-}9U11}!91ЃсрЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд¤м(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°Ѓ№•Э}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐ№‘•бtЂ„фЃ№Х±±БСИЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бt¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бt°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бt°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЃф((ЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂфЃ№•Э}‰Х™™•Им(ЂЂЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂфЃ№•Э}µ•µЅЙдм(ЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐ№‘•бtЂфЃ№•Э}µ…ББҐ№њм(ЂЂЂЃЙ•…‘‰…Ќ¬№НҐй•НmҐ№‘•бtЂфЃНҐй”м(ЂЂЂЃЙ•…‘‰…Ќ¬№НХ‰µҐННҐЅ№}ЭЙҐСС•№mҐ№‘•бtЂфЂАм(ЂЂЂЃЙ•…‘‰…Ќ¬№ЭЙҐСС•№}НҐй•mҐ№‘•бtЂфЂАм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃфм((ЂЃЌЅ№НРЃХҐ№РМЙ}РЃЭЙҐС•}Ґ№‘•аЂфЃЙ•…‘‰…Ќ¬№ЌХЙЙ•№С}Ґ№‘•ам(ЂЃЌЅ№НРЃХҐ№РМЙ}РЃЙ•…‘}Ґ№‘•аЂфЂДЂґЃЭЙҐС•}Ґ№‘•ам(ЂЃЌЅ№НРЃХҐ№РМЙ}РЃЙ•…‘‰…Ќ­}НҐй”ЂфЃ±Ґќ№I•…‘‰…Ќ­	Х™™•ЙMҐй”ЎСЅС…±}НҐй”¤м(ЂЃҐЂ …•№НХЙ•}Й•…‘‰…Ќ­}Н±ЅРЎЭЙҐС•}Ґ№‘•а°ЃЙ•…‘‰…Ќ­}НҐй”¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ%ННХ•Й…Э}5•µ•бБЅЙСI•…‘‰…Ќ­Х±±A…С ЎСЅС…±}НҐй”¤м(ЂЃф((ЂЃНЎ…Й•‘}µ•µЅЙе|ґщUН”ЎYХ±­…№MЎ…Й•‘5•µЅЙдийUН…ќ”ий­I•…ђ¤м(ЂЃMХ‰µҐС	…ЙЙҐ•ЙМЎСЙХ”¤м((ЂЃХҐ№РМЙ}РЃЙ•…‘‰…Ќ­}Ѕ™™Н•РЂфЂАм(ЂЃ™ЅИЂЎЌЅ№НРЃ‘Й…Э}ХСҐ°ий5•µбБЅЙСI…№ќ”Ѓµ•µ•бБЅЙС}Й…№ќ”ЂиЃµ•µ•бБЅЙС}Й…№ќ•Н|¤Ѓм(ЂЂЂЃY­	Х™™•ЙЅБдЃЙ•…‘‰…Ќ­}Й•ќҐЅёЂфЃнфм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НЙЌ=™™Н•РЂфЃµ•µ•бБЅЙС}Й…№ќ”№‰…Н•}…‘‘Й•НН}‘ЭЅЙ‘МЂррЂИм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№‘НС=™™Н•РЂфЃЙ•…‘‰…Ќ­}Ѕ™™Н•Рм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НҐй”ЂфЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­ЅБе	Х™™•ИЎНЎ…Й•‘}µ•µЅЙе|ґщ‰Х™™•И ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЭЙҐС•}Ґ№‘•бt°ЂД°Ђ™Й•…‘‰…Ќ­}Й•ќҐЅё¤м(ЂЂЂЃЙ•…‘‰…Ќ­}Ѕ™™Н•РЂ¬фЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЃф(ЂЃAХНЎ	Х™™•Й5•µЅЙе	…ЙЙҐ•ИЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЭЙҐС•}Ґ№‘•бt°ЂА°ЃСЅС…±}НҐй”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}QI9MI}	%P°ЃY-}A%A1%9}MQ}!=MQ}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}MM}QI9MI}]I%Q}	%P°ЃY-}MM}!=MQ}I}	%P¤м(ЂЃЙ•…‘‰…Ќ¬№НХ‰µҐННҐЅ№}ЭЙҐСС•№mЭЙҐС•}Ґ№‘•бtЂфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤м(ЂЃЙ•…‘‰…Ќ¬№ЭЙҐСС•№}НҐй•mЭЙҐС•}Ґ№‘•бtЂфЃСЅС…±}НҐй”м((ЂЃЎ•Ќ­MХ‰µҐННҐЅ№•№Ќ•№‘•ЩҐЌ•1ЅНМ А¤м(ЂЃ‰ЅЅ°ЃБЙ•ЩҐЅХН}Н±ЅС}Й•…‘дЂф(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЙ•…‘}Ґ№‘•бtЂ„фЃY-}9U11}!91Ђ(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmЙ•…‘}Ґ№‘•бtЂ„фЃY-}9U11}!91Ђ(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mЙ•…‘}Ґ№‘•бtЂ„фЃ№Х±±БСИЂЃСЅС…±}НҐй”ЂрфЃЙ•…‘‰…Ќ¬№НҐй•НmЙ•…‘}Ґ№‘•бtЂ(ЂЂЂЂЂЃСЅС…±}НҐй”ЂрфЃЙ•…‘‰…Ќ¬№ЭЙҐСС•№}НҐй•mЙ•…‘}Ґ№‘•бtЂЃЙ•…‘‰…Ќ¬№НХ‰µҐННҐЅ№}ЭЙҐСС•№mЙ•…‘}Ґ№‘•бtЂ(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№НХ‰µҐННҐЅ№}ЭЙҐСС•№mЙ•…‘}Ґ№‘•бtЂрфЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|м(ЂЃҐЂ …БЙ•ЩҐЅХН}Н±ЅС}Й•…‘д¤Ѓм(ЂЂЂЃ%ННХ•Й…Э}5•µ•бБЅЙСI•…‘‰…Ќ­Х±±A…С ЎСЅС…±}НҐй”¤м(ЂЂЂЃЙ•…‘‰…Ќ¬№ЌХЙЙ•№С}Ґ№‘•аЂфЃЙ•…‘}Ґ№‘•ам(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃY­5…ББ•‘5•µЅЙеI…№ќ”ЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”ЂфЃнфм(ЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№НQеБ”ЂфЃY-}MQIUQUI}QeA}5AA}55=Ie}I9м(ЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№µ•µЅЙдЂфЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmЙ•…‘}Ґ№‘•бtм(ЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№Ѕ™™Н•РЂфЂАм(ЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№НҐй”ЂфЃY-}]!=1}M%iм(ЂЃ‘™ё№Щ­%№Щ…±Ґ‘…С•5…ББ•‘5•µЅЙеI…№ќ•МЎ‘•ЩҐЌ”°ЂД°Ђ™Й•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”¤м((ЂЃЌЅ№НРЃХҐ№Рб}РЁЃЙ•…‘‰…Ќ­}‰еС•МЂф(ЂЂЂЂЂЃЙ•Ґ№С•ЙБЙ•С}Ќ…НРсЌЅ№НРЃХҐ№Рб}РЁшЎЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mЙ•…‘}Ґ№‘•бt¤м(ЂЃ™ЅИЂЎЌЅ№НРЃ‘Й…Э}ХСҐ°ий5•µбБЅЙСI…№ќ”Ѓµ•µ•бБЅЙС}Й…№ќ”ЂиЃµ•µ•бБЅЙС}Й…№ќ•Н|¤Ѓм(ЂЂЂЃНСђийµ•µЌБдЎµ•µЅЙе|ґщQЙ…№Н±…С•AЎеНҐЌ…°Ўµ•µ•бБЅЙС}Й…№ќ”№‰…Н•}…‘‘Й•НН}‘ЭЅЙ‘МЂррЂИ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ­}‰еС•М°Ѓµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•М¤м(ЂЂЂЃЙ•…‘‰…Ќ­}‰еС•МЂ¬фЃµ•µ•бБЅЙС}Й…№ќ”№НҐй•}‰еС•Мм(ЂЃф((ЂЃЙ•…‘‰…Ќ¬№ЌХЙЙ•№С}Ґ№‘•аЂфЃЙ•…‘}Ґ№‘•ам(ЂЃЙ•СХЙёЃСЙХ”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийI•ЌЅЙ‘Й…Э•№НХНЅБдЎХҐ№РМЙ}РЃЭЙҐСС•№}…‘‘Й•НМ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃЭЙҐСС•№}±•№ќС °(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‰ЅЅ°ЃЙ•…‘‰…Ќ­}Б…С ¤Ѓм(ЂЃҐЂ …‘Й…Э}Ќ•№НХН|ЃсрЂ…‘Й…Э}Ќ•№НХН|ґщ%НI•ЌЅЙ‘Ґ№њ ¤¤Ѓм(ЂЂЂЃЙ•СХЙём(ЂЃф(ЂЃЌЅ№НРЃI•ќҐНС•ЙҐ±”ЃЙ•ќМЂфЂ©Й•ќҐНС•Й}™Ґ±•|м(ЂЃ‘Й…Э}Ќ•№НХМийЅБеI•ЌЅЙђЃЙ•ЌЅЙ‘нфм(ЂЃЙ•ЌЅЙђ№Й‰}ЌЅБе}ЌЅ№СЙЅ°ЂфЃЙ•ќНma}AU}I}I	}=Ae}=9QI=1tм(ЂЃЙ•ЌЅЙђ№Й‰}ЌЅБе}‘•НС}Ґ№™јЂфЃЙ•ќНma}AU}I}I	}=Ae}MQ}%9=tм(ЂЃЙ•ЌЅЙђ№Й‰}ЌЅБе}‘•НС}‰…Н”ЂфЃЙ•ќНma}AU}I}I	}=Ae}MQ}	Mtм(ЂЃЙ•ЌЅЙђ№Й‰}ЌЅБе}‘•НС}БҐСЌ ЂфЃЙ•ќНma}AU}I}I	}=Ae}MQ}A%Q!tм(ЂЃЙ•ЌЅЙђ№ЭЙҐСС•№}…‘‘Й•НМЂфЃЭЙҐСС•№}…‘‘Й•НМм(ЂЃЙ•ЌЅЙђ№ЭЙҐСС•№}±•№ќС ЂфЃЭЙҐСС•№}±•№ќС м(ЂЃЙ•ЌЅЙђ№Й‰}НХЙ™…Ќ•}Ґ№™јЂфЃЙ•ќНma}AU}I}I	}MUI}%9=tм(ЂЃЙ•ЌЅЙђ№Й‰}ЌЅ±ЅЙ}Ґ№™јАЂфЃЙ•ќНma}AU}I}I	}=1=I}%9=tм(ЂЃЙ•ЌЅЙђ№Й‰}‘•БСЎ}Ґ№™јЂфЃЙ•ќНma}AU}I}I	}AQ!}%9=tм(ЂЃЙ•ЌЅЙђ№Й‰}µЅ‘•ЌЅ№СЙЅ°ЂфЃЙ•ќНma}AU}I}I	}5==9QI=1tм(ЂЃЙ•ЌЅЙђ№Й•…‘‰…Ќ­}Б…С ЂфЃЙ•…‘‰…Ќ­}Б…С м(ЂЃ‘Й…Э}Ќ•№НХН|ґщI•ЌЅЙ‘ЅБдЎЙ•ЌЅЙђ¤м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий%ННХ•ЅБд ¤Ѓм(ЌҐЃIa}A1Q=I5}M]%Q (ЂЃНЭҐСЌЎ}СҐµҐ№њийMЌЅБ”ЃСҐµҐ№њЎНЭҐСЌЎ}СҐµҐ№њий­I•НЅ±Щ•БХUМ¤м(Ќ•№‘Ґ(ЌҐЃa}AU}%9}I%9}I]}M=AL(ЂЃM=A}БЙЅ™Ґ±•}ЌБХ} ‰ќБФ€¤м(Ќ•№‘ҐЂЂјјЃa}AU}%9}I%9}I]}M=AL((ЂЃҐЂ …	•ќҐ№MХ‰µҐННҐЅёЎСЙХ”¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ЃЙ•…‘‰…Ќ­}µЅ‘”ЂфЃ•СI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ЎIaYI}PЎЩХ±­…№}Й•…‘‰…Ќ­}Й•НЅ±Щ”¤¤м(ЂЃҐЂЎЙ•…‘‰…Ќ­}µЅ‘”ЂффЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ий­ҐН…‰±•ђЂ(ЂЂЂЂЂЃIaYI}PЎќБХ}ЌЅµБ…Й•}Й•НЅ±Щ•}…‘‘Й•НМ¤№•µБСд ¤¤Ѓм(ЂЂЂЃХҐ№РМЙ}РЃЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС м(ЂЂЂЃ‰ЅЅ°ЃЙ•НЅ±Щ•ђЂфЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщI•НЅ±Щ” ©µ•µЅЙе|°Ђ©НЎ…Й•‘}µ•µЅЙе|°Ђ©С•бСХЙ•}Ќ…ЌЎ•|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЂЂЃҐЂЎЙ•НЅ±Щ•ђ¤Ѓм(ЂЂЂЂЂЃI•ЌЅЙ‘Й…Э•№НХНЅБдЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС °Ѓ™…±Н”¤м(ЂЂЂЂЂЂјјЃU№ЌЅ№‘ҐСҐЅ№…±±д°ЃНјЃСЎ…РЃСЎ”Ѓ•бЌ±ХНҐЅёЃН•РЃҐМЃ…±Й•…‘дЃЌЅµБ±•С”ЃҐЃСЎ”(ЂЂЂЂЂЂјјЃ№…СҐЩ”ЃБ…С ЃҐМЃНЭҐСЌЎ•ђЃЅёЃ±…С•ИЃҐёЃСЎ”ЃЙХёё(ЂЂЂЂЂЃ№…СҐЩ•}Й•НҐ‘•№Ќе|ґщ9ЅС•I•НЅ±Щ••НСҐ№…СҐЅёЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЂЂЂЂЃҐЂЎIaYI}PЎќБХ}№…СҐЩ•}НС…СМ¤¤Ѓм(ЂЂЂЂЂЂЂЃ№…СҐЩ•}С•±•µ•СЙдий9ЅС•I•НЅ±Щ••НСҐ№…СҐЅёЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЂЂЃЙ•СХЙёЃЙ•НЅ±Щ•ђм(ЂЃф((ЂЃЙ•СХЙёЃ%ННХ•ЅБе}I•…‘‰…Ќ­I•НЅ±Щ•A…С  ¤м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий%ННХ•ЅБе}I•…‘‰…Ќ­I•НЅ±Щ•A…С  ¤Ѓм(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃХҐ№РМЙ}РЃЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС м(ЂЃҐЂ …Й•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщI•НЅ±Щ” ©µ•µЅЙе|°Ђ©НЎ…Й•‘}µ•µЅЙе|°Ђ©С•бСХЙ•}Ќ…ЌЎ•|°ЃЭЙҐСС•№}…‘‘Й•НМ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЭЙҐСС•№}±•№ќС ¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф(ЂЃ№…СҐЩ•}Й•НҐ‘•№Ќе|ґщ9ЅС•I•НЅ±Щ••НСҐ№…СҐЅёЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЃI•ЌЅЙ‘Й…Э•№НХНЅБдЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС °ЃСЙХ”¤м(ЂЃҐЂЎIaYI}PЎќБХ}№…СҐЩ•}НС…СМ¤¤Ѓм(ЂЂЂЃ№…СҐЩ•}С•±•µ•СЙдий9ЅС•I•НЅ±Щ••НСҐ№…СҐЅёЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЃф((ЂЃҐЂ …ЭЙҐСС•№}±•№ќС ¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃҐЂ …µ•µЅЙе|ґщQЙ…№Н±…С•AЎеНҐЌ…°ЎЭЙҐСС•№}…‘‘Й•НМ¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ЃЙ•…‘‰…Ќ­}µЅ‘”ЂфЃ•СI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ЎIaYI}PЎЩХ±­…№}Й•…‘‰…Ќ­}Й•НЅ±Щ”¤¤м(ЂЃЌЅ№НРЃ‰ЅЅ°ЃЌЅµБ…Й•}БҐб•±МЂфЃ]…№СНI•НЅ±Щ•ЅµБ…ЙҐНЅёЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЃҐЂЎЙ•…‘‰…Ќ­}µЅ‘”ЂффЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ий­ҐН…‰±•ђЂЂ…ЌЅµБ…Й•}БҐб•±М¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃ…ХСјЃ•№НХЙ•}Й•…‘‰…Ќ­}Н±ЅРЂфЃl™tЎI•…‘‰…Ќ­	Х™™•ИЃЙ•…‘‰…Ќ¬°ЃХҐ№РМЙ}РЃҐ№‘•а°ЃХҐ№РМЙ}РЃНҐй”¤ЂґшЃ‰ЅЅ°Ѓм(ЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂ„фЃY-}9U11}!91ЂЃНҐй”ЂрфЃЙ•…‘‰…Ќ¬№НҐй•НmҐ№‘•бtЂ(ЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐ№‘•бtЂ„фЃ№Х±±БСИ¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃY­	Х™™•ИЃ№•Э}‰Х™™•ИЂфЃY-}9U11}!91м(ЂЂЂЃY­•ЩҐЌ•5•µЅЙдЃ№•Э}µ•µЅЙдЂфЃY-}9U11}!91м(ЂЂЂЃҐЂ …Х¤ийЩХ±­…ёийХСҐ°ийЙ•…С••‘ҐЌ…С•‘±±ЅЌ…СҐЅ№	Х™™•И (ЂЂЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”°ЃНҐй”°ЃY-}	UI}UM}QI9MI}MQ}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий5•µЅЙеAХЙБЅН”ий­I•…‘‰…Ќ¬°Ѓ№•Э}‰Х™™•И°Ѓ№•Э}µ•µЅЙд¤¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”Ѓ„ЃнфЃ5ЃYХ±­…ёЃЙ•НЅ±Щ”ЃЙ•…‘‰…Ќ¬Ѓ‰Х™™•И€°ЃНҐй”ЂшшЂИА¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЃЩЅҐђЁЃ№•Э}µ…ББҐ№њЂфЃ№Х±±БСИм(ЂЂЂЃҐЂЎ‘™ё№Щ­5…Б5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°ЂА°ЃY-}]!=1}M%i°ЂА°Ђ™№•Э}µ…ББҐ№њ¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃµ…АЃ„ЃYХ±­…ёЃЙ•НЅ±Щ”ЃЙ•…‘‰…Ќ¬Ѓ‰Х™™•И€¤м(ЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°Ѓ№•Э}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂ„фЃY-}9U11}!91ЃсрЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд¤м(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°Ѓ№•Э}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐ№‘•бtЂ„фЃ№Х±±БСИЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бt¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бt°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бt°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЃф((ЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐ№‘•бtЂфЃ№•Э}‰Х™™•Им(ЂЂЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐ№‘•бtЂфЃ№•Э}µ•µЅЙдм(ЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐ№‘•бtЂфЃ№•Э}µ…ББҐ№њм(ЂЂЂЃЙ•…‘‰…Ќ¬№НҐй•НmҐ№‘•бtЂфЃНҐй”м(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃфм((ЂЃ‰ЅЅ°ЃҐН}НЌ…±•ђЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ%НЙ…ЭI•НЅ±ХСҐЅ№MЌ…±•ђ ¤м(ЂЃХҐ№РШС}РЃЙ•НЅ±Щ•}­•дЂфЃ5…­•I•…‘‰…Ќ­I•НЅ±Щ•-•дЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЃI•…‘‰…Ќ­	Х™™•ИЃЙ•…‘‰…Ќ¬ЂфЃЙ•…‘‰…Ќ­}‰Х™™•ЙН}mЙ•НЅ±Щ•}­•еtм(ЂЃЙ•…‘‰…Ќ¬№±…НС}ХН•‘}™Й…µ”ЂфЃ™Й…µ•}ЌХЙЙ•№С|м(ЂЃХҐ№РМЙ}РЃЭЙҐС•}Ґ№‘•аЂфЃЙ•…‘‰…Ќ¬№ЌХЙЙ•№С}Ґ№‘•ам(ЂЃХҐ№РМЙ}РЃЙ•…‘‰…Ќ­}НҐй”ЂфЃ±Ґќ№I•…‘‰…Ќ­	Х™™•ЙMҐй”ЎЭЙҐСС•№}±•№ќС ¤м(ЂЃҐЂ …•№НХЙ•}Й•…‘‰…Ќ­}Н±ЅРЎЙ•…‘‰…Ќ¬°ЃЭЙҐС•}Ґ№‘•а°ЃЙ•…‘‰…Ќ­}НҐй”¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃҐЂЎҐН}НЌ…±•ђ¤Ѓм(ЂЂЂЃҐЂ …Й•НЅ±Щ•}‘ЅЭ№НЌ…±•}БҐБ•±Ґ№•|ЃсрЂ…Й•НЅ±Щ•}‘ЅЭ№НЌ…±•}БҐБ•±Ґ№•}±…еЅХС|¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃЙ•њийI	}=Ae}MQ}%9<ЃЌЅБе}‘•НС}Ґ№™јЂфЃЙ•ќҐНС•Й}™Ґ±•|ґщ•РсЙ•њийI	}=Ae}MQ}%9<ш ¤м(ЂЂЂЃЌЅ№НРЃЅЙµ…С%№™јЁЃ™ЅЙµ…С}Ґ№™јЂфЃЅЙµ…С%№™јий•РЎХҐ№РМЙ}РЎЌЅБе}‘•НС}Ґ№™ј№ЌЅБе}‘•НС}™ЅЙµ…Р¤¤м(ЂЂЂЃХҐ№РМЙ}РЃ‰ҐСН}Б•Й}БҐб•°ЂфЃ™ЅЙµ…С}Ґ№™јґщ‰ҐСН}Б•Й}БҐб•°м(ЂЂЂЃҐЂЎ‰ҐСН}Б•Й}БҐб•°Ђ„фЂаЂЃ‰ҐСН}Б•Й}БҐб•°Ђ„фЂДШЂЃ‰ҐСН}Б•Й}БҐб•°Ђ„фЂМИЂ(ЂЂЂЂЂЂЂЃ‰ҐСН}Б•Й}БҐб•°Ђ„фЂШР¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃХҐ№РМЙ}РЃБҐб•±}НҐй•}±ЅњИм(ЂЂЂЃҐЂ …Й•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎ‰ҐСН}Б•Й}БҐб•°ЂшшЂМ°Ђ™БҐб•±}НҐй•}±ЅњИ¤¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф(ЂЂЂЃХҐ№РМЙ}РЃСҐ±•}НҐй•|ЕаЂфЂМИЂЁЂМИЂЁЂЎХҐ№РМЙ}Р Д¤ЂррЃБҐб•±}НҐй•}±ЅњИ¤м(ЂЂЂЃХҐ№РМЙ}РЃСҐ±•}ЌЅХ№РЂфЃЭЙҐСС•№}±•№ќС ЂјЃСҐ±•}НҐй•|Еам(ЂЂЂЃҐЂ …СҐ±•}ЌЅХ№Р¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃХҐ№РШС}РЃНЌ…±•‘}НС…ЙРЂфЂА°ЃНЌ…±•‘}±•№ќС ЂфЂАм(ЂЂЂЃҐЂ …С•бСХЙ•}Ќ…ЌЎ•|ґщ•СMЌ…±•‘I•НЅ±Щ•I…№ќ”ЎЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС °ЂА°ЃНЌ…±•‘}НС…ЙР°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЌ…±•‘}±•№ќС ¤¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф(ЂЂЂЃҐЂ …НЌ…±•‘}±•№ќС ¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃY­	Х™™•ИЃНЌ…±•‘}Й•НЅ±Щ•}‰Х™™•ИЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщНЌ…±•‘}Й•НЅ±Щ•}‰Х™™•И ¤м(ЂЂЂЃҐЂЎНЌ…±•‘}Й•НЅ±Щ•}‰Х™™•ИЂффЃY-}9U11}!91ЃсрЃНЌ…±•‘}НС…ЙРЂшЃХҐ№РШС}РЎU%9PМЙ}5`¤¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃХҐ№РМЙ}РЃ‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй”ЂфЃ±Ґќ№I•…‘‰…Ќ­	Х™™•ЙMҐй”ЎЭЙҐСС•№}±•№ќС ¤м(ЂЂЂЃҐЂЎ‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй”ЂшЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй•|¤Ѓм(ЂЂЂЂЂЃY­	Х™™•ИЃ№•Э}‰Х™™•ИЂфЃY-}9U11}!91м(ЂЂЂЂЂЃY­•ЩҐЌ•5•µЅЙдЃ№•Э}µ•µЅЙдЂфЃY-}9U11}!91м(ЂЂЂЂЂЃҐЂ …Х¤ийЩХ±­…ёийХСҐ°ийЙ•…С••‘ҐЌ…С•‘±±ЅЌ…СҐЅ№	Х™™•И (ЂЂЂЂЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”°Ѓ‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}	UI}UM}MQ=I}	UI}	%PЃрЃY-}	UI}UM}QI9MI}MI}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий5•µЅЙеAХЙБЅН”ий­•ЩҐЌ•1ЅЌ…°°Ѓ№•Э}‰Х™™•И°Ѓ№•Э}µ•µЅЙд¤¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”Ѓ„ЃнфЃ5ЃYХ±­…ёЃЙ•НЅ±Щ”Ѓ‘ЅЭ№НЌ…±”Ѓ‰Х™™•И€°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй”ЂшшЂИА¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|Ђ„фЃY-}9U11}!91Ѓср(ЂЂЂЂЂЂЂЂЂЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й}µ•µЅЙе|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°Ѓ№•Э}‰Х™™•И°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°Ѓ№•Э}µ•µЅЙд°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃҐЂЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃҐЂЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й}µ•µЅЙе|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й}µ•µЅЙе|°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|ЂфЃ№•Э}‰Х™™•Им(ЂЂЂЂЂЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й}µ•µЅЙе|ЂфЃ№•Э}µ•µЅЙдм(ЂЂЂЂЂЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй•|ЂфЃ‘ЅЭ№НЌ…±•}‰Х™™•Й}НҐй”м(ЂЂЂЃф(ЂЂЂЃҐЂЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|ЂффЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃY­•НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}Н•РЂфЃ±±ЅЌ…С•MҐ№ќ±•QЙ…№НҐ•№С•НЌЙҐБСЅИ (ЂЂЂЂЂЂЂЃMҐ№ќ±•QЙ…№НҐ•№С•НЌЙҐБСЅЙ1…еЅХРий­MСЅЙ…ќ•	Х™™•ЙA…ҐЙЅµБХС”¤м(ЂЂЂЃҐЂЎ‘•НЌЙҐБСЅЙ}Н•РЂффЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃY­•НЌЙҐБСЅЙ	Х™™•Й%№™јЃ‰Х™™•Й}Ґ№™ЅНlЙtЂфЃнфм(ЂЂЂЃ‰Х™™•Й}Ґ№™ЅНlБt№‰Х™™•ИЂфЃНЌ…±•‘}Й•НЅ±Щ•}‰Х™™•Им(ЂЂЂЃ‰Х™™•Й}Ґ№™ЅНlБt№Ѕ™™Н•РЂфЂАм(ЂЂЂЃ‰Х™™•Й}Ґ№™ЅНlБt№Й…№ќ”ЂфЃY-}]!=1}M%iм(ЂЂЂЃ‰Х™™•Й}Ґ№™ЅНlЕt№‰Х™™•ИЂфЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|м(ЂЂЂЃ‰Х™™•Й}Ґ№™ЅНlЕt№Ѕ™™Н•РЂфЂАм(ЂЂЂЃ‰Х™™•Й}Ґ№™ЅНlЕt№Й…№ќ”ЂфЃЭЙҐСС•№}±•№ќС м((ЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НlЙtЂфЃнфм(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂИмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НmҐt№НQеБ”ЂфЃY-}MQIUQUI}QeA}]I%Q}MI%AQ=I}MPм(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НmҐt№‘НСM•РЂфЃ‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НmҐt№‘НС	Ґ№‘Ґ№њЂфЃ¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НmҐt№‘•НЌЙҐБСЅЙЅХ№РЂфЂДм(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НmҐt№‘•НЌЙҐБСЅЙQеБ”ЂфЃY-}MI%AQ=I}QeA}MQ=I}	UHм(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•НmҐt№Б	Х™™•Й%№™јЂфЂ™‰Х™™•Й}Ґ№™ЅНmҐtм(ЂЂЂЃф(ЂЂЂЃ‘™ё№Щ­UБ‘…С••НЌЙҐБСЅЙM•СМЎ‘•ЩҐЌ”°ЂИ°Ѓ‘•НЌЙҐБСЅЙ}ЭЙҐС•М°ЂА°Ѓ№Х±±БСИ¤м((ЂЂЂЃС•бСХЙ•}Ќ…ЌЎ•|ґщUН•MЌ…±•‘I•НЅ±Щ•	Х™™•ЙЅЙI•…ђ ¤м(ЂЂЂЃMХ‰µҐС	…ЙЙҐ•ЙМЎСЙХ”¤м((ЂЂЂЃY­	Х™™•Й5•µЅЙе	…ЙЙҐ•ИЃБЙ•}‰…ЙЙҐ•ИЂфЃнфм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№НQеБ”ЂфЃY-}MQIUQUI}QeA}	UI}55=Ie}	II%Hм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№НЙЌЌЌ•НН5…Н¬ЂфЃY-}MM}QI9MI}I}	%PЃрЃY-}MM}M!I}]I%Q}	%Pм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№‘НСЌЌ•НН5…Н¬ЂфЃY-}MM}M!I}]I%Q}	%Pм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№НЙЌEХ•Х•…µҐ±е%№‘•аЂфЃY-}EUU}5%1e}%9=Iм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№‘НСEХ•Х•…µҐ±е%№‘•аЂфЃY-}EUU}5%1e}%9=Iм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№‰Х™™•ИЂфЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|м(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№Ѕ™™Н•РЂфЂАм(ЂЂЂЃБЙ•}‰…ЙЙҐ•И№НҐй”ЂфЃЭЙҐСС•№}±•№ќС м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­AҐБ•±Ґ№•	…ЙЙҐ•И (ЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}QI9MI}	%PЃрЃY-}A%A1%9}MQ}=5AUQ}M!I}	%P°(ЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}=5AUQ}M!I}	%P°ЂА°ЂА°Ѓ№Х±±БСИ°ЂД°Ђ™БЙ•}‰…ЙЙҐ•И°ЂА°Ѓ№Х±±БСИ¤м((ЂЂЂЃ	Ґ№‘бС•Й№…±ЅµБХС•AҐБ•±Ґ№”ЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}БҐБ•±Ґ№•|¤м((ЂЂЂЃI•НЅ±Щ•ЅЭ№НЌ…±•Ѕ№НС…№СМЃЌЅ№НС…№СМм(ЂЂЂЃЌЅ№НС…№СМ№НЌ…±•}аЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а ¤м(ЂЂЂЃЌЅ№НС…№СМ№НЌ…±•}дЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д ¤м(ЂЂЂЃЌЅ№НС…№СМ№БҐб•±}НҐй•}±ЅњИЂфЃБҐб•±}НҐй•}±ЅњИм(ЂЂЂЃЌЅ№НС…№СМ№СҐ±•}ЌЅХ№РЂфЃСҐ±•}ЌЅХ№Рм(ЂЂЂЃЌЅ№НС…№СМ№НЅХЙЌ•}Ѕ™™Н•С}‰еС•МЂфЃХҐ№РМЙ}РЎНЌ…±•‘}НС…ЙР¤м(ЂЂЂЃЌЅ№НС…№СМ№Ў…±™}БҐб•±}Ѕ™™Н•РЂфЂЎIaYI}PЎЙ•…‘‰…Ќ­}Й•НЅ±Щ•}Ў…±™}БҐб•±}Ѕ™™Н•Р¤Ђ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЎЌЅ№НС…№СМ№НЌ…±•}аЂшЂДЃсрЃЌЅ№НС…№СМ№НЌ…±•}дЂшЂД¤¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЂЕФ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЂБФм(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­AХНЎЅ№НС…№СМЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}БҐБ•±Ґ№•}±…еЅХС|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}M!I}MQ}=5AUQ}	%P°ЂА°ЃНҐй•ЅЎЌЅ№НС…№СМ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™ЌЅ№НС…№СМ¤м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­	Ґ№‘•НЌЙҐБСЅЙM•СМЎY-}A%A1%9}	%9}A=%9Q}=5AUQ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}БҐБ•±Ґ№•}±…еЅХС|°ЂА°ЂД°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™‘•НЌЙҐБСЅЙ}Н•Р°ЂА°Ѓ№Х±±БСИ¤м(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЃҐЂ …I•бMЭҐСЌЎA•Й™M­ҐА МИ¤¤(Ќ•№‘Ґ(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­ҐНБ…СЌ ЎСҐ±•}ЌЅХ№Р°ЂД°ЂД¤м((ЂЂЂЃY­	Х™™•Й5•µЅЙе	…ЙЙҐ•ИЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•ИЂфЃнфм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№НQеБ”ЂфЃY-}MQIUQUI}QeA}	UI}55=Ie}	II%Hм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№НЙЌЌЌ•НН5…Н¬ЂфЃY-}MM}M!I}]I%Q}	%Pм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№‘НСЌЌ•НН5…Н¬ЂфЃY-}MM}QI9MI}I}	%Pм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№НЙЌEХ•Х•…µҐ±е%№‘•аЂфЃY-}EUU}5%1e}%9=Iм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№‘НСEХ•Х•…µҐ±е%№‘•аЂфЃY-}EUU}5%1e}%9=Iм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№‰Х™™•ИЂфЃЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|м(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№Ѕ™™Н•РЂфЂАм(ЂЂЂЃ‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И№НҐй”ЂфЃЭЙҐСС•№}±•№ќС м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­AҐБ•±Ґ№•	…ЙЙҐ•ИЎY-}A%A1%9}MQ}=5AUQ}M!I}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}QI9MI}	%P°ЂА°ЂА°Ѓ№Х±±БСИ°ЂД°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™‘ЅЭ№НЌ…±•}‰…ЙЙҐ•И°ЂА°Ѓ№Х±±БСИ¤м((ЂЂЂЃY­	Х™™•ЙЅБдЃЙ•…‘‰…Ќ­}Й•ќҐЅёЂфЃнфм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НЙЌ=™™Н•РЂфЂАм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№‘НС=™™Н•РЂфЂАм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НҐй”ЂфЃЭЙҐСС•№}±•№ќС м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­ЅБе	Х™™•ИЎЙ•НЅ±Щ•}‘ЅЭ№НЌ…±•}‰Х™™•Й|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЭЙҐС•}Ґ№‘•бt°ЂД°Ђ™Й•…‘‰…Ќ­}Й•ќҐЅё¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщUН”ЎYХ±­…№MЎ…Й•‘5•µЅЙдийUН…ќ”ий­I•…ђ¤м(ЂЂЂЃMХ‰µҐС	…ЙЙҐ•ЙМЎСЙХ”¤м((ЂЂЂЃY­	Х™™•ЙЅБдЃЙ•…‘‰…Ќ­}Й•ќҐЅёЂфЃнфм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НЙЌ=™™Н•РЂфЃЭЙҐСС•№}…‘‘Й•НМм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№‘НС=™™Н•РЂфЂАм(ЂЂЂЃЙ•…‘‰…Ќ­}Й•ќҐЅё№НҐй”ЂфЃЭЙҐСС•№}±•№ќС м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­ЅБе	Х™™•ИЎНЎ…Й•‘}µ•µЅЙе|ґщ‰Х™™•И ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЭЙҐС•}Ґ№‘•бt°ЂД°Ђ™Й•…‘‰…Ќ­}Й•ќҐЅё¤м(ЂЃф((ЂЃAХНЎ	Х™™•Й5•µЅЙе	…ЙЙҐ•ИЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЭЙҐС•}Ґ№‘•бt°ЂА°ЃЭЙҐСС•№}±•№ќС °(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}QI9MI}	%P°ЃY-}A%A1%9}MQ}!=MQ}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}MM}QI9MI}]I%Q}	%P°ЃY-}MM}!=MQ}I}	%P¤м((ЂЃ‰ЅЅ°ЃХН•}‘•±…е•‘}Не№ЊЂфЂ…ЌЅµБ…Й•}БҐб•±МЂ(ЂЂЂЂЂЂЎЙ•…‘‰…Ќ­}µЅ‘”ЂффЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ий­…НРЃсрЃЙ•…‘‰…Ќ­}µЅ‘”ЂффЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ий­MЅµ”¤м(ЂЃХҐ№РМЙ}РЃЙ•…‘}Ґ№‘•аЂфЃЭЙҐС•}Ґ№‘•ам(ЂЃҐЂЎХН•}‘•±…е•‘}Не№Њ¤Ѓм(ЂЂЂЃЙ•…‘}Ґ№‘•аЂфЂДЂґЃЭЙҐС•}Ґ№‘•ам(ЂЃфЃ•±Н”ЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃ‰ЅЅ°ЃҐН}Ќ…ЌЎ•}µҐНМЂфЃ™…±Н”м(ЂЃҐЂЎХН•}‘•±…е•‘}Не№ЊЂЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЙ•…‘}Ґ№‘•бtЂффЃY-}9U11}!91Ѓср(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЭЙҐСС•№}±•№ќС ЂшЃЙ•…‘‰…Ќ¬№НҐй•НmЙ•…‘}Ґ№‘•бtЃср(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mЙ•…‘}Ґ№‘•бtЂффЃ№Х±±БСИ¤¤Ѓм(ЂЂЂЃҐН}Ќ…ЌЎ•}µҐНМЂфЃСЙХ”м(ЂЂЂЃЙ•…‘}Ґ№‘•аЂфЃЭЙҐС•}Ґ№‘•ам(ЂЂЂЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф(ЂЃф((ЂЃ‰ЅЅ°ЃНЎЅХ±‘}ЌЅБдЂфЃЌЅµБ…Й•}БҐб•±МЃсрЂЎЙ•…‘‰…Ќ­}µЅ‘”Ђ„фЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ий­MЅµ”¤ЃсрЃҐН}Ќ…ЌЎ•}µҐНМм(ЂЃҐЂЎНЎЅХ±‘}ЌЅБдЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmЙ•…‘}Ґ№‘•бtЂ„фЃY-}9U11}!91Ђ(ЂЂЂЂЂЃЭЙҐСС•№}±•№ќС ЂрфЃЙ•…‘‰…Ќ¬№НҐй•НmЙ•…‘}Ґ№‘•бtЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mЙ•…‘}Ґ№‘•бtЂ„фЃ№Х±±БСИ¤Ѓм(ЂЂЂЃY­5…ББ•‘5•µЅЙеI…№ќ”ЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”ЂфЃнфм(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№НQеБ”ЂфЃY-}MQIUQUI}QeA}5AA}55=Ie}I9м(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№µ•µЅЙдЂфЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmЙ•…‘}Ґ№‘•бtм(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№Ѕ™™Н•РЂфЂАм(ЂЂЂЃЙ•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”№НҐй”ЂфЃY-}]!=1}M%iм(ЂЂЂЃЌЅ№НРЃY­I•НХ±РЃҐ№Щ…±Ґ‘…С•}НС…СХМЂф(ЂЂЂЂЂЂЂЃ‘™ё№Щ­%№Щ…±Ґ‘…С•5…ББ•‘5•µЅЙеI…№ќ•МЎ‘•ЩҐЌ”°ЂД°Ђ™Й•…‘‰…Ќ­}µ•µЅЙе}Й…№ќ”¤м(ЂЂЂЃҐЂЎЌЅµБ…Й•}БҐб•±МЂЃҐ№Щ…±Ґ‘…С•}НС…СХМЂ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}]I8 ‰mќ°µБҐб•±НtЃЙ•…‘‰…Ќ¬ЃҐ№Щ…±Ґ‘…СҐЅёЃ™…Ґ±•ђиЃнф€°ЃҐ№РМЙ}РЎҐ№Щ…±Ґ‘…С•}НС…СХМ¤¤м(ЂЂЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЂЂЃф((ЂЂЂЃҐЂЎЌЅµБ…Й•}БҐб•±М¤Ѓм(ЂЂЂЂЂЃ…БСХЙ•I•НЅ±Щ•ЅµБ…ЙҐНЅё ©Й•ќҐНС•Й}™Ґ±•|°Ђ‰ЩХ±­…ё€°ЃЭЙҐСС•№}…‘‘Й•НМ°ЃЭЙҐСС•№}±•№ќС °(ЂЂЂЂЂЂЂЂЂЃ™Й…µ•}ЌХЙЙ•№С|°Ѓ…ЌСҐЩ•}Щ•ЙС•б}НЎ…‘•И ¤ЂьЃ…ЌСҐЩ•}Щ•ЙС•б}НЎ…‘•И ¤ґщХЌЅ‘•}‘…С…}Ў…Н  ¤ЂиЂА°(ЂЂЂЂЂЂЂЂЂЃ…ЌСҐЩ•}БҐб•±}НЎ…‘•И ¤ЂьЃ…ЌСҐЩ•}БҐб•±}НЎ…‘•И ¤ґщХЌЅ‘•}‘…С…}Ў…Н  ¤ЂиЂА°(ЂЂЂЂЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mЙ•…‘}Ґ№‘•бt¤м(ЂЂЂЃф((ЂЂЂЃХҐ№Рб}РЁЃ‘•НСҐ№…СҐЅёЂфЃµ•µЅЙе|ґщQЙ…№Н±…С•AЎеНҐЌ…°ЎЭЙҐСС•№}…‘‘Й•НМ¤м(ЂЂЂЃҐЂЎ‘•НСҐ№…СҐЅёЂЃЙ•…‘‰…Ќ­}µЅ‘”Ђ„фЃI•…‘‰…Ќ­I•НЅ±Щ•5Ѕ‘”ий­ҐН…‰±•ђ¤Ѓм(ЂЂЂЂЂЃНСђийµ•µЌБдЎ‘•НСҐ№…СҐЅё°ЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mЙ•…‘}Ґ№‘•бt°ЃЭЙҐСС•№}±•№ќС ¤м(ЂЂЂЃф(ЂЃф((ЂЃЙ•…‘‰…Ќ¬№ЌХЙЙ•№С}Ґ№‘•аЂфЂДЂґЃЙ•…‘‰…Ќ¬№ЌХЙЙ•№С}Ґ№‘•ам(ЂЃЙ•СХЙёЃСЙХ”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийЩҐЌС=±‘I•…‘‰…Ќ­	Х™™•ЙМ (ЂЂЂЃНСђийХ№ЅЙ‘•Й•‘}µ…АсХҐ№РШС}Р°ЃI•…‘‰…Ќ­	Х™™•ИшЃ‰Х™™•Й}µ…А¤Ѓм(ЂЃҐЂЎ‰Х™™•Й}µ…А№•µБСд ¤¤Ѓм(ЂЂЂЃЙ•СХЙём(ЂЃф((ЂЃЌЅ№НРЃХҐ№РШС}РЃ•ЩҐЌСҐЅ№}™Й…µ•}™±ЅЅИЂфЂЎ™Й…µ•}ЌХЙЙ•№С|ЂшЃ­I•…‘‰…Ќ­	Х™™•ЙЩҐЌСҐЅ№ќ•Й…µ•М¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЂЎ™Й…µ•}ЌХЙЙ•№С|ЂґЃ­I•…‘‰…Ќ­	Х™™•ЙЩҐЌСҐЅ№ќ•Й…µ•М¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЂАм(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м(ЂЃ™ЅИЂЎ…ХСјЃҐРЂфЃ‰Х™™•Й}µ…А№‰•ќҐё ¤мЃҐРЂ„фЃ‰Х™™•Й}µ…А№•№ђ ¤м¤Ѓм(ЂЂЂЃI•…‘‰…Ќ­	Х™™•ИЃЙ•…‘‰…Ќ¬ЂфЃҐРґщН•ЌЅ№ђм(ЂЂЂЃ‰ЅЅ°Ѓ•ЩҐЌРЂф(ЂЂЂЂЂЂЂЃ‰Х™™•Й}µ…А№НҐй” ¤ЂшЃ­5…бI•…‘‰…Ќ­	Х™™•ЙМЃсрЃЙ•…‘‰…Ќ¬№±…НС}ХН•‘}™Й…µ”ЂрЃ•ЩҐЌСҐЅ№}™Й…µ•}™±ЅЅИм(ЂЂЂЃҐЂ …•ЩҐЌР¤Ѓм(ЂЂЂЂЂЂ¬­ҐРм(ЂЂЂЂЂЃЌЅ№СҐ№Х”м(ЂЂЂЃф(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂИмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐtЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐt¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐt°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐtЂ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐt°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№‰Х™™•ЙНmҐtЂфЃY-}9U11}!91м(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ•µЅЙҐ•НmҐtЂфЃY-}9U11}!91м(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№µ…ББ•‘}‘…С…mҐtЂфЃ№Х±±БСИм(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№НҐй•НmҐtЂфЂАм(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№НХ‰µҐННҐЅ№}ЭЙҐСС•№mҐtЂфЂАм(ЂЂЂЂЂЃЙ•…‘‰…Ќ¬№ЭЙҐСС•№}НҐй•mҐtЂфЂАм(ЂЂЂЃф(ЂЂЂЃҐРЂфЃ‰Х™™•Й}µ…А№•Й…Н”ЎҐР¤м(ЂЃф)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий%№ҐСҐ…±Ґй•=ЌЌ±ХНҐЅ№EХ•ЙеI•НЅХЙЌ•М ¤Ѓм(ЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|ЂфЃнфм(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}ЌХЙНЅЙ|ЂфЂАм(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•НЅХЙЌ•Н}…Щ…Ґ±…‰±•|ЂфЃ™…±Н”м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|ЂфЃY-}9U11}!91м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}‰Х™™•Й|ЂфЃY-}9U11}!91м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|ЂфЃY-}9U11}!91м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}СеБ•|ЂфЃU%9PМЙ}5`м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}НҐй•|ЂфЂАм(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|ЂфЃ№Х±±БСИм((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЂјјЃATЃ™Й…µ”ЃСҐµҐ№њ°ЃҐЃ…Н­•ђЃ™ЅИёЃ%№‘•Б•№‘•№РЃЅЃСЎ”ЃЅЌЌ±ХНҐЅёЃБЅЅ°Ѓ‰•±ЅЬи(ЂЂјјЃҐСМЃ™…Ґ±ХЙ”ЃµХНРЃ№ЅРЃС…­”ЃЅЌЌ±ХНҐЅёЃЕХ•ЙҐ•МЃ‘ЅЭёЃЭҐС ЃҐР°Ѓ…№ђЃЩҐЌ”ЃЩ•ЙН„ё(ЂЃҐЂЎIaYI}PЎќБХ}СҐµ•НС…µБ}ЕХ•ЙҐ•М¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ™±Ѕ…РЃСҐµ•НС…µБ}Б•ЙҐЅђЂфЃЩХ±­…№}‘•ЩҐЌ”ґщБЙЅБ•ЙСҐ•М ¤№СҐµ•НС…µБA•ЙҐЅђм(ЂЂЂЃҐЂЎСҐµ•НС…µБ}Б•ЙҐЅђЂрфЂАёБ¤Ѓм(ЂЂЂЂЂЃIaAU}]I8 ‰ќБХ}СҐµ•НС…µБ}ЕХ•ЙҐ•МиЃ‘•ЩҐЌ”ЃЙ•БЅЙСМЃСҐµ•НС…µБA•ЙҐЅђЂАмЃ‘ҐН…‰±•ђ€¤м(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЃY­EХ•ЙеAЅЅ±Й•…С•%№™јЃСН}Ґ№™јЂфЃнфм(ЂЂЂЂЂЃСН}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}EUIe}A==1}IQ}%9<м(ЂЂЂЂЂЃСН}Ґ№™ј№ЕХ•ЙеQеБ”ЂфЃY-}EUIe}QeA}Q%5MQ5@м(ЂЂЂЂЂЃСН}Ґ№™ј№ЕХ•ЙеЅХ№РЂфЃ­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ”ЂЁЃ­5…бЙ…µ•Н%№±ҐќЎРм(ЂЂЂЂЂЃҐЂЎ‘™ё№Щ­Й•…С•EХ•ЙеAЅЅ°Ў‘•ЩҐЌ”°Ђ™СН}Ґ№™ј°Ѓ№Х±±БСИ°Ђ™СҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}]I8 ‰ќБХ}СҐµ•НС…µБ}ЕХ•ЙҐ•МиЃ™…Ґ±•ђЃСјЃЌЙ•…С”ЃСЎ”ЃЕХ•ЙдЃБЅЅ°мЃ‘ҐН…‰±•ђ€¤м(ЂЂЂЂЂЂЂЃСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|ЂфЃY-}9U11}!91м(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃСҐµ•НС…µБ}Б•ЙҐЅ‘}№Н|ЂфЃ‘ЅХ‰±”ЎСҐµ•НС…µБ}Б•ЙҐЅђ¤м(ЂЂЂЂЂЂЂЃСҐµ•НС…µБ}ЕХ•ЙҐ•Н}…Щ…Ґ±…‰±•|ЂфЃСЙХ”м(ЂЂЂЂЂЂЂЃIaAU}%9< ‰ќБХ}СҐµ•НС…µБ}ЕХ•ЙҐ•МиЃ•№…‰±•ђ°ЃСҐµ•НС…µБA•ЙҐЅђЃнфЃ№М€°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃСҐµ•НС…µБ}Б•ЙҐЅ‘}№Н|¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф((ЂЃY­EХ•ЙеAЅЅ±Й•…С•%№™јЃБЅЅ±}Ґ№™јЂфЃнфм(ЂЃБЅЅ±}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}EUIe}A==1}IQ}%9<м(ЂЃБЅЅ±}Ґ№™ј№ЕХ•ЙеQеБ”ЂфЃY-}EUIe}QeA}=1UM%=8м(ЂЃБЅЅ±}Ґ№™ј№ЕХ•ЙеЅХ№РЂфЃ­5…б=ЌЌ±ХНҐЅ№EХ•ЙҐ•Мм(ЂЃҐЂЎ‘™ё№Щ­Й•…С•EХ•ЙеAЅЅ°Ў‘•ЩҐЌ”°Ђ™БЅЅ±}Ґ№™ј°Ѓ№Х±±БСИ°Ђ™ЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЃIaAU}]I8 (ЂЂЂЂЂЂЂЂ‰YХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИиЃ…Ґ±•ђЃСјЃЌЙ•…С”ЃЅЌЌ±ХНҐЅёЃЕХ•ЙдЃБЅЅ°°ЃХНҐ№њЃ™…­”ЃН…µБ±”ЃЌЅХ№СМ€¤м(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃҐЂ …Х¤ийЩХ±­…ёийХСҐ°ийЙ•…С••‘ҐЌ…С•‘±±ЅЌ…СҐЅ№	Х™™•И (ЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”°ЃНҐй•ЅЎХҐ№РШС}Р¤ЂЁЃ­5…б=ЌЌ±ХНҐЅ№EХ•ЙҐ•М°ЃY-}	UI}UM}QI9MI}MQ}	%P°(ЂЂЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий5•µЅЙеAХЙБЅН”ий­I•…‘‰…Ќ¬°ЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}‰Х™™•Й|°(ЂЂЂЂЂЂЂЂЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|°Ђ™ЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}СеБ•|°(ЂЂЂЂЂЂЂЂЂЂ™ЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}НҐй•|¤¤Ѓм(ЂЂЂЃIaAU}]I8 (ЂЂЂЂЂЂЂЂ‰YХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИиЃ…Ґ±•ђЃСјЃЌЙ•…С”ЃЅЌЌ±ХНҐЅёЃЕХ•ЙдЃЙ•…‘‰…Ќ¬Ѓ‰Х™™•И°ЃХНҐ№њЃ™…­”Ђ€(ЂЂЂЂЂЂЂЂ‰Н…µБ±”ЃЌЅХ№СМ€¤м(ЂЂЂЃMЎХС‘ЅЭ№=ЌЌ±ХНҐЅ№EХ•ЙеI•НЅХЙЌ•М ¤м(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃҐЂЎ‘™ё№Щ­5…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|°ЂА°ЃY-}]!=1}M%i°ЂА°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•Ґ№С•ЙБЙ•С}Ќ…НРсЩЅҐђЁЁш ™ЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|¤¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЃIaAU}]I8 (ЂЂЂЂЂЂЂЂ‰YХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИиЃ…Ґ±•ђЃСјЃµ…АЃЅЌЌ±ХНҐЅёЃЕХ•ЙдЃЙ•…‘‰…Ќ¬Ѓ‰Х™™•И°ЃХНҐ№њЃ™…­”ЃН…µБ±”Ђ€(ЂЂЂЂЂЂЂЂ‰ЌЅХ№СМ€¤м(ЂЂЂЃMЎХС‘ЅЭ№=ЌЌ±ХНҐЅ№EХ•ЙеI•НЅХЙЌ•М ¤м(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•НЅХЙЌ•Н}…Щ…Ґ±…‰±•|ЂфЃСЙХ”м(ЂЃЙ•СХЙёЃСЙХ”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийMЎХС‘ЅЭ№=ЌЌ±ХНҐЅ№EХ•ЙеI•НЅХЙЌ•М ¤Ѓм(ЂЃҐН…‰±•!ЅНС=ЌЌ±ХНҐЅ№EХ•ЙҐ•М ¤м((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃҐЂЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃ‘™ё№Щ­U№µ…Б5•µЅЙдЎ‘•ЩҐЌ”°ЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|¤м(ЂЃф(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|ЂфЃ№Х±±БСИм(ЂЃҐЂЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}‰Х™™•Й|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°ЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}‰Х™™•Й|°Ѓ№Х±±БСИ¤м(ЂЃф(ЂЃҐЂЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°ЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|°Ѓ№Х±±БСИ¤м(ЂЃф(ЂЃҐЂЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃ‘™ё№Щ­•НСЙЅеEХ•ЙеAЅЅ°Ў‘•ЩҐЌ”°ЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°Ѓ№Х±±БСИ¤м(ЂЃф(ЂЃҐЂЎСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃ‘™ё№Щ­•НСЙЅеEХ•ЙеAЅЅ°Ў‘•ЩҐЌ”°ЃСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|°Ѓ№Х±±БСИ¤м(ЂЂЂЃСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|ЂфЃY-}9U11}!91м(ЂЃф(ЂЃСҐµ•НС…µБ}ЕХ•ЙҐ•Н}…Щ…Ґ±…‰±•|ЂфЃ™…±Н”м(ЂЃНСђийµ•µН•РЎСҐµ•НС…µБ}Н±ЅС}™Й…µ•|°ЂА°ЃНҐй•ЅЎСҐµ•НС…µБ}Н±ЅС}™Й…µ•|¤¤м((ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|ЂфЃY-}9U11}!91м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}‰Х™™•Й|ЂфЃY-}9U11}!91м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|ЂфЃY-}9U11}!91м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}СеБ•|ЂфЃU%9PМЙ}5`м(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}НҐй•|ЂфЂАм)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийЌЕХҐЙ•=ЌЌ±ХНҐЅ№EХ•Йе%№‘•аЎХҐ№РМЙ}РЃЎЅНС}Ґ№‘•б}ЅХР¤Ѓм(ЂЃҐЂЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}ЌХЙНЅЙ|ЂшфЃ­5…б=ЌЌ±ХНҐЅ№EХ•ЙҐ•М¤Ѓм(ЂЂЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}ЌХЙНЅЙ|ЂфЂАм(ЂЃф(ЂЃЎЅНС}Ґ№‘•б}ЅХРЂфЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}ЌХЙНЅЙ|¬¬м(ЂЃЙ•СХЙёЃСЙХ”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийҐН…‰±•!ЅНС=ЌЌ±ХНҐЅ№EХ•ЙҐ•М ¤Ѓм(ЂЃҐЂЎ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№Щ…±ҐђЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃҐЂЎ	•ќҐ№MХ‰µҐННҐЅёЎСЙХ”¤¤Ѓм(ЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­№‘EХ•ЙдЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№ЎЅНС}Ґ№‘•а¤м(ЂЂЂЂЂЃ№‘MХ‰µҐННҐЅёЎ™…±Н”¤м(ЂЂЂЃф(ЂЃф(ЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|ЂфЃнфм(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}ЌХЙНЅЙ|ЂфЂАм(ЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•НЅХЙЌ•Н}…Щ…Ґ±…‰±•|ЂфЃ™…±Н”м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий	•ќҐ№Х•НС=ЌЌ±ХНҐЅ№EХ•ЙдЎХҐ№РМЙ}РЃН…µБ±•}ЌЅХ№С}…‘‘Й•НМ¤Ѓм(ЂЃҐЂ …IaYI}PЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}•№…‰±”¤ЃсрЂ…ЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•НЅХЙЌ•Н}…Щ…Ґ±…‰±•|Ѓср(ЂЂЂЂЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|ЂффЃY-}9U11}!91ЃсрЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|ЂффЃ№Х±±БСИ¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф(ЂЃҐЂЎ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№Щ…±Ґђ¤Ѓм(ЂЂЂЃIaAU}]I8 (ЂЂЂЂЂЂЂЂ‰YХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИиЃ=ЌЌ±ХНҐЅёЃЕХ•ЙдЃ‰•ќҐёЃҐННХ•ђЃЭЎҐ±”Ѓ…№ЅСЎ•ИЃЕХ•ЙдЃҐМЃ…ЌСҐЩ”€¤м(ЂЂЂЃҐН…‰±•!ЅНС=ЌЌ±ХНҐЅ№EХ•ЙҐ•М ¤м(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃХҐ№РМЙ}РЃЎЅНС}Ґ№‘•аЂфЂАм(ЂЃҐЂ …ЌЕХҐЙ•=ЌЌ±ХНҐЅ№EХ•Йе%№‘•аЎЎЅНС}Ґ№‘•а¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф(ЂЃҐЂ …	•ќҐ№MХ‰µҐННҐЅёЎСЙХ”¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃ№‘I•№‘•ЙA…НМ ¤м((ЂЃ•™•ЙЙ•‘Ѕµµ…№‘	Х™™•ИЃЌЅµµ…№‘}‰Х™™•ИЂфЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•И ¤м(ЂЃЌЅµµ…№‘}‰Х™™•И№µ‘Y­I•Н•СEХ•ЙеAЅЅ°ЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°ЃЎЅНС}Ґ№‘•а°ЂД¤м(ЂЃЌЅµµ…№‘}‰Х™™•И№µ‘Y­	•ќҐ№EХ•ЙдЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°ЃЎЅНС}Ґ№‘•а°ЂА¤м(ЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№Н…µБ±•}ЌЅХ№С}…‘‘Й•НМЂфЃН…µБ±•}ЌЅХ№С}…‘‘Й•НМм(ЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№ЎЅНС}Ґ№‘•аЂфЃЎЅНС}Ґ№‘•ам(ЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№Щ…±ҐђЂфЃСЙХ”м(ЂЃЙ•СХЙёЃСЙХ”м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий№‘Х•НС=ЌЌ±ХНҐЅ№EХ•ЙдЎХҐ№РМЙ}РЃН…µБ±•}ЌЅХ№С}…‘‘Й•НМ¤Ѓм(ЂЃҐЂ …IaYI}PЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}•№…‰±”¤ЃсрЂ…ЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•НЅХЙЌ•Н}…Щ…Ґ±…‰±•|Ѓср(ЂЂЂЂЂЂ……ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№Щ…±ҐђЃсрЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|ЂффЃY-}9U11}!91Ѓср(ЂЂЂЂЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|ЂффЃ№Х±±БСИ¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃХҐ№РМЙ}РЃЎЅНС}Ґ№‘•аЂфЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№ЎЅНС}Ґ№‘•ам(ЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|ЂфЃнфм((ЂЃҐЂ …	•ќҐ№MХ‰µҐННҐЅёЎСЙХ”¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃ№‘I•№‘•ЙA…НМ ¤м((ЂЃ•™•ЙЙ•‘Ѕµµ…№‘	Х™™•ИЃЌЅµµ…№‘}‰Х™™•ИЂфЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•И ¤м(ЂЃЌЅµµ…№‘}‰Х™™•И№µ‘Y­№‘EХ•ЙдЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°ЃЎЅНС}Ґ№‘•а¤м(ЂЃЌЅµµ…№‘}‰Х™™•И№µ‘Y­ЅБеEХ•ЙеAЅЅ±I•НХ±СМЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°ЃЎЅНС}Ґ№‘•а°ЂД°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}‰Х™™•Й|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎХҐ№РШС}Р¤ЂЁЃЎЅНС}Ґ№‘•а°ЃНҐй•ЅЎХҐ№РШС}Р¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃY-}EUIe}IMU1Q|ШС}	%PЃрЃY-}EUIe}IMU1Q}]%Q}	%P¤м((ЂЃҐЂ …№‘MХ‰µҐННҐЅёЎ™…±Н”¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф(ЂЃҐЂ …Э…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м(ЂЃҐЂ „ЎЩХ±­…№}‘•ЩҐЌ”ґщµ•µЅЙе}СеБ•М ¤№ЎЅНС}ЌЅЎ•Й•№РЂ(ЂЂЂЂЂЂЂЂЎХҐ№РМЙ}Р Д¤ЂррЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}СеБ•|¤¤¤Ѓм(ЂЂЂЃY­5…ББ•‘5•µЅЙеI…№ќ”Ѓµ•µЅЙе}Й…№ќ”ЂфЃнфм(ЂЂЂЃµ•µЅЙе}Й…№ќ”№НQеБ”ЂфЃY-}MQIUQUI}QeA}5AA}55=Ie}I9м(ЂЂЂЃµ•µЅЙе}Й…№ќ”№µ•µЅЙдЂфЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе|м(ЂЂЂЃµ•µЅЙе}Й…№ќ”№Ѕ™™Н•РЂфЂАм(ЂЂЂЃµ•µЅЙе}Й…№ќ”№НҐй”Ђф(ЂЂЂЂЂЂЂЃНСђийµҐёЎЙ•аийЙЅХ№‘}ХАЎY­•ЩҐЌ•MҐй”ЎНҐй•ЅЎХҐ№РШС}Р¤ЂЁЃ­5…б=ЌЌ±ХНҐЅ№EХ•ЙҐ•М¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”ґщБЙЅБ•ЙСҐ•М ¤№№Ѕ№ЅЎ•Й•№ССЅµMҐй”¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ•µЅЙе}НҐй•|¤м(ЂЂЂЃ‘™ё№Щ­%№Щ…±Ґ‘…С•5…ББ•‘5•µЅЙеI…№ќ•МЎ‘•ЩҐЌ”°ЂД°Ђ™µ•µЅЙе}Й…№ќ”¤м(ЂЃф((ЂЃЌЅ№НРЃХҐ№РШС}РЁЃЙ•НХ±СМЂфЃЙ•Ґ№С•ЙБЙ•С}Ќ…НРсЌЅ№НРЃХҐ№РШС}РЁшЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}Й•…‘‰…Ќ­}µ…ББҐ№ќ|¤м(ЂЃХҐ№РШС}РЃН…µБ±•МЂфЃ9ЅЙµ…±Ґй•=ЌЌ±ХНҐЅ№M…µБ±•МЎЙ•НХ±СНmЎЅНС}Ґ№‘•бt¤м(ЂЃ]ЙҐС•Х•НС=ЌЌ±ХНҐЅ№I•НХ±РЎН…µБ±•}ЌЅХ№С}…‘‘Й•НМ°ЃН…µБ±•М¤м(ЂЃЙ•СХЙёЃСЙХ”м)ф()ХҐ№РШС}РЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий9ЅЙµ…±Ґй•=ЌЌ±ХНҐЅ№M…µБ±•МЎХҐ№РШС}РЃН…µБ±•М¤ЃЌЅ№НРЃм(ЂЃҐЂЎН…µБ±•МЂффЂАЃсрЂ…С•бСХЙ•}Ќ…ЌЎ•|¤Ѓм(ЂЂЂЃЙ•СХЙёЃН…µБ±•Мм(ЂЃф(ЂЃХҐ№РШС}РЃНЌ…±•}аЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а ¤м(ЂЃХҐ№РШС}РЃНЌ…±•}дЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д ¤м(ЂЃХҐ№РШС}РЃНЌ…±”ЂфЃНЌ…±•}аЂЁЃНЌ…±•}дм(ЂЃҐЂЎНЌ…±”ЂрфЂД¤Ѓм(ЂЂЂЃЙ•СХЙёЃН…µБ±•Мм(ЂЃф(ЂЃЙ•СХЙёЂЎН…µБ±•МЂ¬ЂЎНЌ…±”ЂшшЂД¤¤ЂјЃНЌ…±”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий]ЙҐС•Х•НС=ЌЌ±ХНҐЅ№I•НХ±РЎХҐ№РМЙ}РЃН…µБ±•}ЌЅХ№С}…‘‘Й•НМ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃХҐ№РШС}РЃН…µБ±•М¤Ѓм(ЂЃ…ХСјЁЃН…µБ±•}ЌЅХ№СМЂф(ЂЂЂЂЂЃµ•µЅЙе|ґщQЙ…№Н±…С•AЎеНҐЌ…°сб•№ЅМийб•}ќБХ}‘•БСЎ}Н…µБ±•}ЌЅХ№СМЁшЎН…µБ±•}ЌЅХ№С}…‘‘Й•НМ¤м(ЂЃҐЂ …Н…µБ±•}ЌЅХ№СМ¤Ѓм(ЂЂЂЃЙ•СХЙём(ЂЃф(ЂЃХҐ№РМЙ}РЃЌ±…µБ•ђЂфЃН…µБ±•МЂшЃХҐ№РШС}РЎU%9PМЙ}5`¤ЂьЃU%9PМЙ}5`ЂиЃХҐ№РМЙ}РЎН…µБ±•М¤м(ЂЃН…µБ±•}ЌЅХ№СМґщQЅС…±}ЂфЃЌ±…µБ•ђм(ЂЃН…µБ±•}ЌЅХ№СМґщQЅС…±}ЂфЂАм(ЂЃН…µБ±•}ЌЅХ№СМґщiA…НН}ЂфЃЌ±…µБ•ђм(ЂЃН…µБ±•}ЌЅХ№СМґщiA…НН}ЂфЂАм(ЂЃН…µБ±•}ЌЅХ№СМґщi…Ґ±}ЂфЂАм(ЂЃН…µБ±•}ЌЅХ№СМґщi…Ґ±}ЂфЂАм(ЂЃН…µБ±•}ЌЅХ№СМґщMС•№ЌҐ±…Ґ±}ЂфЂАм(ЂЃН…µБ±•}ЌЅХ№СМґщMС•№ЌҐ±…Ґ±}ЂфЂАм)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийЎ•Ќ­MХ‰µҐННҐЅ№•№Ќ•№‘•ЩҐЌ•1ЅНМЎХҐ№РШС}РЃ…Э…ҐС}НХ‰µҐННҐЅё¤Ѓм(ЂЂјјЃ=№±дЃЙ•БЅЙРЃЅ№Ќ”°Ѓ№јЃ№••ђЃСјЃЙ•СЙдЃ„ЃЭ…ҐРЃСЎ…РЃЭЅёќРЃНХЌЌ••ђЃ…№еЭ…дё(ЂЃҐЂЎ‘•ЩҐЌ•}±ЅНС|¤Ѓм(ЂЂЂЃЙ•СХЙём(ЂЃф((ЂЃҐЂЎ…Э…ҐС}НХ‰µҐННҐЅёЂшфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤¤Ѓм(ЂЂЂЃҐЂЎНХ‰µҐННҐЅ№}ЅБ•№|¤Ѓм(ЂЂЂЂЂЃ№‘MХ‰µҐННҐЅёЎ™…±Н”¤м(ЂЂЂЃф(ЂЂЂЂјјЃЃНХ‰µҐННҐЅёЃЭЅёќРЃ‰”Ѓ•№‘•ђЃҐЃҐРЃЎ…НёќРЃ‰••ёЃНС…ЙС•ђ°ЃЅИЃҐЃ•№‘Ґ№њ(ЂЂЂЂјјЃЎ…МЃ™…Ґ±•ђЂґЃЌ±…µАЃСЎ”ЃҐ№‘•аё(ЂЂЂЃ…Э…ҐС}НХ‰µҐННҐЅёЂфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤ЂґЂДм(ЂЃф((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃНҐй•}РЃ™•№Ќ•Н}СЅС…°ЂфЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№НҐй” ¤м(ЂЃНҐй•}РЃ™•№Ќ•Н}…Э…ҐС•ђЂфЂАм(ЂЃҐЂЎ…Э…ҐС}НХ‰µҐННҐЅёЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЃI•бMЭҐСЌЎA•Й™ЅХ№РЎНЭҐСЌЎ}СҐµҐ№њий­•№Ќ•]…ҐСЅХ№Р¤м(ЂЂЂЃНЭҐСЌЎ}СҐµҐ№њийMЌЅБ”ЃЭ…ҐС}СҐµҐ№њЎНЭҐСЌЎ}СҐµҐ№њий­•№Ќ•]…ҐСUМ¤м(Ќ•№‘Ґ(ЂЂЂЂјјЃЭ…ҐРЃҐёЃ„Ѓ‰±ЅЌ­Ґ№њЃЭ…дЃҐЃЙ•ЕХ•НС•ђё(ЂЂЂЂјјЃQ=<ЎQЙҐ…№њН°¤иЃЭ…ҐРЃЅ№±дЃЅ№”Ѓ™•№Ќ”ёЂ‰•№Ќ”ЃНҐќ№…°ЃЅБ•Й…СҐЅ№МЃСЎ…РЃ…Й”(ЂЂЂЂјјЃ‘•™Ґ№•ђЃ‰дЃЩ­EХ•Х•MХ‰µҐРЃ…‘‘ҐСҐЅ№…±±дЃҐ№Ќ±Х‘”ЃҐёЃСЎ”Ѓ™ҐЙНР(ЂЂЂЂјјЃНе№ЌЎЙЅ№Ґй…СҐЅёЃНЌЅБ”Ѓ…±°ЃЌЅµµ…№‘МЃСЎ…РЃЅЌЌХИЃ•…Й±Ґ•ИЃҐёЃНХ‰µҐННҐЅё(ЂЂЂЂјјЃЅЙ‘•Иё€(ЂЂЂЂјјЃЃќ•№ХҐ№”ЃНС…±°иЃСЎҐМЃ‰±ЅЌ­МЃЭҐС Ѓ№јЃСҐµ•ЅХРЃХ№СҐ°ЃСЎ”ЃATЃЌ…СЌЎ•МЃХАё(ЂЂЂЂјјЂЎQЎ”Ѓ±ЅЅАЃ‰•±ЅЬЃЭ…ҐСМЃЭҐС Ѓ„ЃСҐµ•ЅХРЃЅЂА°ЃЭЎҐЌ ЃҐМЃ„ЃБЅ±°°Ѓ№ЅРЃ„ЃНС…±°°(ЂЂЂЂјјЃ…№ђЃҐМЃ‘•±Ґ‰•Й…С•±дЃ№ЅРЃЌЅХ№С•ђё¤ЃAI=%1}5}	UI}MQ10ЃЎ…ђЃ№јЃЌ…±°(ЂЂЂЂјјЃНҐС”Ѓ…№еЭЎ•Й”ЃҐёЃСЎ”ЃСЙ•”ЃХ№СҐ°Ѓ№ЅЬё(ЂЂЂЃAI=%1}5}	UI}MQ10 ¤м(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЂјјЃЃATЃСЎ…РЃ№•Щ•ИЃНҐќ№…±МЃ±•…Щ•МЃСЎҐМЃСЎЙ•…ђЃ‰±ЅЌ­•ђЃЭҐС Ѓ№ЅСЎҐ№њЃҐёЃСЎ”(ЂЂЂЂјјЃ±Ѕњ°Ѓ…№ђЃ•Щ•ЙдЃќХ•НРЃСЎЙ•…ђЃЭ…ҐСҐ№њЃЅёЃСЎ”ЃATЃ‰•ЎҐ№ђЃҐРёЃ=ёЃMЭҐСЌ ЃСЎ…Р(ЂЂЂЂјјЃ±ЅЅ­МЃ•б…ЌС±дЃ±Ґ­”Ѓ„ЃќХ•НРЃ‘•…‘±ЅЌ¬°ЃНјЃ„Ѓ™•№Ќ”ЃСЎ…РЃЅХС±…НСМЃ…№д(ЂЂЂЂјјЃБ±…ХНҐ‰±”Ѓ™Й…µ”ЃҐМЃ№…µ•ђЃ‰•™ЅЙ”ЃСЎ”ЃЭ…ҐРЃЌЅ№СҐ№Х•МЃХ№ЌЎ…№ќ•ђё(ЂЂЂЃY­I•НХ±РЃЭ…ҐС}Й•НХ±РЂф(ЂЂЂЂЂЂЂЃ‘™ё№Щ­]…ҐСЅЙ•№Ќ•МЎ‘•ЩҐЌ”°ЃХҐ№РМЙ}РЎ…Э…ҐС}НХ‰µҐННҐЅёЂґЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№‘…С„ ¤°ЃY-}QIU°ЂМњАААњАААњААБХ±°¤м(ЂЂЂЃҐЂЎЭ…ҐС}Й•НХ±РЂффЃY-}Q%5=UP¤Ѓм(ЂЂЂЂЂЃIaAU}]I8 ‰MЭҐСЌ ЃНС…±°иЃATЃ™•№Ќ”ЃЭ…ҐРЂНМЃ™ЅИЃНХ‰µҐННҐЅёЃнфЂЎЌЅµБ±•С•ђЃнф¤€°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ…Э…ҐС}НХ‰µҐННҐЅё°ЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤м(ЂЂЂЂЂЃЭ…ҐС}Й•НХ±РЂф(ЂЂЂЂЂЂЂЂЂЃ‘™ё№Щ­]…ҐСЅЙ•№Ќ•МЎ‘•ЩҐЌ”°ЃХҐ№РМЙ}РЎ…Э…ҐС}НХ‰µҐННҐЅёЂґЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№‘…С„ ¤°ЃY-}QIU°ЃU%9PШС}5`¤м(ЂЂЂЂЂЃIaAU}]I8 ‰MЭҐСЌ ЃНС…±°иЃATЃ™•№Ќ”ЃЭ…ҐРЃ™ЅИЃНХ‰µҐННҐЅёЃнфЃ•№‘•ђЃЭҐС Ѓнф€°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ…Э…ҐС}НХ‰µҐННҐЅё°ЃНС…СҐЌ}Ќ…НРсҐ№РшЎЭ…ҐС}Й•НХ±Р¤¤м(ЂЂЂЃф(Ќ•±Н”(ЂЂЂЃY­I•НХ±РЃЭ…ҐС}Й•НХ±РЂф(ЂЂЂЂЂЂЂЃ‘™ё№Щ­]…ҐСЅЙ•№Ќ•МЎ‘•ЩҐЌ”°ЃХҐ№РМЙ}РЎ…Э…ҐС}НХ‰µҐННҐЅёЂґЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№‘…С„ ¤°ЃY-}QIU°ЃU%9PШС}5`¤м(Ќ•№‘Ґ(ЂЂЂЃҐЂЎЭ…ҐС}Й•НХ±РЂффЃY-}MUML¤Ѓм(ЂЂЂЂЂЃ™•№Ќ•Н}…Э…ҐС•ђЂ¬фЃ…Э…ҐС}НХ‰µҐННҐЅёЂґЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|м(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃ…Э…ҐРЃНХ‰µҐННҐЅёЃЌЅµБ±•СҐЅёЃYХ±­…ёЃ™•№Ќ•М€¤м(ЂЂЂЂЂЃҐЂЎЭ…ҐС}Й•НХ±РЂффЃY-}II=I}Y%}1=MP¤Ѓм(ЂЂЂЂЂЂЂЃ‘•ЩҐЌ•}±ЅНС|ЂфЃСЙХ”м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф(ЂЂјјЃЎ•Ќ¬ЃЎЅЬЃ™…ИЃҐ№СјЃСЎ”ЃНХ‰µҐННҐЅ№МЃСЎ”ЃATЃЌХЙЙ•№С±дЃҐМ°ЃҐёЃЅЙ‘•ИЃ‰•Ќ…ХН”(ЂЂјјЃНХ‰µҐННҐЅёЃСЎ•µН•±Щ•МЃЌ…ёЃ‰”Ѓ•б•ЌХС•ђЃЅХРЃЅЃЅЙ‘•И°Ѓ‰ХРЃa•№Ґ„ЃН•ЙҐ…±Ґй•М(ЂЂјјЃСЎ…РЃ™ЅИЃНҐµБ±ҐЌҐСдё(ЂЃЭЎҐ±”ЂЎ™•№Ќ•Н}…Э…ҐС•ђЂрЃ™•№Ќ•Н}СЅС…°¤Ѓм(ЂЂЂЃY­I•НХ±РЃ™•№Ќ•}НС…СХМЂф(ЂЂЂЂЂЂЂЃ‘™ё№Щ­]…ҐСЅЙ•№Ќ•МЎ‘•ЩҐЌ”°ЂД°Ђ™НХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н}m™•№Ќ•Н}…Э…ҐС•‘t°ЃY-}QIU°ЂА¤м(ЂЂЂЃҐЂЎ™•№Ќ•}НС…СХМЂ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃҐЂЎ™•№Ќ•}НС…СХМЂффЃY-}II=I}Y%}1=MP¤Ѓм(ЂЂЂЂЂЂЂЃ‘•ЩҐЌ•}±ЅНС|ЂфЃСЙХ”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЂ¬­™•№Ќ•Н}…Э…ҐС•ђм(ЂЃф(ЂЃҐЂЎ‘•ЩҐЌ•}±ЅНС|¤Ѓм(ЂЂЂЃҐЂЎќЙ…БЎҐЌН}НеНС•µ|¤Ѓм(ЂЂЂЂЂЃќЙ…БЎҐЌН}НеНС•µ|ґщ=№!ЅНСБХ1ЅННЙЅµ№еQЎЙ•…ђЎСЙХ”¤м(ЂЂЂЃф(ЂЂЂЃЙ•СХЙём(ЂЃф(ЂЃҐЂ …™•№Ќ•Н}…Э…ҐС•ђ¤Ѓм(ЂЂЂЂјјЃ9ЅРЃХБ‘…С•ђЂґЃ№јЃ№••ђЃСјЃЙ•Ќ±…ҐґЃЅИЃ‘ЅЭ№±Ѕ…ђЃСЎҐ№ќМё(ЂЂЂЃЙ•СХЙём(ЂЃф(ЂЂјјЃI•Ќ±…ҐґЃ™•№Ќ•Мё(ЂЃ™•№Ќ•Н}™Й••|№Й•Н•ЙЩ”Ў™•№Ќ•Н}™Й••|№НҐй” ¤Ђ¬Ѓ™•№Ќ•Н}…Э…ҐС•ђ¤м(ЂЃ…ХСјЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н}…Э…ҐС•‘}•№ђЂфЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№Ќ‰•ќҐё ¤м(ЂЃНСђий…‘Щ…№Ќ”ЎНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н}…Э…ҐС•‘}•№ђ°Ѓ™•№Ќ•Н}…Э…ҐС•ђ¤м(ЂЃ™•№Ќ•Н}™Й••|№Ґ№Н•ЙРЎ™•№Ќ•Н}™Й••|№Ќ•№ђ ¤°ЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№Ќ‰•ќҐё ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н}…Э…ҐС•‘}•№ђ¤м(ЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№•Й…Н”ЎНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№Ќ‰•ќҐё ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н}…Э…ҐС•‘}•№ђ¤м(ЂЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|Ђ¬фЃ™•№Ќ•Н}…Э…ҐС•ђм((ЂЂјјЃI•Ќ±…ҐґЃН•µ…БЎЅЙ•Мё(ЂЃЭЎҐ±”Ђ …НХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}Н•µ…БЎЅЙ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃН•µ…БЎЅЙ•}НХ‰µҐННҐЅёЂфЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}Н•µ…БЎЅЙ•Н|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎН•µ…БЎЅЙ•}НХ‰µҐННҐЅё№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃН•µ…БЎЅЙ•Н}™Й••|№БХНЎ}‰…Ќ¬ЎН•µ…БЎЅЙ•}НХ‰µҐННҐЅё№Н•ЌЅ№ђ¤м(ЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}Н•µ…БЎЅЙ•Н|№БЅБ}™ЙЅ№Р ¤м(ЂЃф((ЂЂјјЃI•Ќ±…ҐґЃЌЅµµ…№ђЃБЅЅ±Мё(ЂЃЭЎҐ±”Ђ …ЌЅµµ…№‘}‰Х™™•ЙН}НХ‰µҐСС•‘|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃЌЅµµ…№‘}‰Х™™•Й}Б…ҐИЂфЃЌЅµµ…№‘}‰Х™™•ЙН}НХ‰µҐСС•‘|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎЌЅµµ…№‘}‰Х™™•Й}Б…ҐИ№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№БХНЎ}‰…Ќ¬ЎЌЅµµ…№‘}‰Х™™•Й}Б…ҐИ№Н•ЌЅ№ђ¤м(ЂЂЂЃЌЅµµ…№‘}‰Х™™•ЙН}НХ‰µҐСС•‘|№БЅБ}™ЙЅ№Р ¤м(ЂЃф((ЂЃНЎ…Й•‘}µ•µЅЙе|ґщЅµБ±•С•‘MХ‰µҐННҐЅ№UБ‘…С•ђ ¤м((ЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщЅµБ±•С•‘MХ‰µҐННҐЅ№UБ‘…С•ђ ¤м((ЂЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщЅµБ±•С•‘MХ‰µҐННҐЅ№UБ‘…С•ђ ¤м((ЂЃС•бСХЙ•}Ќ…ЌЎ•|ґщЅµБ±•С•‘MХ‰µҐННҐЅ№UБ‘…С•ђЎНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤м((ЂЂјјЃ•НСЙЅдЃЅ‰©•ЌСМЃНЌЎ•‘Х±•ђЃ™ЅИЃ‘•НСЙХЌСҐЅёё(ЂЃЭЎҐ±”Ђ …‘•НСЙЅе}™Й…µ•‰Х™™•ЙН|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃ‘•НСЙЅе}Б…ҐИЂфЃ‘•НСЙЅе}™Й…µ•‰Х™™•ЙН|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎ‘•НСЙЅе}Б…ҐИ№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃ‘™ё№Щ­•НСЙЅеЙ…µ•‰Х™™•ИЎ‘•ЩҐЌ”°Ѓ‘•НСЙЅе}Б…ҐИ№Н•ЌЅ№ђ°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘•НСЙЅе}™Й…µ•‰Х™™•ЙН|№БЅБ}™ЙЅ№Р ¤м(ЂЃф(ЂЃЭЎҐ±”Ђ …‘•НСЙЅе}Ґµ…ќ•}ЩҐ•ЭН|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃ‘•НСЙЅе}Б…ҐИЂфЃ‘•НСЙЅе}Ґµ…ќ•}ЩҐ•ЭН|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎ‘•НСЙЅе}Б…ҐИ№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃ‘™ё№Щ­•НСЙЅе%µ…ќ•YҐ•ЬЎ‘•ЩҐЌ”°Ѓ‘•НСЙЅе}Б…ҐИ№Н•ЌЅ№ђ°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘•НСЙЅе}Ґµ…ќ•}ЩҐ•ЭН|№БЅБ}™ЙЅ№Р ¤м(ЂЃф(ЂЃЭЎҐ±”Ђ …‘•НСЙЅе}‰Х™™•ЙН|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃ‘•НСЙЅе}Б…ҐИЂфЃ‘•НСЙЅе}‰Х™™•ЙН|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎ‘•НСЙЅе}Б…ҐИ№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃ‘™ё№Щ­•НСЙЅе	Х™™•ИЎ‘•ЩҐЌ”°Ѓ‘•НСЙЅе}Б…ҐИ№Н•ЌЅ№ђ°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘•НСЙЅе}‰Х™™•ЙН|№БЅБ}™ЙЅ№Р ¤м(ЂЃф(ЂЃЭЎҐ±”Ђ …‘•НСЙЅе}Ґµ…ќ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃ‘•НСЙЅе}Б…ҐИЂфЃ‘•НСЙЅе}Ґµ…ќ•Н|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎ‘•НСЙЅе}Б…ҐИ№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃ‘™ё№Щ­•НСЙЅе%µ…ќ”Ў‘•ЩҐЌ”°Ѓ‘•НСЙЅе}Б…ҐИ№Н•ЌЅ№ђ°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘•НСЙЅе}Ґµ…ќ•Н|№БЅБ}™ЙЅ№Р ¤м(ЂЃф(ЂЃЭЎҐ±”Ђ …‘•НСЙЅе}µ•µЅЙе|№•µБСд ¤¤Ѓм(ЂЂЂЃЌЅ№НРЃ…ХСјЃ‘•НСЙЅе}Б…ҐИЂфЃ‘•НСЙЅе}µ•µЅЙе|№™ЙЅ№Р ¤м(ЂЂЂЃҐЂЎ‘•НСЙЅе}Б…ҐИ№™ҐЙНРЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃ‘™ё№Щ­Й••5•µЅЙдЎ‘•ЩҐЌ”°Ѓ‘•НСЙЅе}Б…ҐИ№Н•ЌЅ№ђ°Ѓ№Х±±БСИ¤м(ЂЂЂЃ‘•НСЙЅе}µ•µЅЙе|№БЅБ}™ЙЅ№Р ¤м(ЂЃф)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий…№№‘MХ‰µҐННҐЅ№%µµ•‘Ґ…С•±д ¤ЃЌЅ№НРЃм(ЂЃЙ•СХЙёЂ…НХ‰µҐННҐЅ№}ЅБ•№|ЃсрЂ …НЌЙ…СЌЎ}‰Х™™•Й}ХН•‘|ЂЂ…БҐБ•±Ґ№•}Ќ…ЌЎ•|ґщ%НЙ•…СҐ№ќAҐБ•±Ґ№•М ¤¤м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий	•ќҐ№MХ‰µҐННҐЅёЎ‰ЅЅ°ЃҐН}ќХ•НС}ЌЅµµ…№ђ¤Ѓм(ЌҐЃa}AU}%9}I%9}I]}M=AL(ЂЃM=A}БЙЅ™Ґ±•}ЌБХ} ‰ќБФ€¤м(Ќ•№‘ҐЂЂјјЃa}AU}%9}I%9}I]}M=AL((ЂЃҐЂЎ‘•ЩҐЌ•}±ЅНС|¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃ‰ЅЅ°ЃҐН}ЅБ•№Ґ№ќ}™Й…µ”ЂфЃҐН}ќХ•НС}ЌЅµµ…№ђЂЂ…™Й…µ•}ЅБ•№|м(ЂЃҐЂЎНХ‰µҐННҐЅ№}ЅБ•№|ЂЂ…ҐН}ЅБ•№Ґ№ќ}™Й…µ”¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЂјјЃЎ•Ќ¬ЃСЎ”Ѓ™•№Ќ”ЂґЃ№••‘•ђЃ™ЅИЃ…±°Ѓ­Ґ№‘МЃЅЃНХ‰µҐННҐЅ№МЂЎСјЃЙ•Ќ±…ҐґЃСЙ…№НҐ•№Р(ЂЂјјЃЙ•НЅХЙЌ•МЃ•…Й±д¤Ѓ…№ђЃНБ•ЌҐ™ҐЌ…±±дЃ™ЅИЃ™Й…µ•МЂЎ№ЅРЃСјЃЕХ•Х”ЃСЅјЃµ…№д¤°Ѓ…№ђ(ЂЂјјЃ…Э…ҐРЃСЎ”Ѓ…Щ…Ґ±…‰Ґ±ҐСдЃЅЃСЎ”ЃЌХЙЙ•№РЃ™Й…µ”ёЃ±НјЃЌЎ•Ќ¬ЃЭЎ•СЎ•ИЃСЎ”Ѓ‘•ЩҐЌ”(ЂЂјјЃҐМЃНСҐ±°Ѓ…Щ…Ґ±…‰±”°Ѓ…№ђЃЭЎ•СЎ•ИЃСЎ”Ѓ…Э…ҐРЃЭ…МЃНХЌЌ•НН™Х°ё(ЂЃХҐ№РШС}РЃ…Э…ҐС}НХ‰µҐННҐЅёЂф(ЂЂЂЂЂЃҐН}ЅБ•№Ґ№ќ}™Й…µ”ЂьЃЌ±ЅН•‘}™Й…µ•}НХ‰µҐННҐЅ№Н}m™Й…µ•}ЌХЙЙ•№С|Ђ”Ѓ­5…бЙ…µ•Н%№±ҐќЎСtЂиЂАм(ЂЃЎ•Ќ­MХ‰µҐННҐЅ№•№Ќ•№‘•ЩҐЌ•1ЅНМЎ…Э…ҐС}НХ‰µҐННҐЅё¤м(ЂЃҐЂЎ‘•ЩҐЌ•}±ЅНС|ЃсрЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|ЂрЃ…Э…ҐС}НХ‰µҐННҐЅё¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃҐЂЎҐН}ЅБ•№Ґ№ќ}™Й…µ”¤Ѓм(ЂЂЂЂјјЃUБ‘…С”ЃСЎ”ЃЌЅµБ±•С•ђЃ™Й…µ”ЃҐ№‘•а°Ѓ…±НјЃЅ‰С…Ґ№Ґ№њЃСЎ”Ѓ…ЌСХ…°ЃЌЅµБ±•С•ђ(ЂЂЂЂјјЃ™Й…µ”Ѓ№Хµ‰•ИЂЎНҐ№Ќ”ЃСЎ”ЃATЃµ…дЃ‰”Ѓ…ЌСХ…±±дЃ±•НМЃСЎ…ёЂМЃ™Й…µ•МЃ‰•ЎҐ№ђ¤(ЂЂЂЂјјЃ‰•™ЅЙ”ЃЙ•Ќ±…ҐµҐ№њЃЙ•НЅХЙЌ•МЃСЙ…Ќ­•ђЃЭҐС ЃСЎ”Ѓ™Й…µ”Ѓ№Хµ‰•Иё(ЂЂЂЃ™Й…µ•}ЌЅµБ±•С•‘|ЂфЃНСђийµ…аЎ™Й…µ•}ЌХЙЙ•№С|°ЃХҐ№РШС}РЎ­5…бЙ…µ•Н%№±ҐќЎР¤¤ЂґЃ­5…бЙ…µ•Н%№±ҐќЎРм(ЂЂЂЃ™ЅИЂЎХҐ№РШС}РЃ™Й…µ”ЂфЃ™Й…µ•}ЌЅµБ±•С•‘|Ђ¬ЂДмЃ™Й…µ”ЂрЃ™Й…µ•}ЌХЙЙ•№С|мЂ¬­™Й…µ”¤Ѓм(ЂЂЂЂЂЃҐЂЎЌ±ЅН•‘}™Й…µ•}НХ‰µҐННҐЅ№Н}m™Й…µ”Ђ”Ѓ­5…бЙ…µ•Н%№±ҐќЎСtЂшЃНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ™Й…µ•}ЌЅµБ±•С•‘|ЂфЃ™Й…µ”м(ЂЂЂЃф(ЂЃф((ЂЃҐЂ …НХ‰µҐННҐЅ№}ЅБ•№|¤Ѓм(ЂЂЂЃНХ‰µҐННҐЅ№}ЅБ•№|ЂфЃСЙХ”м((ЂЂЂЃ±•…Й‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•С…ЌЎ” ¤м((ЂЂЂЂјјЃMС…ЙРЃ„Ѓ№•ЬЃ‘•™•ЙЙ•ђЃЌЅµµ…№ђЃ‰Х™™•ИЂґЃЭҐ±°ЃНХ‰µҐРЃҐРЃСјЃСЎ”ЃЙ•…°ЃЅ№”ЃҐё(ЂЂЂЂјјЃСЎ”Ѓ•№ђЃЅЃСЎ”ЃНХ‰µҐННҐЅёЂЎЭЎ•ёЃ…Не№ЊЃБҐБ•±Ґ№”ЃЅ‰©•ЌРЃЌЙ•…СҐЅёЃЙ•ЕХ•НСМ(ЂЂЂЂјјЃ…Й”Ѓ™Х±™Ґ±±•ђ¤ё(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№I•Н•Р ¤м((ЂЂЂЂјјЃI•Н•РЃЌ…ЌЎ•ђЃНС…С”ЃЅЃСЎ”ЃЌЅµµ…№ђЃ‰Х™™•Иё(ЂЂЂЃ‘е№…µҐЌ}ЩҐ•ЭБЅЙС}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НЌҐННЅЙ}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­}ХБ‘…С•}№••‘•‘|ЂфЃСЙХ”м(ЂЂЂЃЌХЙЙ•№С}Й•№‘•Й}Б…НН|ЂфЃY-}9U11}!91м(ЂЂЂЃЌХЙЙ•№С}™Й…µ•‰Х™™•Й|ЂфЃ№Х±±БСИм(ЂЂЂЃҐ№}Й•№‘•Й}Б…НН|ЂфЃ™…±Н”м(ЂЂЂЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•|ЂфЃY-}9U11}!91м(ЂЂЂЃЌХЙЙ•№С}•бС•Й№…±}ќЙ…БЎҐЌН}БҐБ•±Ґ№•|ЂфЃY-}9U11}!91м(ЂЂЂЃЌХЙЙ•№С}•бС•Й№…±}ЌЅµБХС•}БҐБ•±Ґ№•|ЂфЃY-}9U11}!91м(ЂЂЂЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•}±…еЅХС|ЂфЃ№Х±±БСИм(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}‰ЅХ№‘}ХБ}СЅ}‘…С•|ЂфЂАм((ЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ	•ќҐ№MХ‰µҐННҐЅё ¤м((ЂЂЂЃС•бСХЙ•}Ќ…ЌЎ•|ґщ	•ќҐ№MХ‰µҐННҐЅёЎ•СХЙЙ•№СMХ‰µҐННҐЅё ¤¤м(ЂЃф((ЂЃҐЂЎҐН}ЅБ•№Ґ№ќ}™Й…µ”¤Ѓм(ЂЂЂЃ™Й…µ•}ЅБ•№|ЂфЃСЙХ”м(ЂЂЂЃ™Й…µ•}ХН•‘}…Не№Ќ}Б±…Ќ•ЎЅ±‘•Й}БҐБ•±Ґ№•|ЂфЃ™…±Н”м((ЂЂЂЂјјЃ!…ЙЩ•НРЃ…№дЃ™Ґ№ҐНЎ•ђЃ™Й…µ”ќМЃСҐµ•НС…µБМЃ™ҐЙНРёЃ™Й…µ•}ЌЅµБ±•С•‘|ЃЭ…МЃ©ХНР(ЂЂЂЂјјЃ‰ЙЅХќЎРЃХАЃСјЃ‘…С”Ѓ…‰ЅЩ”°ЃНјЃ„ЃН±ЅРЃЭЎЅН”Ѓ™Й…µ”ЃҐМЃ…РЃЅИЃ‰•±ЅЬЃҐРЃЎ…М(ЂЂЂЂјјЃЌ•ЙС…Ґ№±дЃ•б•ЌХС•ђмЃСЎ”ЃЙ•…ђЃҐМЃНСҐ±°ЃҐННХ•ђЃЭҐСЎЅХРЃ]%PЃНјЃСЎ…РЃ„(ЂЂЂЂјјЃ‘ЙҐЩ•ИЃ‘ҐН…ќЙ••Ґ№њЃ…‰ЅХРЃСЎ…РЃЌ…№№ЅРЃНС…±°ЃСЎ”ЃЌЅµµ…№ђЃБЙЅЌ•ННЅИё(ЂЂЂЃҐЂЎСҐµ•НС…µБ}ЕХ•ЙҐ•Н}…Щ…Ґ±…‰±•|¤Ѓм(ЂЂЂЂЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃСН}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЂЂЂЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃСН}‘™ёЂфЃСН}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЂЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃН±ЅРЂфЂАмЃН±ЅРЂрЃ­5…бЙ…µ•Н%№±ҐќЎРмЂ¬­Н±ЅР¤Ѓм(ЂЂЂЂЂЂЂЃЌЅ№НРЃХҐ№РШС}РЃН±ЅС}™Й…µ”ЂфЃСҐµ•НС…µБ}Н±ЅС}™Й…µ•}mН±ЅСtм(ЂЂЂЂЂЂЂЃҐЂ …Н±ЅС}™Й…µ”ЃсрЃН±ЅС}™Й…µ”ЂшЃ™Й…µ•}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃЌЅ№СҐ№Х”м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃХҐ№РШС}РЃНС…µБНm­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ•tЂфЃнфм(ЂЂЂЂЂЂЂЃҐЂЎСН}‘™ё№Щ­•СEХ•ЙеAЅЅ±I•НХ±СМ (ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃСН}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤°ЃСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃН±ЅРЂЁЃ­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ”°Ѓ­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ”°ЃНҐй•ЅЎНС…µБМ¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНС…µБМ°ЃНҐй•ЅЎХҐ№РШС}Р¤°ЃY-}EUIe}IMU1Q|ШС}	%P¤ЂффЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЂЂЃҐЂЎНС…µБНlЕtЂшЃНС…µБНlБt¤Ѓм(ЂЂЂЂЂЂЂЂЂЂЂЃЌЅ№НРЃ‘ЅХ‰±”Ѓ№МЂфЃ‘ЅХ‰±”ЎНС…µБНlЕtЂґЃНС…µБНlБt¤ЂЁЃСҐµ•НС…µБ}Б•ЙҐЅ‘}№Н|м(ЂЂЂЂЂЂЂЂЂЂЂЃЙ•аийБ•ЙийM•СЅХ№С•ИЎЙ•аийБ•ЙийЅХ№С•Й%ђий­БХЙ…µ•UМ°ЃҐ№РШС}РЎ№МЂјЂДАААёА¤¤м(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЂЂЂЂЂЂЂЂЃI•бMЭҐСЌЎA•Й™‘ђЎНЭҐСЌЎ}СҐµҐ№њий­БХЙ…µ•MБ…№UМ°ЃХҐ№РШС}РЎ№МЂјЂДАААёА¤¤м(ЂЂЂЂЂЂЂЂЂЂЂЃI•бMЭҐСЌЎA•Й™ЅХ№РЎНЭҐСЌЎ}СҐµҐ№њий­БХЙ…µ•MБ…№ЅХ№Р¤м(Ќ•№‘Ґ(ЂЂЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЂЂЃСҐµ•НС…µБ}Н±ЅС}™Й…µ•}mН±ЅСtЂфЂАм(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЃф((ЂЂЂЃҐЂЎСҐµ•НС…µБ}ЕХ•ЙҐ•Н}…Щ…Ґ±…‰±•|¤Ѓм(ЂЂЂЂЂЃЌЅ№НРЃХҐ№РМЙ}РЃН±ЅРЂфЃХҐ№РМЙ}РЎ™Й…µ•}ЌХЙЙ•№С|Ђ”Ѓ­5…бЙ…µ•Н%№±ҐќЎР¤м(ЂЂЂЂЂЃЌЅ№НРЃХҐ№РМЙ}РЃ™ҐЙНРЂфЃН±ЅРЂЁЃ­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ”м(ЂЂЂЂЂЂјјЃI•Н•РЃ‰ЅС ЃЅЃСЎ”ЃН±ЅРќМЃЕХ•ЙҐ•МЃҐ№НҐ‘”ЃСЎ”ЃЌЅµµ…№ђЃ‰Х™™•И°ЃНјЃСЎ”(ЂЂЂЂЂЂјјЃЙ•Н•РЃҐМЃЅЙ‘•Й•ђЃ…ќ…Ґ№НРЃСЎ”ЃATќМЃЅЭёЃ•б•ЌХСҐЅёЃЙ…СЎ•ИЃСЎ…ёЃ…ќ…Ґ№НР(ЂЂЂЂЂЂјјЃСЎ”ЃЎЅНР°Ѓ…№ђЃЌ…№№ЅРЃЙ…Ќ”Ѓ„ЃНСҐ±°µҐёµ™±ҐќЎРЃ™Й…µ”ЃЙ•…‘Ґ№њЃСЎ•ґё(ЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­I•Н•СEХ•ЙеAЅЅ°ЎСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|°Ѓ™ҐЙНР°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ”¤м(ЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­]ЙҐС•QҐµ•НС…µАЎY-}A%A1%9}MQ}Q=A}=}A%A}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|°Ѓ™ҐЙНР¤м(ЂЂЂЂЂЃСҐµ•НС…µБ}Н±ЅС}™Й…µ•}mН±ЅСtЂфЃ™Й…µ•}ЌХЙЙ•№С|м(ЂЂЂЃф((ЂЂЂЂјјЃI•Н•РЃ‰Ґ№‘Ґ№ќМЃСЎ…РЃ‘•Б•№ђЃЅёЃСЙ…№НҐ•№РЃ‘…С„ё(ЂЂЂЃНСђийµ•µН•РЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•б|°ЂА°ЃНҐй•ЅЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•б|¤¤м(ЂЂЂЃНСђийµ•µН•РЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±|°ЂА°ЃНҐй•ЅЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±|¤¤м(ЂЂЂЃНСђийµ•µН•РЎЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН|°ЂА°ЃНҐй•ЅЎЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН|¤¤м(ЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЂфЂАм(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СMЎ…Й•‘5•µЅЙе№‘‘Й…µtЂф(ЂЂЂЂЂЂЂЃНЎ…Й•‘}µ•µЅЙе}…№‘}•‘Й…µ}‘•НЌЙҐБСЅЙ}Н•С|м(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЂЂЃU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СMЎ…Й•‘5•µЅЙе№‘‘Й…ґм((ЂЂЂЂјјЃI•Ќ±…ҐґЃБЅЅ°ЃБ…ќ•МЂґЃ№јЃ№••ђЃСјЃ‘јЃСЎҐМЃ•Щ•ЙдЃНµ…±°ЃНХ‰µҐННҐЅёЃНҐ№Ќ”ЃНЅµ”(ЂЂЂЂјјЃµ…дЃ‰”ЃЙ•ХН•ђё(ЂЂЂЂјјЃ%a5ЎQЙҐ…№њН°¤иЃQЎҐМЃЭҐ±°ЃЙ•НХ±РЃҐёЃ„Ѓµ•µЅЙдЃ±•…¬ЃҐЃСЎ”ЃќХ•НРЃҐМЃ№ЅР(ЂЂЂЂјјЃБЙ•Н•№СҐ№њё(ЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщI•Ќ±…ҐґЎ™Й…µ•}ЌЅµБ±•С•‘|¤м(ЂЂЂЃЭЎҐ±”Ђ …НҐ№ќ±•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃЌЅ№НРЃUН•‘MҐ№ќ±•QЙ…№НҐ•№С•НЌЙҐБСЅИЃХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИЂф(ЂЂЂЂЂЂЂЂЂЃНҐ№ќ±•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№™ЙЅ№Р ¤м(ЂЂЂЂЂЃҐЂЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИ№™Й…µ”ЂшЃ™Й…µ•}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃНҐ№ќ±•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••}mНҐй•}РЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИ№±…еЅХРҐt№БХНЎ}‰…Ќ¬ (ЂЂЂЂЂЂЂЂЂЃХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИ№Н•Р¤м(ЂЂЂЂЂЃНҐ№ќ±•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№БЅБ}™ЙЅ№Р ¤м(ЂЂЂЃф(ЂЂЂЃЭЎҐ±”Ђ …ЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃЌЅ№НРЃНСђийБ…ҐИсХҐ№РШС}Р°ЃY­•НЌЙҐБСЅЙM•РшЃХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИЂф(ЂЂЂЂЂЂЂЂЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№™ЙЅ№Р ¤м(ЂЂЂЂЂЃҐЂЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИ№™ҐЙНРЂшЃ™Й…µ•}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••|№БХНЎ}‰…Ќ¬ЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅИ№Н•ЌЅ№ђ¤м(ЂЂЂЂЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№БЅБ}™ЙЅ№Р ¤м(ЂЂЂЃф(ЂЂЂЃЭЎҐ±”Ђ …С•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}ХН•‘|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃЌЅ№НРЃUН•‘Q•бСХЙ•QЙ…№НҐ•№С•НЌЙҐБСЅЙM•РЃХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•РЂф(ЂЂЂЂЂЂЂЂЂЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}ХН•‘|№™ЙЅ№Р ¤м(ЂЂЂЂЂЃҐЂЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•Р№™Й…µ”ЂшЃ™Й…µ•}ЌЅµБ±•С•‘|¤Ѓм(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ…ХСјЃҐРЂфЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}™Й••|№™Ґ№ђЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•Р№±…еЅХР¤м(ЂЂЂЂЂЃҐЂЎҐРЂффЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}™Й••|№•№ђ ¤¤Ѓм(ЂЂЂЂЂЂЂЃҐРЂфЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}™Й••|(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ№•µБ±…Ќ”ЎНСђийБҐ•Ќ•ЭҐН•}ЌЅ№НСЙХЌР°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНСђий™ЅЙЭ…Й‘}…Н}СХБ±”ЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•Р№±…еЅХР¤°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНСђий™ЅЙЭ…Й‘}…Н}СХБ±” ¤¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ№™ҐЙНРм(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐРґщН•ЌЅ№ђ№БХНЎ}‰…Ќ¬ЎХН•‘}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•Р№Н•Р¤м(ЂЂЂЂЂЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}ХН•‘|№БЅБ}™ЙЅ№Р ¤м(ЂЂЂЃф((ЂЂЂЃЩҐЌС=±‘I•…‘‰…Ќ­	Х™™•ЙМЎЙ•…‘‰…Ќ­}‰Х™™•ЙН|¤м(ЂЂЂЃЩҐЌС=±‘I•…‘‰…Ќ­	Х™™•ЙМЎµ•µ•бБЅЙС}Й•…‘‰…Ќ­}‰Х™™•ЙН|¤м((ЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ	•ќҐ№Й…µ” ¤м((ЂЂЂЃС•бСХЙ•}Ќ…ЌЎ•|ґщ	•ќҐ№Й…µ” ¤м(ЂЃф((ЂЃЙ•СХЙёЃСЙХ”м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий№‘MХ‰µҐННҐЅёЎ‰ЅЅ°ЃҐН}НЭ…А¤Ѓм(ЌҐЃIa}A1Q=I5}M]%Q (ЂЃНЭҐСЌЎ}СҐµҐ№њийMЌЅБ”ЃСҐµҐ№њЎНЭҐСЌЎ}СҐµҐ№њий­№‘MХ‰µҐННҐЅ№БХUМ¤м(Ќ•№‘Ґ(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЂјјЃ5…­”ЃНХЙ”Ѓ•Щ•ЙеСЎҐ№њЃ№••‘•ђЃ™ЅИЃНХ‰µҐССҐ№њЃ•бҐНРё(ЂЃҐЂЎНХ‰µҐННҐЅ№}ЅБ•№|¤Ѓм(ЂЂЂЃҐЂЎ™•№Ќ•Н}™Й••|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃY­•№Ќ•Й•…С•%№™јЃ™•№Ќ•}ЌЙ•…С•}Ґ№™јм(ЂЂЂЂЂЃ™•№Ќ•}ЌЙ•…С•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}9}IQ}%9<м(ЂЂЂЂЂЃ™•№Ќ•}ЌЙ•…С•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЂЂЃ™•№Ќ•}ЌЙ•…С•}Ґ№™ј№™±…ќМЂфЂАм(ЂЂЂЂЂЃY­•№Ќ”Ѓ™•№Ќ”м(ЂЂЂЂЂЃҐЂЎ‘™ё№Щ­Й•…С••№Ќ”Ў‘•ЩҐЌ”°Ђ™™•№Ќ•}ЌЙ•…С•}Ґ№™ј°Ѓ№Х±±БСИ°Ђ™™•№Ќ”¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”Ѓ„ЃYХ±­…ёЃ™•№Ќ”€¤м(ЂЂЂЂЂЂЂЂјјЃQЙдЃСјЃНХ‰µҐРЃ±…С•ИёЃЅµБ±•С•±дЃ‘ЙЅББҐ№њЃСЎ”ЃНХ‰µҐННҐЅёЃҐМЃ№ЅР(ЂЂЂЂЂЂЂЂјјЃБ•ЙµҐСС•ђЃ‰•Ќ…ХН”ЃЙ•НЅХЙЌ•МЃЭЅХ±ђЃ‰”Ѓ±•™РЃҐёЃ…ёЃХ№‘•™Ґ№•ђЃНС…С”ё(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ™•№Ќ•Н}™Й••|№БХНЎ}‰…Ќ¬Ў™•№Ќ”¤м(ЂЂЂЃф(ЂЂЂЃҐЂ …НБ…ЙН•}µ•µЅЙе}‰Ґ№‘Н|№•µБСд ¤ЂЃН•µ…БЎЅЙ•Н}™Й••|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃY­M•µ…БЎЅЙ•Й•…С•%№™јЃН•µ…БЎЅЙ•}ЌЙ•…С•}Ґ№™јм(ЂЂЂЂЂЃН•µ…БЎЅЙ•}ЌЙ•…С•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}M5A!=I}IQ}%9<м(ЂЂЂЂЂЃН•µ…БЎЅЙ•}ЌЙ•…С•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЂЂЃН•µ…БЎЅЙ•}ЌЙ•…С•}Ґ№™ј№™±…ќМЂфЂАм(ЂЂЂЂЂЃY­M•µ…БЎЅЙ”ЃН•µ…БЎЅЙ”м(ЂЂЂЂЂЃҐЂЎ‘™ё№Щ­Й•…С•M•µ…БЎЅЙ”Ў‘•ЩҐЌ”°Ђ™Н•µ…БЎЅЙ•}ЌЙ•…С•}Ґ№™ј°Ѓ№Х±±БСИ°Ђ™Н•µ…БЎЅЙ”¤Ђ„ф(ЂЂЂЂЂЂЂЂЂЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”Ѓ„ЃYХ±­…ёЃН•µ…БЎЅЙ”€¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃН•µ…БЎЅЙ•Н}™Й••|№БХНЎ}‰…Ќ¬ЎН•µ…БЎЅЙ”¤м(ЂЂЂЃф(ЂЂЂЃҐЂЎЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃЅµµ…№‘	Х™™•ИЃЌЅµµ…№‘}‰Х™™•Им(ЂЂЂЂЂЃY­Ѕµµ…№‘AЅЅ±Й•…С•%№™јЃЌЅµµ…№‘}БЅЅ±}ЌЙ•…С•}Ґ№™јм(ЂЂЂЂЂЃЌЅµµ…№‘}БЅЅ±}ЌЙ•…С•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}=559}A==1}IQ}%9<м(ЂЂЂЂЂЃЌЅµµ…№‘}БЅЅ±}ЌЙ•…С•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЂЂЃЌЅµµ…№‘}БЅЅ±}ЌЙ•…С•}Ґ№™ј№™±…ќМЂфЃY-}=559}A==1}IQ}QI9M%9Q}	%Pм(ЂЂЂЂЂЃЌЅµµ…№‘}БЅЅ±}ЌЙ•…С•}Ґ№™ј№ЕХ•Х•…µҐ±е%№‘•аЂфЃЩХ±­…№}‘•ЩҐЌ”ґщЕХ•Х•}™…µҐ±е}ќЙ…БЎҐЌН}ЌЅµБХС” ¤м(ЂЂЂЂЂЃҐЂЎ‘™ё№Щ­Й•…С•Ѕµµ…№‘AЅЅ°Ў‘•ЩҐЌ”°Ђ™ЌЅµµ…№‘}БЅЅ±}ЌЙ•…С•}Ґ№™ј°Ѓ№Х±±БСИ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™ЌЅµµ…№‘}‰Х™™•И№БЅЅ°¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”Ѓ„ЃYХ±­…ёЃЌЅµµ…№ђЃБЅЅ°€¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃY­Ѕµµ…№‘	Х™™•Й±±ЅЌ…С•%№™јЃЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™јм(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}=559}	UI}11=Q}%9<м(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™ј№ЌЅµµ…№‘AЅЅ°ЂфЃЌЅµµ…№‘}‰Х™™•И№БЅЅ°м(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™ј№±•Щ•°ЂфЃY-}=559}	UI}1Y1}AI%5Idм(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™ј№ЌЅµµ…№‘	Х™™•ЙЅХ№РЂфЂДм(ЂЂЂЂЂЃҐЂЎ‘™ё№Щ­±±ЅЌ…С•Ѕµµ…№‘	Х™™•ЙМЎ‘•ЩҐЌ”°Ђ™ЌЅµµ…№‘}‰Х™™•Й}…±±ЅЌ…С•}Ґ№™ј°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™ЌЅµµ…№‘}‰Х™™•И№‰Х™™•И¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃ…±±ЅЌ…С”Ѓ„ЃYХ±­…ёЃЌЅµµ…№ђЃ‰Х™™•И€¤м(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅеЅµµ…№‘AЅЅ°Ў‘•ЩҐЌ”°ЃЌЅµµ…№‘}‰Х™™•И№БЅЅ°°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№БХНЎ}‰…Ќ¬ЎЌЅµµ…№‘}‰Х™™•И¤м(ЂЂЂЃф(ЂЃф((ЂЃ‰ЅЅ°ЃҐН}Ќ±ЅНҐ№ќ}™Й…µ”ЂфЃҐН}НЭ…АЂЃ™Й…µ•}ЅБ•№|м((ЂЂјјЃ	•™ЅЙ”ЃСЎ”ЃНХ‰µҐРЃ‰±ЅЌ¬Ѓ‰•±ЅЬ°ЃЭЎҐЌ ЃҐМЃСЎ”Ѓ±…НРЃБЅҐ№РЃ…РЃЭЎҐЌ Ѓ…№еСЎҐ№њ(ЂЂјјЃЌ…ёЃНСҐ±°Ѓ‰”ЃЙ•ЌЅЙ‘•ђЃҐ№СјЃСЎҐМЃ™Й…µ”ќМЃЌЅµµ…№ђЃ‰Х™™•Иё(ЂЃҐЂЎҐН}Ќ±ЅНҐ№ќ}™Й…µ”ЂЃСҐµ•НС…µБ}ЕХ•ЙҐ•Н}…Щ…Ґ±…‰±•|ЂЃНХ‰µҐННҐЅ№}ЅБ•№|¤Ѓм(ЂЂЂЃЌЅ№НРЃХҐ№РМЙ}РЃН±ЅРЂфЃХҐ№РМЙ}РЎ™Й…µ•}ЌХЙЙ•№С|Ђ”Ѓ­5…бЙ…µ•Н%№±ҐќЎР¤м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­]ЙҐС•QҐµ•НС…µА (ЂЂЂЂЂЂЂЃY-}A%A1%9}MQ}	=QQ=5}=}A%A}	%P°ЃСҐµ•НС…µБ}ЕХ•Йе}БЅЅ±|°(ЂЂЂЂЂЂЂЃН±ЅРЂЁЃ­QҐµ•НС…µБEХ•ЙҐ•НA•ЙЙ…µ”Ђ¬ЂД¤м(ЂЃф((ЂЃҐЂЎҐН}Ќ±ЅНҐ№ќ}™Й…µ”¤Ѓм(ЂЂЂЃС•бСХЙ•}Ќ…ЌЎ•|ґщ№‘Й…µ” ¤м((ЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ№‘Й…µ” ¤м(ЂЃф((ЂЃҐЂЎНХ‰µҐННҐЅ№}ЅБ•№|¤Ѓм(ЂЂЂЃ…НН•ЙС}™…±Н”ЎНЌЙ…СЌЎ}‰Х™™•Й}ХН•‘|¤м((ЂЂЂЃҐЂЎ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№Щ…±ҐђЂЃЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­№‘EХ•ЙдЎЅЌЌ±ХНҐЅ№}ЕХ•Йе}БЅЅ±|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|№ЎЅНС}Ґ№‘•а¤м(ЂЂЂЂЂЃ…ЌСҐЩ•}ЅЌЌ±ХНҐЅ№}ЕХ•Йе|ЂфЃнфм(ЂЂЂЃф((ЂЂЂЃ№‘I•№‘•ЙA…НМ ¤м((ЂЂЂЃБҐБ•±Ґ№•}Ќ…ЌЎ•|ґщ№‘MХ‰µҐННҐЅё ¤м((ЂЂЂЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ№‘MХ‰µҐННҐЅё ¤м((ЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ№‘MХ‰µҐННҐЅё ¤м((ЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщ№‘MХ‰µҐННҐЅё ¤м((ЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщ±ХНЎ]ЙҐС•М ¤м((ЂЂЂЂјјЃMХ‰µҐРЃНБ…ЙН”Ѓ‰Ґ№‘МЃ•…Й±Ґ•И°Ѓ‰•™ЅЙ”Ѓ•б•ЌХСҐ№њЃСЎ”Ѓ‘•™•ЙЙ•ђЃЌЅµµ…№ђ(ЂЂЂЂјјЃ‰Х™™•И°ЃСјЃЙ•‘ХЌ”Ѓ±…С•№Ќдё(ЂЂЂЃҐЂ …НБ…ЙН•}µ•µЅЙе}‰Ґ№‘Н|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ЅН}С•µБ|№Ќ±•…И ¤м(ЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ЅН}С•µБ|№Й•Н•ЙЩ”ЎНБ…ЙН•}‰Х™™•Й}‰Ґ№‘Н|№НҐй” ¤¤м(ЂЂЂЂЂЃ™ЅИЂЎЌЅ№НРЃMБ…ЙН•	Х™™•Й	Ґ№ђЃНБ…ЙН•}‰Х™™•Й}‰Ґ№ђЂиЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘Н|¤Ѓм(ЂЂЂЂЂЂЂЃY­MБ…ЙН•	Х™™•Й5•µЅЙе	Ґ№‘%№™јЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™јЂф(ЂЂЂЂЂЂЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ЅН}С•µБ|№•µБ±…Ќ•}‰…Ќ¬ ¤м(ЂЂЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ј№‰Х™™•ИЂфЃНБ…ЙН•}‰Х™™•Й}‰Ґ№ђ№‰Х™™•Им(ЂЂЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ј№‰Ґ№‘ЅХ№РЂфЃНБ…ЙН•}‰Х™™•Й}‰Ґ№ђ№‰Ґ№‘}ЌЅХ№Рм(ЂЂЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ј№Б	Ґ№‘МЂф(ЂЂЂЂЂЂЂЂЂЂЂЃНБ…ЙН•}µ•µЅЙе}‰Ґ№‘Н|№‘…С„ ¤Ђ¬ЃНБ…ЙН•}‰Х™™•Й}‰Ґ№ђ№‰Ґ№‘}Ѕ™™Н•Рм(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ…НН•ЙС}™…±Н”ЎН•µ…БЎЅЙ•Н}™Й••|№•µБСд ¤¤м(ЂЂЂЂЂЃY­M•µ…БЎЅЙ”Ѓ‰Ґ№‘}НБ…ЙН•}Н•µ…БЎЅЙ”ЂфЃН•µ…БЎЅЙ•Н}™Й••|№‰…Ќ¬ ¤м(ЂЂЂЂЂЃY­	Ґ№‘MБ…ЙН•%№™јЃ‰Ґ№‘}НБ…ЙН•}Ґ№™јм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}	%9}MAIM}%9<м(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Э…ҐСM•µ…БЎЅЙ•ЅХ№РЂфЂАм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Б]…ҐСM•µ…БЎЅЙ•МЂфЃ№Х±±БСИм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№‰Х™™•Й	Ґ№‘ЅХ№РЂфЃХҐ№РМЙ}РЎНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ЅН}С•µБ|№НҐй” ¤¤м(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Б	Х™™•Й	Ґ№‘МЂф(ЂЂЂЂЂЂЂЂЂЂ…НБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ЅН}С•µБ|№•µБСд ¤ЂьЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘}Ґ№™ЅН}С•µБ|№‘…С„ ¤ЂиЃ№Х±±БСИм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Ґµ…ќ•=Б…ЕХ•	Ґ№‘ЅХ№РЂфЂАм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Б%µ…ќ•=Б…ЕХ•	Ґ№‘МЂфЃ№Х±±БСИм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Ґµ…ќ•	Ґ№‘ЅХ№РЂфЂАм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№Б%µ…ќ•	Ґ№‘МЂфЂАм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№НҐќ№…±M•µ…БЎЅЙ•ЅХ№РЂфЂДм(ЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Ґ№™ј№БMҐќ№…±M•µ…БЎЅЙ•МЂфЂ™‰Ґ№‘}НБ…ЙН•}Н•µ…БЎЅЙ”м(ЂЂЂЂЂЃY­I•НХ±РЃ‰Ґ№‘}НБ…ЙН•}Й•НХ±Рм(ЂЂЂЂЂЃм(ЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийEХ•Х”ийЌЕХҐНҐСҐЅёЃЕХ•Х•}…ЌЕХҐНҐСҐЅёЂф(ЂЂЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”ґщЌЕХҐЙ•EХ•Х”ЎЩХ±­…№}‘•ЩҐЌ”ґщЕХ•Х•}™…µҐ±е}НБ…ЙН•}‰Ґ№‘Ґ№њ ¤°ЂА¤м(ЂЂЂЂЂЂЂЃ‰Ґ№‘}НБ…ЙН•}Й•НХ±РЂф(ЂЂЂЂЂЂЂЂЂЂЂЃ‘™ё№Щ­EХ•Х•	Ґ№‘MБ…ЙН”ЎЕХ•Х•}…ЌЕХҐНҐСҐЅё№ЕХ•Х” ¤°ЂД°Ђ™‰Ґ№‘}НБ…ЙН•}Ґ№™ј°ЃY-}9U11}!91¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎ‰Ґ№‘}НБ…ЙН•}Й•НХ±РЂ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃНХ‰µҐРЃYХ±­…ёЃНБ…ЙН”Ѓ‰Ґ№‘М€¤м(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}Н•µ…БЎЅЙ•Н|№БХНЎ}‰…Ќ¬Ў‰Ґ№‘}НБ…ЙН•}Н•µ…БЎЅЙ”¤м(ЂЂЂЂЂЃН•µ…БЎЅЙ•Н}™Й••|№БЅБ}‰…Ќ¬ ¤м(ЂЂЂЂЂЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}НС…ќ•}µ…Н­Н|№БХНЎ}‰…Ќ¬ЎНБ…ЙН•}‰Ґ№‘}Э…ҐС}НС…ќ•}µ…Н­|¤м(ЂЂЂЂЂЃНБ…ЙН•}‰Ґ№‘}Э…ҐС}НС…ќ•}µ…Н­|ЂфЂАм(ЂЂЂЂЂЃНБ…ЙН•}‰Х™™•Й}‰Ґ№‘Н|№Ќ±•…И ¤м(ЂЂЂЂЂЃНБ…ЙН•}µ•µЅЙе}‰Ґ№‘Н|№Ќ±•…И ¤м(ЂЂЂЃф((ЂЂЂЃMХ‰µҐС	…ЙЙҐ•ЙМЎСЙХ”¤м((ЂЂЂЃ…НН•ЙС}™…±Н”ЎЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№•µБСд ¤¤м(ЂЂЂЃЅµµ…№‘	Х™™•ИЃЌЅµµ…№‘}‰Х™™•ИЂфЃЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№‰…Ќ¬ ¤м(ЂЂЂЃҐЂЎ‘™ё№Щ­I•Н•СЅµµ…№‘AЅЅ°Ў‘•ЩҐЌ”°ЃЌЅµµ…№‘}‰Х™™•И№БЅЅ°°ЂА¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЙ•Н•РЃ„ЃYХ±­…ёЃЌЅµµ…№ђЃБЅЅ°€¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф(ЂЂЂЃY­Ѕµµ…№‘	Х™™•Й	•ќҐ№%№™јЃЌЅµµ…№‘}‰Х™™•Й}‰•ќҐ№}Ґ№™јм(ЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}‰•ќҐ№}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}=559}	UI}	%9}%9<м(ЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}‰•ќҐ№}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}‰•ќҐ№}Ґ№™ј№™±…ќМЂфЃY-}=559}	UI}UM}=9}Q%5}MU	5%Q}	%Pм(ЂЂЂЃЌЅµµ…№‘}‰Х™™•Й}‰•ќҐ№}Ґ№™ј№Б%№Ў•ЙҐС…№Ќ•%№™јЂфЃ№Х±±БСИм(ЂЂЂЃҐЂЎ‘™ё№Щ­	•ќҐ№Ѕµµ…№‘	Х™™•ИЎЌЅµµ…№‘}‰Х™™•И№‰Х™™•И°Ђ™ЌЅµµ…№‘}‰Х™™•Й}‰•ќҐ№}Ґ№™ј¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃ‰•ќҐёЃ„ЃYХ±­…ёЃЌЅµµ…№ђЃ‰Х™™•И€¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№б•ЌХС”ЎЌЅµµ…№‘}‰Х™™•И№‰Х™™•И¤м(ЂЂЂЃҐЂЎ‘™ё№Щ­№‘Ѕµµ…№‘	Х™™•ИЎЌЅµµ…№‘}‰Х™™•И№‰Х™™•И¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃ•№ђЃ„ЃYХ±­…ёЃЌЅµµ…№ђЃ‰Х™™•И€¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЃY­MХ‰µҐС%№™јЃНХ‰µҐС}Ґ№™јм(ЂЂЂЃНХ‰µҐС}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}MU	5%Q}%9<м(ЂЂЂЃНХ‰µҐС}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЃҐЂ …ЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}Н•µ…БЎЅЙ•Н|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃНХ‰µҐС}Ґ№™ј№Э…ҐСM•µ…БЎЅЙ•ЅХ№РЂфЃХҐ№РМЙ}РЎЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}Н•µ…БЎЅЙ•Н|№НҐй” ¤¤м(ЂЂЂЂЂЃНХ‰µҐС}Ґ№™ј№Б]…ҐСM•µ…БЎЅЙ•МЂфЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}Н•µ…БЎЅЙ•Н|№‘…С„ ¤м(ЂЂЂЂЂЃНХ‰µҐС}Ґ№™ј№Б]…ҐСНСMС…ќ•5…Н¬ЂфЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}НС…ќ•}µ…Н­Н|№‘…С„ ¤м(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЃНХ‰µҐС}Ґ№™ј№Э…ҐСM•µ…БЎЅЙ•ЅХ№РЂфЂАм(ЂЂЂЂЂЃНХ‰µҐС}Ґ№™ј№Б]…ҐСM•µ…БЎЅЙ•МЂфЃ№Х±±БСИм(ЂЂЂЂЂЃНХ‰µҐС}Ґ№™ј№Б]…ҐСНСMС…ќ•5…Н¬ЂфЃ№Х±±БСИм(ЂЂЂЃф(ЂЂЂЃНХ‰µҐС}Ґ№™ј№ЌЅµµ…№‘	Х™™•ЙЅХ№РЂфЂДм(ЂЂЂЃНХ‰µҐС}Ґ№™ј№БЅµµ…№‘	Х™™•ЙМЂфЂ™ЌЅµµ…№‘}‰Х™™•И№‰Х™™•Им(ЂЂЂЃНХ‰µҐС}Ґ№™ј№НҐќ№…±M•µ…БЎЅЙ•ЅХ№РЂфЂАм(ЂЂЂЃНХ‰µҐС}Ґ№™ј№БMҐќ№…±M•µ…БЎЅЙ•МЂфЃ№Х±±БСИм(ЂЂЂЃ…НН•ЙС}™…±Н”Ў™•№Ќ•Н}™Й••|№•µБСд ¤¤м(ЂЂЂЃY­•№Ќ”Ѓ™•№Ќ”ЂфЃ™•№Ќ•Н}™Й••|№‰…Ќ¬ ¤м(ЂЂЂЃҐЂЎ‘™ё№Щ­I•Н•С•№Ќ•МЎ‘•ЩҐЌ”°ЂД°Ђ™™•№Ќ”¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЙ•Н•РЃ„ЃYХ±­…ёЃНХ‰µҐННҐЅёЃ™•№Ќ”€¤м(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф(ЂЂЂЃY­I•НХ±РЃНХ‰µҐС}Й•НХ±Рм(ЂЂЂЃм(ЂЂЂЂЂЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийEХ•Х”ийЌЕХҐНҐСҐЅёЃЕХ•Х•}…ЌЕХҐНҐСҐЅёЂф(ЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”ґщЌЕХҐЙ•EХ•Х”ЎЩХ±­…№}‘•ЩҐЌ”ґщЕХ•Х•}™…µҐ±е}ќЙ…БЎҐЌН}ЌЅµБХС” ¤°ЂА¤м(ЌҐЃIa}A1Q=I5}M]%Q (ЂЂЂЂЂЃI•бMЭҐСЌЎA•Й™ЅХ№Р Ь¤м(Ќ•№‘Ґ(ЂЂЂЂЂЃНХ‰µҐС}Й•НХ±РЂфЃ‘™ё№Щ­EХ•Х•MХ‰µҐРЎЕХ•Х•}…ЌЕХҐНҐСҐЅё№ЕХ•Х” ¤°ЂД°Ђ™НХ‰µҐС}Ґ№™ј°Ѓ™•№Ќ”¤м(ЂЂЂЃф(ЂЂЂЃҐЂЎНХ‰µҐС}Й•НХ±РЂ„фЃY-}MUML¤Ѓм(ЂЂЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃНХ‰µҐРЃ„ЃYХ±­…ёЃЌЅµµ…№ђЃ‰Х™™•И€¤м(ЂЂЂЂЂЃҐЂЎНХ‰µҐС}Й•НХ±РЂффЃY-}II=I}Y%}1=MPЂЂ…‘•ЩҐЌ•}±ЅНС|¤Ѓм(ЂЂЂЂЂЂЂЃ‘•ЩҐЌ•}±ЅНС|ЂфЃСЙХ”м(ЂЂЂЂЂЂЂЃҐЂЎќЙ…БЎҐЌН}НеНС•µ|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃќЙ…БЎҐЌН}НеНС•µ|ґщ=№!ЅНСБХ1ЅННЙЅµ№еQЎЙ•…ђЎСЙХ”¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЃф(ЂЂЂЃХҐ№РШС}РЃНХ‰µҐННҐЅ№}ЌХЙЙ•№РЂфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤м(ЂЂЂЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}НС…ќ•}µ…Н­Н|№Ќ±•…И ¤м(ЂЂЂЃ™ЅИЂЎY­M•µ…БЎЅЙ”ЃН•µ…БЎЅЙ”ЂиЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}Н•µ…БЎЅЙ•Н|¤Ѓм(ЂЂЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}Н•µ…БЎЅЙ•Н|№•µБ±…Ќ•}‰…Ќ¬ЎНХ‰µҐННҐЅ№}ЌХЙЙ•№Р°ЃН•µ…БЎЅЙ”¤м(ЂЂЂЃф(ЂЂЂЃЌХЙЙ•№С}НХ‰µҐННҐЅ№}Э…ҐС}Н•µ…БЎЅЙ•Н|№Ќ±•…И ¤м(ЂЂЂЃЌЅµµ…№‘}‰Х™™•ЙН}НХ‰µҐСС•‘|№•µБ±…Ќ•}‰…Ќ¬ЎНХ‰µҐННҐЅ№}ЌХЙЙ•№Р°ЃЌЅµµ…№‘}‰Х™™•И¤м(ЂЂЂЃЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№БЅБ}‰…Ќ¬ ¤м(ЂЂЂЂјјЃ%№ЌЙ•µ•№СМЃСЎ”ЃЌХЙЙ•№РЃНХ‰µҐННҐЅёЃ№Хµ‰•И°ЃќЅҐ№њЃСјЃСЎ”Ѓ№•бРЃНХ‰µҐННҐЅёё(ЂЂЂЃНХ‰µҐННҐЅ№Н}Ґ№}™±ҐќЎС}™•№Ќ•Н|№БХНЎ}‰…Ќ¬Ў™•№Ќ”¤м(ЂЂЂЃ™•№Ќ•Н}™Й••|№БЅБ}‰…Ќ¬ ¤м((ЂЂЂЃНХ‰µҐННҐЅ№}ЅБ•№|ЂфЃ™…±Н”м(ЂЃф((ЂЃҐЂЎҐН}Ќ±ЅНҐ№ќ}™Й…µ”¤Ѓм(ЂЂЂЃҐЂЎIaYI}PЎЌ±•…Й}µ•µЅЙе}Б…ќ•}НС…С”¤ЂЃНЎ…Й•‘}µ•µЅЙе|¤Ѓм(ЂЂЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщM•СMеНС•µA…ќ•	±ЅЌ­НY…±Ґ‘]ҐСЎБХ…С…]ЙҐСС•ё ¤м(ЂЂЂЃф(ЂЂЂЃ™Й…µ•}ЅБ•№|ЂфЃ™…±Н”м(ЂЂЂЂјјЃMХ‰µҐННҐЅёЃ…±Й•…‘дЃЌ±ЅН•ђЃ№ЅЬ°ЃНјЃµҐ№ХМЂДё(ЂЂЂЃЌ±ЅН•‘}™Й…µ•}НХ‰µҐННҐЅ№Н}lЎ™Й…µ•}ЌХЙЙ•№С|¬¬¤Ђ”Ѓ­5…бЙ…µ•Н%№±ҐќЎСtЂфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤ЂґЂДм((ЂЂЂЃҐЂЎЌ…ЌЎ•}Ќ±•…Й}Й•ЕХ•НС•‘|ЂЃЭ…ҐС±±EХ•Х•=Б•Й…СҐЅ№НЅµБ±•СҐЅё ¤¤Ѓм(ЂЂЂЂЂЃЌ…ЌЎ•}Ќ±•…Й}Й•ЕХ•НС•‘|ЂфЃ™…±Н”м((ЂЂЂЂЂЃ•НСЙЅеMЌЙ…СЌЎ	Х™™•И ¤м((ЂЂЂЂЂЃ™ЅИЂЎMЭ…БЙ…µ•‰Х™™•ИЃНЭ…Б}™Й…µ•‰Х™™•ИЂиЃНЭ…Б}™Й…µ•‰Х™™•ЙН|¤Ѓм(ЂЂЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅеЙ…µ•‰Х™™•И°Ѓ‘•ЩҐЌ”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЭ…Б}™Й…µ•‰Х™™•И№™Й…µ•‰Х™™•И¤м(ЂЂЂЂЂЃф((ЂЂЂЂЂЃ…НН•ЙС}СЙХ”ЎЌЅµµ…№‘}‰Х™™•ЙН}НХ‰µҐСС•‘|№•µБСд ¤¤м(ЂЂЂЂЂЃ™ЅИЂЎЌЅ№НРЃЅµµ…№‘	Х™™•ИЃЌЅµµ…№‘}‰Х™™•ИЂиЃЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|¤Ѓм(ЂЂЂЂЂЂЂЃ‘™ё№Щ­•НСЙЅеЅµµ…№‘AЅЅ°Ў‘•ЩҐЌ”°ЃЌЅµµ…№‘}‰Х™™•И№БЅЅ°°Ѓ№Х±±БСИ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЌЅµµ…№‘}‰Х™™•ЙН}ЭЙҐС…‰±•|№Ќ±•…И ¤м((ЂЂЂЂЂЃ±•…ЙQЙ…№НҐ•№С•НЌЙҐБСЅЙAЅЅ±М ¤м((ЂЂЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщ±•…Й…ЌЎ” ¤м((ЂЂЂЂЂЃС•бСХЙ•}Ќ…ЌЎ•|ґщ±•…Й…ЌЎ” ¤м((ЂЂЂЂЂЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ±•…Й…ЌЎ” ¤м((ЂЂЂЂЂЂјјЃ9ЅРЃЌ±•…ЙҐ№њЃСЎ”ЃБҐБ•±Ґ№”Ѓ±…еЅХСМЃ…№ђЃСЎ”Ѓ‘•НЌЙҐБСЅИЃН•РЃ±…еЅХСМЃ…М(ЂЂЂЂЂЂјјЃСЎ•дќЙ”ЃЙ•™•Й•№Ќ•ђЃ‰дЃБҐБ•±Ґ№•М°ЃЭЎҐЌ Ѓ…Й”Ѓ№ЅРЃ‘•НСЙЅе•ђё((ЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННЅЙ|ґщ±•…Й…ЌЎ” ¤м((ЂЂЂЂЂЃНЎ…Й•‘}µ•µЅЙе|ґщ±•…Й…ЌЎ” ¤м(ЂЂЂЃф(ЂЃф((ЂЃЙ•СХЙёЃСЙХ”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий±•…ЙQЙ…№НҐ•№С•НЌЙҐБСЅЙAЅЅ±М ¤Ѓм(ЂЃ±•…Й‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•С…ЌЎ” ¤м(ЂЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}™Й••|№Ќ±•…И ¤м(ЂЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}ХН•‘|№Ќ±•…И ¤м(ЂЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}…±±ЅЌ…СЅЙ}С•бСХЙ•Н|№I•Н•Р ¤м((ЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••|№Ќ±•…И ¤м(ЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№Ќ±•…И ¤м(ЂЃ™ЅИЂЎНСђийЩ•ЌСЅИсY­•НЌЙҐБСЅЙM•РшЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й•”Ђи(ЂЂЂЂЂЂЃНҐ№ќ±•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••|¤Ѓм(ЂЂЂЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й•”№Ќ±•…И ¤м(ЂЃф(ЂЃНҐ№ќ±•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№Ќ±•…И ¤м(ЂЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}…±±ЅЌ…СЅЙ}НСЅЙ…ќ•}‰Х™™•Й|№I•Н•Р ¤м(ЂЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}…±±ЅЌ…СЅЙ}Х№Ґ™ЅЙµ}‰Х™™•Й|№I•Н•Р ¤м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий±•…Й‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•С…ЌЎ” ¤Ѓм(ЂЃ™ЅИЂЎ‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•С…ЌЎ•№СЙдЃ•№СЙдЂиЃ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Ќ…ЌЎ•|¤Ѓм(ЂЂЂЃ•№СЙд№‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРЂфЃY-}9U11}!91м(ЂЂЂЃ•№СЙд№‘•НЌЙҐБСЅЙ}Н•РЂфЃY-}9U11}!91м(ЂЂЂЃ•№СЙд№С•бСХЙ•}Ґ№™ЅМ№Ќ±•…И ¤м(ЂЂЂЃ•№СЙд№Н…µБ±•Й}Ґ№™ЅМ№Ќ±•…И ¤м(ЂЂЂЃ•№СЙд№Щ…±ҐђЂфЃ™…±Н”м(ЂЃф)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийMБ±ҐСA•№‘Ґ№ќ	…ЙЙҐ•И ¤Ѓм(ЂЃНҐй•}РЃБ•№‘Ґ№ќ}‰Х™™•Й}µ•µЅЙе}‰…ЙЙҐ•Й}ЌЅХ№РЂфЃБ•№‘Ґ№ќ}‰…ЙЙҐ•ЙН}‰Х™™•Й}µ•µЅЙе}‰…ЙЙҐ•ЙН|№НҐй” ¤м(ЂЃНҐй•}РЃБ•№‘Ґ№ќ}Ґµ…ќ•}µ•µЅЙе}‰…ЙЙҐ•Й}ЌЅХ№РЂфЃБ•№‘Ґ№ќ}‰…ЙЙҐ•ЙН}Ґµ…ќ•}µ•µЅЙе}‰…ЙЙҐ•ЙН|№НҐй” ¤м(ЂЃҐЂ …ЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№НЙЌ}НС…ќ•}µ…Н¬ЂЂ…ЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№‘НС}НС…ќ•}µ…Н¬Ђ(ЂЂЂЂЂЃЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№‰Х™™•Й}µ•µЅЙе}‰…ЙЙҐ•ЙН}Ѕ™™Н•РЂшф(ЂЂЂЂЂЂЂЂЂЃБ•№‘Ґ№ќ}‰Х™™•Й}µ•µЅЙе}‰…ЙЙҐ•Й}ЌЅХ№РЂ(ЂЂЂЂЂЃЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№Ґµ…ќ•}µ•µЅЙе}‰…ЙЙҐ•ЙН}Ѕ™™Н•РЂшфЃБ•№‘Ґ№ќ}Ґµ…ќ•}µ•µЅЙе}‰…ЙЙҐ•Й}ЌЅХ№Р¤Ѓм(ЂЂЂЃЙ•СХЙём(ЂЃф(ЂЃБ•№‘Ґ№ќ}‰…ЙЙҐ•ЙН|№•µБ±…Ќ•}‰…Ќ¬ЎЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|¤м(ЂЃЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№НЙЌ}НС…ќ•}µ…Н¬ЂфЂАм(ЂЃЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№‘НС}НС…ќ•}µ…Н¬ЂфЂАм(ЂЃЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№‰Х™™•Й}µ•µЅЙе}‰…ЙЙҐ•ЙН}Ѕ™™Н•РЂфЃБ•№‘Ґ№ќ}‰Х™™•Й}µ•µЅЙе}‰…ЙЙҐ•Й}ЌЅХ№Рм(ЂЃЌХЙЙ•№С}Б•№‘Ґ№ќ}‰…ЙЙҐ•Й|№Ґµ…ќ•}µ•µЅЙе}‰…ЙЙҐ•ЙН}Ѕ™™Н•РЂфЃБ•№‘Ґ№ќ}Ґµ…ќ•}µ•µЅЙе}‰…ЙЙҐ•Й}ЌЅХ№Рм)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий•НСЙЅеMЌЙ…СЌЎ	Х™™•И ¤Ѓм(ЂЃ…НН•ЙС}™…±Н”ЎНЌЙ…СЌЎ}‰Х™™•Й}ХН•‘|¤м((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃНЌЙ…СЌЎ}‰Х™™•Й}±…НС}ХН…ќ•}НХ‰µҐННҐЅ№|ЂфЂАм(ЂЃНЌЙ…СЌЎ}‰Х™™•Й}±…НС}…ЌЌ•НН}µ…Н­|ЂфЂАм(ЂЃНЌЙ…СЌЎ}‰Х™™•Й}±…НС}НС…ќ•}µ…Н­|ЂфЂАм(ЂЃНЌЙ…СЌЎ}‰Х™™•Й}НҐй•|ЂфЂАм(ЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅе	Х™™•И°Ѓ‘•ЩҐЌ”°ЃНЌЙ…СЌЎ}‰Х™™•Й|¤м(ЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­Й••5•µЅЙд°Ѓ‘•ЩҐЌ”°ЃНЌЙ…СЌЎ}‰Х™™•Й}µ•µЅЙе|¤м)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий№НХЙ•MЭ…Бб……MЅХЙЌ•%µ…ќ”ЎХҐ№РМЙ}РЃЭҐ‘С °ЃХҐ№РМЙ}РЃЎ•ҐќЎР¤Ѓм(ЂЃ…НН•ЙС}СЙХ”ЎНХ‰µҐННҐЅ№}ЅБ•№|¤м(ЂЃҐЂ …ЭҐ‘С ЃсрЂ…Ў•ҐќЎР¤Ѓм(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф(ЂЃҐЂЎНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|Ђ„фЃY-}9U11}!91ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЭҐ‘СЎ|ЂффЃЭҐ‘С Ђ(ЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}Ў•ҐќЎС|ЂффЃЎ•ҐќЎР¤Ѓм(ЂЂЂЃЙ•СХЙёЃСЙХ”м(ЂЃф((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЃҐЂЎНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЃЌЅ№НРЃХҐ№РШС}РЃ‘•НСЙЅе}НХ‰µҐННҐЅёЂфЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}НХ‰µҐННҐЅ№|м(ЂЂЂЃЌЅ№НРЃХҐ№РШС}РЃ‘•™•ЙЙ•‘}‘•НСЙЅе}НХ‰µҐННҐЅёЂфЃ•СХЙЙ•№СMХ‰µҐННҐЅё ¤м(ЂЂЂЃҐЂЎНХ‰µҐННҐЅ№}ЌЅµБ±•С•‘|ЂшфЃ‘•НСЙЅе}НХ‰µҐННҐЅё¤Ѓм(ЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅе%µ…ќ•YҐ•Ь°Ѓ‘•ЩҐЌ”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЩҐ•Э|¤м(ЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅе%µ…ќ”°Ѓ‘•ЩҐЌ”°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|¤м(ЂЂЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­Й••5•µЅЙд°Ѓ‘•ЩҐЌ”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|¤м(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЃҐЂЎНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЩҐ•Э|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘•НСЙЅе}Ґµ…ќ•}ЩҐ•ЭН|№•µБ±…Ќ•}‰…Ќ¬Ў‘•™•ЙЙ•‘}‘•НСЙЅе}НХ‰µҐННҐЅё°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЩҐ•Э|¤м(ЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЩҐ•Э|ЂфЃY-}9U11}!91м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘•НСЙЅе}Ґµ…ќ•Н|№•µБ±…Ќ•}‰…Ќ¬Ў‘•™•ЙЙ•‘}‘•НСЙЅе}НХ‰µҐННҐЅё°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|¤м(ЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|ЂфЃY-}9U11}!91м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|Ђ„фЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃ‘•НСЙЅе}µ•µЅЙе|№•µБ±…Ќ•}‰…Ќ¬Ў‘•™•ЙЙ•‘}‘•НСЙЅе}НХ‰µҐННҐЅё°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|¤м(ЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|ЂфЃY-}9U11}!91м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЭҐ‘СЎ|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}Ў•ҐќЎС|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}НХ‰µҐННҐЅ№|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}НС…ќ•}µ…Н­|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}…ЌЌ•НН}µ…Н­|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}±…еЅХС|ЂфЃY-}%5}1e=UQ}U9%9м((ЂЃY­%µ…ќ•Й•…С•%№™јЃҐµ…ќ•}ЌЙ•…С•}Ґ№™јм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}%5}IQ}%9<м(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№™±…ќМЂфЂАм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№Ґµ…ќ•QеБ”ЂфЃY-}%5}QeA|Йм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№™ЅЙµ…РЂфЃY-}=I5Q}HДЩДЩДЩДЩ}M1=Pм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№•бС•№Р№ЭҐ‘С ЂфЃЭҐ‘С м(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№•бС•№Р№Ў•ҐќЎРЂфЃЎ•ҐќЎРм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№•бС•№Р№‘•БС ЂфЂДм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№µҐБ1•Щ•±МЂфЂДм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№…ЙЙ…е1…е•ЙМЂфЂДм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№Н…µБ±•МЂфЃY-}M5A1}=U9Q|Е}	%Pм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№СҐ±Ґ№њЂфЃY-}%5}Q%1%9}=AQ%50м(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№ХН…ќ”ЂфЃY-}%5}UM}M5A1}	%PЃрЃY-}%5}UM}MQ=I}	%Pм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№НЎ…ЙҐ№ќ5Ѕ‘”ЂфЃY-}M!I%9}5=}a1UM%Yм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№ЕХ•Х•…µҐ±е%№‘•бЅХ№РЂфЂАм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№БEХ•Х•…µҐ±е%№‘ҐЌ•МЂфЃ№Х±±БСИм(ЂЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№Ґ№ҐСҐ…±1…еЅХРЂфЃY-}%5}1e=UQ}U9%9м(ЂЃҐЂ …Х¤ийЩХ±­…ёийХСҐ°ийЙ•…С••‘ҐЌ…С•‘±±ЅЌ…СҐЅ№%µ…ќ” (ЂЂЂЂЂЂЂЂЂЃЩХ±­…№}‘•ЩҐЌ”°ЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј°ЃХ¤ийЩХ±­…ёийХСҐ°ий5•µЅЙеAХЙБЅН”ий­•ЩҐЌ•1ЅЌ…°°(ЂЂЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|¤¤Ѓм(ЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”ЃСЎ”ЃaЃНЅХЙЌ”ЃҐµ…ќ”€¤м(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃY­%µ…ќ•YҐ•ЭЙ•…С•%№™јЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™јм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№НQеБ”ЂфЃY-}MQIUQUI}QeA}%5}Y%]}IQ}%9<м(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№Б9•бРЂфЃ№Х±±БСИм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№™±…ќМЂфЂАм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№Ґµ…ќ”ЂфЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|м(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№ЩҐ•ЭQеБ”ЂфЃY-}%5}Y%]}QeA|Йм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№™ЅЙµ…РЂфЃҐµ…ќ•}ЌЙ•…С•}Ґ№™ј№™ЅЙµ…Рм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№ЌЅµБЅ№•№СМ№ИЂфЃY-}=5A=99Q}M]%ii1}%9Q%Qdм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№ЌЅµБЅ№•№СМ№њЂфЃY-}=5A=99Q}M]%ii1}%9Q%Qdм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№ЌЅµБЅ№•№СМ№€ЂфЃY-}=5A=99Q}M]%ii1}%9Q%Qdм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№ЌЅµБЅ№•№СМ№„ЂфЃY-}=5A=99Q}M]%ii1}%9Q%Qdм(ЂЃҐµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј№НХ‰Й•НЅХЙЌ•I…№ќ”ЂфЃХ¤ийЩХ±­…ёийХСҐ°ий%№ҐСҐ…±Ґй•MХ‰Й•НЅХЙЌ•I…№ќ” ¤м(ЂЃҐЂЎ‘™ё№Щ­Й•…С•%µ…ќ•YҐ•ЬЎ‘•ЩҐЌ”°Ђ™Ґµ…ќ•}ЩҐ•Э}ЌЙ•…С•}Ґ№™ј°Ѓ№Х±±БСИ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™НЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЩҐ•Э|¤Ђ„фЃY-}MUML¤Ѓм(ЂЂЂЃIaAU}II=H ‰…Ґ±•ђЃСјЃЌЙ•…С”ЃСЎ”ЃaЃНЅХЙЌ”ЃҐµ…ќ”ЃЩҐ•Ь€¤м(ЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅе%µ…ќ”°Ѓ‘•ЩҐЌ”°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|¤м(ЂЂЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­Й••5•µЅЙд°Ѓ‘•ЩҐЌ”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|¤м(ЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЃф((ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЭҐ‘СЎ|ЂфЃЭҐ‘С м(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}Ў•ҐќЎС|ЂфЃЎ•ҐќЎРм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}НХ‰µҐННҐЅ№|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}НС…ќ•}µ…Н­|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}…ЌЌ•НН}µ…Н­|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}±…еЅХС|ЂфЃY-}%5}1e=UQ}U9%9м(ЂЃЙ•СХЙёЃСЙХ”м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий•НСЙЅеMЭ…Бб……MЅХЙЌ•%µ…ќ” ¤Ѓм(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м(ЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅе%µ…ќ•YҐ•Ь°Ѓ‘•ЩҐЌ”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЩҐ•Э|¤м(ЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­•НСЙЅе%µ…ќ”°Ѓ‘•ЩҐЌ”°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•|¤м(ЂЃХ¤ийЩХ±­…ёийХСҐ°ий•НСЙЅе№‘9Х±±!…№‘±”Ў‘™ё№Щ­Й••5•µЅЙд°Ѓ‘•ЩҐЌ”°ЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}µ•µЅЙе|¤м(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}ЭҐ‘СЎ|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}Ў•ҐќЎС|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}Ґµ…ќ•}НХ‰µҐННҐЅ№|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}НС…ќ•}µ…Н­|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}…ЌЌ•НН}µ…Н­|ЂфЂАм(ЂЃНЭ…Б}™б……}НЅХЙЌ•}±…еЅХС|ЂфЃY-}%5}1e=UQ}U9%9м)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийUБ‘…С•е№…µҐЌMС…С”ЎЌЅ№НРЃ‘Й…Э}ХСҐ°ийYҐ•ЭБЅЙС%№™јЃЩҐ•ЭБЅЙС}Ґ№™ј°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‰ЅЅ°ЃБЙҐµҐСҐЩ•}БЅ±еќЅ№…°°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•њийI	}AQ!=9QI=0Ѓ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°¤Ѓм(ЌҐЃa}AU}%9}I%9}I]}M=AL(ЂЃM=A}БЙЅ™Ґ±•}ЌБХ} ‰ќБФ€¤м(Ќ•№‘ҐЂЂјјЃa}AU}%9}I%9}I]}M=AL((ЂЃЌЅ№НРЃI•ќҐНС•ЙҐ±”ЃЙ•ќМЂфЂ©Й•ќҐНС•Й}™Ґ±•|м(ЂЃХҐ№РМЙ}РЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}аЂфЃС•бСХЙ•}Ќ…ЌЎ•|ЂьЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а ¤ЂиЂДм(ЂЃХҐ№РМЙ}РЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}дЂфЃС•бСХЙ•}Ќ…ЌЎ•|ЂьЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д ¤ЂиЂДм((ЂЂјјЃ]Ґ№‘ЅЬЃБ…Й…µ•С•ЙМё(ЂЂјјЃЎССАијЅ™СА№С­Ф№•‘Ф№СЬЅ9•С	MЅ9•С	MµЌХЙЙ•№РЅбНЙЊЅ•бС•Й№…°ЅµҐРЅбаШµЩҐ‘•јµ…С¤Ѕ‘ҐНРЅНЙЊЅИШАБ}Й•ќ}…ХСЅ}ИЩба№ (ЂЂјјЃM•”ЃИИАБUБ‘…С•]Ґ№‘ЅЬи(ЂЂјјЃЎССБМијЅќҐСЎХ€№ЌЅґЅ™Й••‘Й•№јЅµ•Н„Ѕ‰±Ѕ€Ѕµ…НС•ИЅНЙЊЅµ•Н„Ѕ‘ЙҐЩ•ЙМЅ‘Й¤ЅИИААЅИИАБ}НС…С”№Њ(ЂЃ…ХСјЃБ…}НЌ}ЭҐ№‘ЅЭ}Ѕ™™Н•РЂфЃЙ•ќМ№•РсЙ•њийA}M}]%9=]}=MPш ¤м((ЂЂјјЃYҐ•ЭБЅЙРё(ЂЃY­YҐ•ЭБЅЙРЃЩҐ•ЭБЅЙРм(ЂЃҐЂЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СlБtЂЃЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СlЕt¤Ѓм(ЂЂЂЃЩҐ•ЭБЅЙР№аЂфЃ™±Ѕ…РЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}Ѕ™™Н•СlБt¤м(ЂЂЂЃЩҐ•ЭБЅЙР№дЂфЃ™±Ѕ…РЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}Ѕ™™Н•СlЕt¤м(ЂЂЂЃЩҐ•ЭБЅЙР№ЭҐ‘С ЂфЃ™±Ѕ…РЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СlБt¤м(ЂЂЂЃЩҐ•ЭБЅЙР№Ў•ҐќЎРЂфЃ™±Ѕ…РЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СlЕt¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЂјјЃYХ±­…ёЃЩҐ•ЭБЅЙРЃЭҐ‘С ЃµХНРЃ‰”ЃќЙ•…С•ИЃСЎ…ёЂАёБ°Ѓ‰ХРЃСЎ”Ѓa•№Ґ„ЂЃЩҐ•ЭБЅЙР(ЂЂЂЂјјЃµ…дЃ‰”Ѓ•µБСдЃ™ЅИЃЩ…ЙҐЅХМЃЙ•…НЅ№МЂґЃН•РЃСЎ”ЃЩҐ•ЭБЅЙРЃСјЃЅХСНҐ‘”ЃСЎ”(ЂЂЂЂјјЃ™Й…µ•‰Х™™•Иё(ЂЂЂЃЩҐ•ЭБЅЙР№аЂфЂґДёБм(ЂЂЂЃЩҐ•ЭБЅЙР№дЂфЂґДёБм(ЂЂЂЃЩҐ•ЭБЅЙР№ЭҐ‘С ЂфЂДёБм(ЂЂЂЃЩҐ•ЭБЅЙР№Ў•ҐќЎРЂфЂДёБм(ЂЃф(ЂЃЩҐ•ЭБЅЙР№µҐ№•БС ЂфЃЩҐ•ЭБЅЙС}Ґ№™ј№й}µҐём(ЂЃЩҐ•ЭБЅЙР№µ…б•БС ЂфЃЩҐ•ЭБЅЙС}Ґ№™ј№й}µ…ам(ЂЃM•СYҐ•ЭБЅЙРЎЩҐ•ЭБЅЙР¤м((ЂЂјјЃMЌҐННЅИё(ЂЃ‘Й…Э}ХСҐ°ийMЌҐННЅИЃНЌҐННЅИм(ЂЃ‘Й…Э}ХСҐ°ий•СMЌҐННЅИЎЙ•ќМ°ЃНЌҐННЅИ¤м(ЂЃНЌҐННЅИ№Ѕ™™Н•СlБtЂЁфЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}ам(ЂЃНЌҐННЅИ№Ѕ™™Н•СlЕtЂЁфЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}дм(ЂЃНЌҐННЅИ№•бС•№СlБtЂЁфЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}ам(ЂЃНЌҐННЅИ№•бС•№СlЕtЂЁфЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}дм(ЂЃY­I•ЌРЙЃНЌҐННЅЙ}Й•ЌРм(ЂЃНЌҐННЅЙ}Й•ЌР№Ѕ™™Н•Р№аЂфЃҐ№РМЙ}РЎНЌҐННЅИ№Ѕ™™Н•СlБt¤м(ЂЃНЌҐННЅЙ}Й•ЌР№Ѕ™™Н•Р№дЂфЃҐ№РМЙ}РЎНЌҐННЅИ№Ѕ™™Н•СlЕt¤м(ЂЃНЌҐННЅЙ}Й•ЌР№•бС•№Р№ЭҐ‘С ЂфЃНЌҐННЅИ№•бС•№СlБtм(ЂЃНЌҐННЅЙ}Й•ЌР№•бС•№Р№Ў•ҐќЎРЂфЃНЌҐННЅИ№•бС•№СlЕtм(ЂЃM•СMЌҐННЅИЎНЌҐННЅЙ}Й•ЌР¤м((ЂЃҐЂЎЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ•СA…С  ¤ЂффЃI•№‘•ЙQ…Йќ•С…ЌЎ”ийA…С ий­!ЅНСI•№‘•ЙQ…Йќ•СМ¤Ѓм(ЂЂЂЂјјЃ•БС Ѓ‰Ґ…Мё(ЂЂЂЃ™±Ѕ…РЃ‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅИ°Ѓ‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅИм(ЂЂЂЃ‘Й…Э}ХСҐ°ий•СAЙ•™•ЙЙ•‘…Ќ•AЅ±еќЅ№=™™Н•РЎЙ•ќМ°ЃБЙҐµҐСҐЩ•}БЅ±еќЅ№…°°Ѓ‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅИ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅИ¤м(ЂЂЂЃ‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅИЂЁф(ЂЂЂЂЂЂЂЃЙ•ќМ№•РсЙ•њийI	}AQ!}%9<ш ¤№‘•БСЎ}™ЅЙµ…РЂффЃб•№ЅМий•БСЎI•№‘•ЙQ…Йќ•СЅЙµ…Рий­ИСLа(ЂЂЂЂЂЂЂЂЂЂЂЂьЃ‘Й…Э}ХСҐ°ий­НДБAЅ±еќЅ№=™™Н•С…ЌСЅЙU№ЅЙґИР(ЂЂЂЂЂЂЂЂЂЂЂЂиЃ‘Й…Э}ХСҐ°ий­НДБAЅ±еќЅ№=™™Н•С…ЌСЅЙ±Ѕ…РИРм(ЂЂЂЂјјЃ]ҐС Ѓ№ЅёµНЕХ…Й”ЃЙ•НЅ±ХСҐЅёЃНЌ…±Ґ№њ°Ѓµ…­”ЃНХЙ”ЃСЎ”ЃЭЅЙНРµЌ…Н”ЃҐµБ…ЌРЃҐМ(ЂЂЂЂјјЃЙ•Щ•ЙС•ђЂЎН±ЅБ”ЃЅ№±дЃ…±Ѕ№њЃСЎ”ЃНЌ…±•ђЃ…бҐМ¤°ЃСЎХМЃµ…аёЃ5ЅЙ”Ѓ‰Ґ…МЃҐМ(ЂЂЂЂјјЃ‰•СС•ИЃСЎ…ёЃ±•НМЃ‰Ґ…М°Ѓ‰•Ќ…ХН”Ѓ±•НМЃ‰Ґ…МЃµ•…№МЃhЃ™ҐќЎСҐ№њЃЭҐС ЃСЎ”(ЂЂЂЂјјЃ‰…Ќ­ќЙЅХ№ђЃҐМЃµЅЙ”Ѓ±Ґ­•±дё(ЂЂЂЃ‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅИЂЁфЃб•№ЅМий­AЅ±еќЅ№=™™Н•СMЌ…±•MХ‰БҐб•±U№ҐРЂЁ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ™±Ѕ…РЎНСђийµ…аЎ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а°Ѓ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д¤¤м(ЂЂЂЂјјЃНСђийµ•µЌµАЃҐ№НС•…ђЃЅЂ„фЃНјЃҐёЃЌ…Н”ЃЅЃ9…8°Ѓ•Щ•ЙдЃ‘Й…ЬЃЭЅёќРЃ‰”(ЂЂЂЂјјЃҐ№Щ…±Ґ‘…СҐ№њЃҐРё(ЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЃНСђийµ•µЌµА ™‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅЙ|°Ђ™‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅИ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎ™±Ѕ…Р¤¤Ђ„фЂАм(ЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ХБ‘…С•}№••‘•‘|ЃрфЃНСђийµ•µЌµА ™‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅЙ|°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅИ°ЃНҐй•ЅЎ™±Ѕ…Р¤¤Ђ„фЂАм(ЂЂЂЃҐЂЎ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅЙ|ЂфЃ‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅИм(ЂЂЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅЙ|ЂфЃ‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅИм(ЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•С•БСЎ	Ґ…МЎ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ЌЅ№НС…№С}™…ЌСЅЙ|°ЂАёБ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}Н±ЅБ•}™…ЌСЅЙ|¤м(ЂЂЂЂЂЃ‘е№…µҐЌ}‘•БСЎ}‰Ґ…Н}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЂјјЃ	±•№ђЃЌЅ№НС…№СМё(ЂЂЂЃ™±Ѕ…РЃ‰±•№‘}ЌЅ№НС…№СНmtЂфЃм(ЂЂЂЂЂЂЂЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}I¤°(ЂЂЂЂЂЂЂЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}I8¤°(ЂЂЂЂЂЂЂЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}	1U¤°(ЂЂЂЂЂЂЂЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}1A!¤°(ЂЂЂЃфм(ЂЂЂЃ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЃНСђийµ•µЌµАЎ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН|°Ѓ‰±•№‘}ЌЅ№НС…№СМ°ЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂР¤Ђ„фЂАм(ЂЂЂЃҐЂЎ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЃНСђийµ•µЌБдЎ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН|°Ѓ‰±•№‘}ЌЅ№НС…№СМ°ЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂР¤м(ЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•С	±•№‘Ѕ№НС…№СМЎ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН|¤м(ЂЂЂЂЂЃ‘е№…µҐЌ}‰±•№‘}ЌЅ№НС…№СН}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЃф((ЂЂЂЂјјЃMС•№ЌҐ°Ѓµ…Н­МЃ…№ђЃЙ•™•Й•№Ќ•Мё(ЂЂЂЂјјЃХ”ЃСјЃБЙ•ССдЃЌЅµБ±•аЃЌЅ№‘ҐСҐЅ№МЃҐ№ЩЅ±ЩҐ№њЃЙ•ќҐНС•ЙМЃ№ЅРЃ‘ҐЙ•ЌС±дЃЙ•±…С•ђ(ЂЂЂЂјјЃСјЃНС•№ЌҐ°ЂЎБЙҐµҐСҐЩ”ЃСеБ”°ЃЌХ±±Ґ№њ¤°ЃЌЎ…№ќҐ№њЃСЎ”ЃЩ…±Х•МЃЅ№±дЃЭЎ•ё(ЂЂЂЂјјЃНС•№ЌҐ°ЃҐМЃ…ЌСХ…±±дЃ№••‘•ђёЃ!ЅЭ•Щ•И°Ѓ‘Х”ЃСјЃСЎ”ЃЭ…дЃ‘е№…µҐЊЃНС…С”Ѓ№••‘М(ЂЂЂЂјјЃСјЃ‰”ЃН•РЃҐёЃYХ±­…ё°ЃЭЎҐЌ Ѓ‘Ѕ•НёќРЃС…­”ЃҐ№СјЃ…ЌЌЅХ№РЃЭЎ•СЎ•ИЃСЎ”ЃНС…С”(ЂЂЂЂјјЃ…ЌСХ…±±дЃЎ…МЃ•™™•ЌРЃЅёЃ‘Й…ЭҐ№њ°Ѓ…№ђЃ‰•Ќ…ХН”ЃСЎ”Ѓµ…Н­МЃ…№ђЃСЎ”ЃЙ•™•Й•№Ќ•М(ЂЂЂЂјјЃ…Й”Ѓ…±Э…еМЃ‘е№…µҐЊЃҐёЃa•№Ґ„ЃќХ•НРЃБҐБ•±Ґ№•М°ЃСЎ•дЃµХНРЃ‰”ЃН•РЃҐёЃСЎ”(ЂЂЂЂјјЃЌЅµµ…№ђЃ‰Х™™•ИЃ‰•™ЅЙ”Ѓ…№дЃ‘Й…Ьё(ЂЂЂЃҐЂЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№НС•№ЌҐ±}•№…‰±”¤Ѓм(ЂЂЂЂЂЃI•ќҐНС•ИЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№С}Й•њ°ЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ­}Й•њм(ЂЂЂЂЂЃҐЂЎБЙҐµҐСҐЩ•}БЅ±еќЅ№…°ЂЃ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№‰…Ќ­™…Ќ•}•№…‰±”¤Ѓм(ЂЂЂЂЂЂЂЃҐЂЎ•СYХ±­…№•ЩҐЌ” ¤ґщБЙЅБ•ЙСҐ•М ¤№Н•Б…Й…С•MС•№ЌҐ±5…Н­I•¤Ѓм(ЂЂЂЂЂЂЂЂЂЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№С}Й•њЂфЃa}AU}I}I	}MQ9%1I5M,м(ЂЂЂЂЂЂЂЂЂЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ­}Й•њЂфЃa}AU}I}I	}MQ9%1I5M-}	м(ЂЂЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЂЂЂјјЃЎЅЅН”ЃСЎ”Ѓ‰…Ќ¬Ѓ™…Ќ”ЃЩ…±Х•МЃЅ№±дЃҐЃ‘Й…ЭҐ№њЃЅ№±дЃ‰…Ќ¬Ѓ™…Ќ•Мё(ЂЂЂЂЂЂЂЂЂЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№С}Й•њЂфЃЙ•ќМ№•РсЙ•њийA}MU}M}5=}9Q0ш ¤№ЌХ±±}™ЙЅ№Р(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЃa}AU}I}I	}MQ9%1I5M-}	(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃa}AU}I}I	}MQ9%1I5M,м(ЂЂЂЂЂЂЂЂЂЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ­}Й•њЂфЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№С}Й•њм(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№С}Й•њЂфЃa}AU}I}I	}MQ9%1I5M,м(ЂЂЂЂЂЂЂЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ­}Й•њЂфЃa}AU}I}I	}MQ9%1I5M,м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ…ХСјЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№РЂфЃЙ•ќМ№•РсЙ•њийI	}MQ9%1I5M,шЎНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№С}Й•њ¤м(ЂЂЂЂЂЃ…ХСјЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬ЂфЃЙ•ќМ№•РсЙ•њийI	}MQ9%1I5M,шЎНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ­}Й•њ¤м(ЂЂЂЂЂЂјјЃЅµБ…Й”Ѓµ…Н¬ё(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С|Ђ„фЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№Р№НС•№ЌҐ±µ…Н¬м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С|ЂфЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№Р№НС•№ЌҐ±µ…Н¬м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­|Ђ„фЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬№НС•№ЌҐ±µ…Н¬м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­|ЂфЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬№НС•№ЌҐ±µ…Н¬м(ЂЂЂЂЂЂјјЃ]ЙҐС”Ѓµ…Н¬ё(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С|Ђ„фЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№Р№НС•№ЌҐ±ЭЙҐС•µ…Н¬м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С|ЂфЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№Р№НС•№ЌҐ±ЭЙҐС•µ…Н¬м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­|Ђ„фЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬№НС•№ЌҐ±ЭЙҐС•µ…Н¬м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­|ЂфЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬№НС•№ЌҐ±ЭЙҐС•µ…Н¬м(ЂЂЂЂЂЂјјЃI•™•Й•№Ќ”ё(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С|Ђ„фЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№Р№НС•№ЌҐ±Й•м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С|ЂфЃНС•№ЌҐ±}Й•™}µ…Н­}™ЙЅ№Р№НС•№ЌҐ±Й•м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­}ХБ‘…С•}№••‘•‘|Ѓрф(ЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­|Ђ„фЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬№НС•№ЌҐ±Й•м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­|ЂфЃНС•№ЌҐ±}Й•™}µ…Н­}‰…Ќ¬№НС•№ЌҐ±Й•м(ЂЂЂЃф(ЂЂЂЂјјЃUНҐ№њЃY-}MQ9%1}}I=9Q}9}	,Ѓ™ЅИЃЎҐќЎ•ИЃН…™•СдЃЭЎ•ёЃЙХ№№Ґ№њЃЅё(ЂЂЂЂјјЃСЎ”ЃYХ±­…ёЃБЅЙС…‰Ґ±ҐСдЃНХ‰Н•РЃЭҐСЎЅХРЃН•Б…Й…С•MС•№ЌҐ±5…Н­I•ё(ЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|Ѓср(ЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С|ЂффЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­|¤Ѓм(ЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±ЅµБ…Й•5…Н¬ЎY-}MQ9%1}}I=9Q}9}	,°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С|¤м(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±ЅµБ…Й•5…Н¬ЎY-}MQ9%1}}I=9Q}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С|¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±ЅµБ…Й•5…Н¬ЎY-}MQ9%1}}	-}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­|¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЌЅµБ…Й•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЃф(ЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|Ѓср(ЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С|ЂффЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­|¤Ѓм(ЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±]ЙҐС•5…Н¬ЎY-}MQ9%1}}I=9Q}9}	,°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С|¤м(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±]ЙҐС•5…Н¬ЎY-}MQ9%1}}I=9Q}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С|¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±]ЙҐС•5…Н¬ЎY-}MQ9%1}}	-}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­|¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}™ЙЅ№С}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}ЭЙҐС•}µ…Н­}‰…Ќ­}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЃф(ЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С}ХБ‘…С•}№••‘•‘|Ѓср(ЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С|ЂффЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­|¤Ѓм(ЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±I•™•Й•№Ќ”ЎY-}MQ9%1}}I=9Q}9}	,°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С|¤м(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±I•™•Й•№Ќ”ЎY-}MQ9%1}}I=9Q}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С|¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЂЂЃҐЂЎ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­}ХБ‘…С•}№••‘•‘|¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­M•СMС•№ЌҐ±I•™•Й•№Ќ”ЎY-}MQ9%1}}	-}	%P°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­|¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}™ЙЅ№С}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЂЂЃ‘е№…µҐЌ}НС•№ЌҐ±}Й•™•Й•№Ќ•}‰…Ќ­}ХБ‘…С•}№••‘•‘|ЂфЃ™…±Н”м(ЂЂЂЃф(ЂЃф((ЂЂјјЃQ=<ЎQЙҐ…№њН°¤иЃY-}aQ}•бС•№‘•‘}‘е№…µҐЌ}НС…С”Ѓ…№ђ(ЂЂјјЃY-}aQ}•бС•№‘•‘}‘е№…µҐЌ}НС…С”Иё)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийUБ‘…С•MеНС•µЅ№НС…№СY…±Х•М (ЂЂЂЃ‰ЅЅ°ЃБЙҐµҐСҐЩ•}БЅ±еќЅ№…°°(ЂЂЂЃЌЅ№НРЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•ННҐ№ќI•НХ±РЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р°(ЂЂЂЃ‰ЅЅ°ЃНЎ…‘•Й|МЙ‰ҐС}Ґ№‘•б}‘µ„°ЃХҐ№РМЙ}РЃЌЅµБХС•}µ•µ•бБЅЙС}Щ•ЙС•б}ЌЅХ№Р°(ЂЂЂЃЌЅ№НРЃ‘Й…Э}ХСҐ°ийYҐ•ЭБЅЙС%№™јЃЩҐ•ЭБЅЙС}Ґ№™ј°ЃХҐ№РМЙ}РЃХН•‘}С•бСХЙ•}µ…Н¬°(ЂЂЂЃЙ•њийI	}AQ!=9QI=0Ѓ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°°ЃХҐ№РМЙ}РЃ№ЅЙµ…±Ґй•‘}ЌЅ±ЅЙ}µ…Н¬¤Ѓм(ЌҐЃa}AU}%9}I%9}I]}M=AL(ЂЃM=A}БЙЅ™Ґ±•}ЌБХ} ‰ќБФ€¤м(Ќ•№‘ҐЂЂјјЃa}AU}%9}I%9}I]}M=AL((ЂЃЌЅ№НРЃI•ќҐНС•ЙҐ±”ЃЙ•ќМЂфЂ©Й•ќҐНС•Й}™Ґ±•|м(ЂЃ…ХСјЃБ…}Ќ±}Ќ±ҐБ}Ќ№С°ЂфЃЙ•ќМ№•РсЙ•њийA}1}1%A}9Q0ш ¤м(ЂЃ…ХСјЃБ…}Ќ±}ЩС•}Ќ№С°ЂфЃЙ•ќМ№•РсЙ•њийA}1}YQ}9Q0ш ¤м(ЂЃ…ХСјЃБ…}НХ}НЌ}µЅ‘•}Ќ№С°ЂфЃЙ•ќМ№•РсЙ•њийA}MU}M}5=}9Q0ш ¤м(ЂЃ…ХСјЃЙ‰}…±БЎ…}Й•ЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}1A!}I¤м(ЂЃ…ХСјЃЙ‰}ЌЅ±ЅЙЌЅ№СЙЅ°ЂфЃЙ•ќМ№•РсЙ•њийI	}=1=I=9QI=0ш ¤м(ЂЃ…ХСјЃЙ‰}‘•БСЎ}Ґ№™јЂфЃЙ•ќМ№•РсЙ•њийI	}AQ!}%9<ш ¤м(ЂЃ…ХСјЃЙ‰}НС•№ЌҐ±Й•™µ…Н¬ЂфЃЙ•ќМ№•РсЙ•њийI	}MQ9%1I5M,ш ¤м(ЂЃ…ХСјЃЙ‰}НС•№ЌҐ±Й•™µ…Н­}‰ЂфЃЙ•ќМ№•РсЙ•њийI	}MQ9%1I5M,шЎa}AU}I}I	}MQ9%1I5M-}	¤м(ЂЃ…ХСјЃЙ‰}НХЙ™…Ќ•}Ґ№™јЂфЃЙ•ќМ№•РсЙ•њийI	}MUI}%9<ш ¤м(ЂЃ…ХСјЃЩќС}‘µ…}НҐй”ЂфЃЙ•ќМ№•РсЙ•њийYQ}5}M%iш ¤м(ЂЃ…ХСјЃЩќС}‘Й…Э}Ґ№ҐСҐ…СЅИЂфЃЙ•ќМ№•РсЙ•њийYQ}I]}%9%Q%Q=Hш ¤м(ЂЃ…ХСјЃЩќС}Ґ№‘б}Ѕ™™Н•РЂфЃЙ•ќМ№•РсҐ№РМЙ}РшЎa}AU}I}YQ}%9a}=MP¤м(ЂЃ…ХСјЃЩќС}µ…б}ЩСб}Ґ№‘аЂфЃЙ•ќМ№•РсХҐ№РМЙ}РшЎa}AU}I}YQ}5a}YQa}%9`¤м(ЂЃ…ХСјЃЩќС}µҐ№}ЩСб}Ґ№‘аЂфЃЙ•ќМ№•РсХҐ№РМЙ}РшЎa}AU}I}YQ}5%9}YQa}%9`¤м((ЂЃ‰ЅЅ°Ѓ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬Ђф(ЂЂЂЂЂЃЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ•СA…С  ¤ЂффЃI•№‘•ЙQ…Йќ•С…ЌЎ”ийA…С ий­AҐб•±MЎ…‘•Й%№С•Й±ЅЌ¬м(ЂЃХҐ№РМЙ}РЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}аЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а ¤м(ЂЃХҐ№РМЙ}РЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}дЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д ¤м((ЂЂјјЃ•РЃСЎ”ЃЌЅ±ЅИЃҐ№™јЃЙ•ќҐНС•ИЃЩ…±Х•МЃ™ЅИЃ•…Ќ ЃЙ•№‘•ИЃС…Йќ•РёЃ±Нј°Ѓ™ЅИЃM$°(ЂЂјјЃ•бЌ±Х‘”ЃЌЅµБЅ№•№СМЃСЎ…РЃ‘ЅёќРЃ•бҐНРЃҐёЃСЎ”Ѓ™ЅЙµ…РЃ™ЙЅґЃСЎ”ЃЭЙҐС”Ѓµ…Н¬ё(ЂЂјјЃЅёќРЃ•бЌ±Х‘”Ѓ™Х±±дЃЅЩ•Й±…ББҐ№њЃЙ•№‘•ИЃС…Йќ•СМ°ЃЎЅЭ•Щ•ИЂґЃСЭјЃЙ•№‘•И(ЂЂјјЃС…Йќ•СМЃЭҐС ЃСЎ”ЃН…µ”Ѓ‰…Н”Ѓ…‘‘Й•НМЃ…Й”ЃХН•ђЃҐёЃСЎ”Ѓ±ҐќЎСҐ№њЃБ…НМЃЅ(ЂЂјјЂСФМАЭШ°Ѓ™ЅИЃ•б…µБ±”°ЃЭҐС ЃСЎ”Ѓ№••‘•ђЃЅ№”ЃБҐЌ­•ђЃЭҐС Ѓ‘е№…µҐЊЃЌЅ№СЙЅ°(ЂЂјјЃ™±ЅЬё(ЂЃЙ•њийI	}=1=I}%9<ЃЌЅ±ЅЙ}Ґ№™ЅНmб•№ЅМий­5…бЅ±ЅЙI•№‘•ЙQ…Йќ•СНtм(ЂЃ™±Ѕ…РЃЙС}Ќ±…µБlСulСtм(ЂЂјјЃQЭјЃU%9PМЙ}5`ЃҐЃ№јЃЌЅµБЅ№•№СМЃ…ЌСХ…±±дЃ•бҐНСҐ№њЃҐёЃСЎ”ЃIPЃ…Й”ЃЭЙҐСС•ёё(ЂЃХҐ№РМЙ}РЃЙС}­••Б}µ…Н­НlСulЙtм(ЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЃб•№ЅМий­5…бЅ±ЅЙI•№‘•ЙQ…Йќ•СМмЂ¬­¤¤Ѓм(ЂЂЂЃ…ХСјЃЌЅ±ЅЙ}Ґ№™јЂфЃЙ•ќМ№•РсЙ•њийI	}=1=I}%9<шЎЙ•њийI	}=1=I}%9<ийЙС}Й•ќҐНС•Й}Ґ№‘ҐЌ•НmҐt¤м(ЂЂЂЃЌЅ±ЅЙ}Ґ№™ЅНmҐtЂфЃЌЅ±ЅЙ}Ґ№™јм(ЂЂЂЃҐЂЎ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬¤Ѓм(ЂЂЂЂЂЃI•№‘•ЙQ…Йќ•С…ЌЎ”ий•СAM%Ѕ±ЅЙЅЙµ…С%№™ј (ЂЂЂЂЂЂЂЂЂЃЌЅ±ЅЙ}Ґ№™ј№ЌЅ±ЅЙ}™ЅЙµ…Р°ЂЎ№ЅЙµ…±Ґй•‘}ЌЅ±ЅЙ}µ…Н¬ЂшшЂЎ¤ЂЁЂР¤¤ЂЂБ€ДДДД°ЃЙС}Ќ±…µБmҐulБt°(ЂЂЂЂЂЂЂЂЂЃЙС}Ќ±…µБmҐulЕt°ЃЙС}Ќ±…µБmҐulЙt°ЃЙС}Ќ±…µБmҐulНt°ЃЙС}­••Б}µ…Н­НmҐulБt°ЃЙС}­••Б}µ…Н­НmҐulЕt¤м(ЂЂЂЃф(ЂЃф((ЂЂјјЃҐН…‰±”Ѓ‘•БС Ѓ…№ђЃНС•№ЌҐ°ЃҐЃҐРЃ…±Ґ…Н•МЃ„ЃЌЅ±ЅИЃЙ•№‘•ИЃС…Йќ•РЂЎ™ЅИ(ЂЂјјЃҐ№НС…№Ќ”°Ѓ‘ХЙҐ№њЃСЎ”Ѓa	1Ѓ±ЅќјЃҐёЂФаРДАдФР°ЃСЎЅХќ Ѓ‘•БС ЃЭЙҐСҐ№њЃҐМЃ…±Й•…‘д(ЂЂјјЃ‘ҐН…‰±•ђЃСЎ•Й”¤ё(ЂЃ‰ЅЅ°Ѓ‘•БСЎ}НС•№ЌҐ±}•№…‰±•ђЂф(ЂЂЂЂЂЃ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№НС•№ЌҐ±}•№…‰±”ЃсрЃ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№й}•№…‰±”м(ЂЃҐЂЎ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬ЂЃ‘•БСЎ}НС•№ЌҐ±}•№…‰±•ђ¤Ѓм(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂРмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃҐЂЎЙ‰}‘•БСЎ}Ґ№™ј№‘•БСЎ}‰…Н”ЂффЃЌЅ±ЅЙ}Ґ№™ЅНmҐt№ЌЅ±ЅЙ}‰…Н”Ђ(ЂЂЂЂЂЂЂЂЂЂЎЙС}­••Б}µ…Н­НmҐulБtЂ„фЃU%9PМЙ}5`ЃсрЃЙС}­••Б}µ…Н­НmҐulЕtЂ„фЃU%9PМЙ}5`¤¤Ѓм(ЂЂЂЂЂЂЂЃ‘•БСЎ}НС•№ЌҐ±}•№…‰±•ђЂфЃ™…±Н”м(ЂЂЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф((ЂЃ‰ЅЅ°Ѓ‘ҐЙСдЂфЃ™…±Н”м((ЂЂјјЃ±…ќМё(ЂЃХҐ№РМЙ}РЃ™±…ќМЂфЂАм(ЂЂјјЃY•ЙС•аЃҐ№‘•аЃНЎ…‘•ИЃ±Ѕ…‘Ґ№њё(ЂЃҐЂЎНЎ…‘•Й|МЙ‰ҐС}Ґ№‘•б}‘µ„¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}Y•ЙС•б%№‘•б1Ѕ…ђм(ЂЃф(ЂЃҐЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№Ґ№‘•б}‰Х™™•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­!ЅНС	ХҐ±СҐ№ЅЙ5Ѓср(ЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№Ґ№‘•б}‰Х™™•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­Х•НС5Ѓср(ЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№Ґ№‘•б}‰Х™™•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЃAЙҐµҐСҐЩ•AЙЅЌ•ННЅИийAЙЅЌ•НН•‘%№‘•б	Х™™•ЙQеБ”ий­!ЅНСЅ№Щ•ЙС•ђ¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•=ЙAЙҐµҐСҐЩ•Y•ЙС•б%№‘•б1Ѕ…ђм(ЂЂЂЃҐЂЎЩќС}‘Й…Э}Ґ№ҐСҐ…СЅИ№Ґ№‘•б}НҐй”ЂффЃб•№ЅМий%№‘•бЅЙµ…Рий­%№РМИ¤Ѓм(ЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИЂий­MеН±…ќ}ЅµБХС•=ЙAЙҐµҐСҐЩ•Y•ЙС•б%№‘•б1Ѕ…ђМЙ	ҐРм(ЂЂЂЃф(ЂЂЂЂјјЃAЅҐ№РЃ…№ђЃЙ•ЌС…№ќ±”Ѓ•бБ…№НҐЅёЃХН•МЃБЙҐµҐСҐЩ”ЃЙ•НС…ЙРЃЅ№±дЃҐёЃСЎ”ЃЎЅНР(ЂЂЂЂјјЃ‰ХҐ±РµҐёЃНСЙҐАЃҐ№‘•аЃ‰Х™™•ИмЃќХ•НРЃҐ№‘ҐЌ•МЃ…Й”Ѓ№ЅРЃЙ•Н•Рµ‰…Н•ђЃСЎ•Й”ё(ЂЂЂЃ‰ЅЅ°ЃЌЅµБХС•}ЅЙ}БЙҐµҐСҐЩ•}Щ•ЙС•б}Ґ№‘•б}Й•Н•РЂф(ЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}БЙҐµҐСҐЩ•}Й•Н•С}•№…‰±•ђЂ(ЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђ„ф(ЂЂЂЂЂЂЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­AЅҐ№С1ҐНСНQЙҐ…№ќ±•MСЙҐАЂ(ЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђ„ф(ЂЂЂЂЂЂЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­I•ЌС…№ќ±•1ҐНСНQЙҐ…№ќ±•MСЙҐАм(ЂЂЂЃҐЂЎЌЅµБХС•}ЅЙ}БЙҐµҐСҐЩ•}Щ•ЙС•б}Ґ№‘•б}Й•Н•Р¤Ѓм(ЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•=ЙAЙҐµҐСҐЩ•Y•ЙС•б%№‘•бI•Н•Рм(ЂЂЂЃф(ЂЃф(ЂЃҐЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђфф(ЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­QЙҐ…№ќ±•Ѕµ…Ґ№A…СЌЎ%№‘•б•ђ¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•5•µбБЅЙСA…СЌЎ%№‘•б%№I•ќҐНС•ИДм(ЂЃф(ЂЃҐЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђфф(ЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­QЙҐ…№ќ±•Ѕµ…Ґ№A%№‘•б•ђ¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•5•µбБЅЙСQЙҐ…№ќ±•A%№‘•б•ђм(ЂЃфЃ•±Н”ЃҐЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­EХ…‘Ѕµ…Ґ№A%№‘•б•ђ¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•5•µбБЅЙСEХ…‘A%№‘•б•ђм(ЂЃф(ЂЃҐЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№С•НН•±±…СҐЅ№}µЅ‘”ЂффЃб•№ЅМийQ•НН•±±…СҐЅ№5Ѕ‘”ий­‘…БСҐЩ”Ђ(ЂЂЂЂЂЂЎБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­QЙҐ…№ќ±•Ѕµ…Ґ№A…СЌЎ%№‘•б•ђЃср(ЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}Щ•ЙС•б}НЎ…‘•Й}СеБ”Ђфф(ЂЂЂЂЂЂЂЂЂЂЃMЎ…‘•Иий!ЅНСY•ЙС•бMЎ…‘•ЙQеБ”ий­EХ…‘Ѕµ…Ґ№A…СЌЎ%№‘•б•ђ¤¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•5•µбБЅЙСA…СЌЎ%№‘•бЙЅµ%№ЩЅЌ…СҐЅём(ЂЃф(ЂЂјјЃ\АЃ‘ҐЩҐНҐЅёЃЌЅ№СЙЅ°ё(ЂЂјјЃЎССАијЅЭЭЬ№а№ЅЙњЅ‘ЅЌМЅ5ЅЅ±ђЅ•Щ•ЙќЙ••№|Н}Й•ќҐНС•ЙН}ШИ№Б‘(ЂЂјјЂаиЃYQa}ae}5PЂфЃСЙХ”иЃСЎ”ЃҐ№ЌЅµҐ№њЃadЃЎ…Щ”Ѓ…±Й•…‘дЃ‰••ёЃµХ±СҐБ±Ґ•ђЃ‰дЂДЅ\Аё(ЂЂјјЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂфЃ™…±Н”иЃµХ±СҐБ±дЃСЎ”Ѓ`°ЃdЃЌЅЅЙ‘Ґ№…С•МЃ‰дЂДЅ\Аё(ЂЂјјЂдиЃYQa}i}5PЂфЃСЙХ”иЃСЎ”ЃҐ№ЌЅµҐ№њЃhЃЎ…МЃ…±Й•…‘дЃ‰••ёЃµХ±СҐБ±Ґ•ђЃ‰дЂДЅ\Аё(ЂЂјјЂЂЂЂЂЂЂЂЂЂЂЂЂЂфЃ™…±Н”иЃµХ±СҐБ±дЃСЎ”ЃhЃЌЅЅЙ‘Ґ№…С”Ѓ‰дЂДЅ\Аё(ЂЂјјЂДАиЃYQa}\Б}5PЂфЃСЙХ”иЃСЎ”ЃҐ№ЌЅµҐ№њЃ\АЃҐМЃ№ЅРЂДЅ\АёЃA•Й™ЅЙґЃСЎ”ЃЙ•ЌҐБЙЅЌ…°(ЂЂјјЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃСјЃќ•РЂДЅ\Аё(ЂЃҐЂЎБ…}Ќ±}ЩС•}Ќ№С°№ЩСб}бе}™µР¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}aeҐЩҐ‘•‘	е\м(ЂЃф(ЂЃҐЂЎБ…}Ќ±}ЩС•}Ќ№С°№ЩСб}й}™µР¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}iҐЩҐ‘•‘	е\м(ЂЃф(ЂЃҐЂЎБ…}Ќ±}ЩС•}Ќ№С°№ЩСб}ЬБ}™µР¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}]9ЅСI•ЌҐБЙЅЌ…°м(ЂЃф(ЂЂјјЃ]Ў•СЎ•ИЃСЎ”ЃБЙҐµҐСҐЩ”ЃҐМЃБЅ±еќЅ№…°°Ѓ…№ђЃќ±}ЙЅ№С…ЌҐ№њЃµ…СС•ЙМё(ЂЃҐЂЎБЙҐµҐСҐЩ•}БЅ±еќЅ№…°¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}AЙҐµҐСҐЩ•AЅ±еќЅ№…°м(ЂЃф(ЂЂјјЃAЙҐµҐСҐЩ”ЃСеБ”ё(ЂЃҐЂЎ‘Й…Э}ХСҐ°ий%НAЙҐµҐСҐЩ•1Ґ№”ЎЙ•ќМ¤¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}AЙҐµҐСҐЩ•1Ґ№”м(ЂЃф(ЂЂјјЃ5MЃН…µБ±”ЃЌЅХ№Рё(ЂЃ™±…ќМЃрфЃХҐ№РМЙ}РЎЙ‰}НХЙ™…Ќ•}Ґ№™ј№µН……}Н…µБ±•М¤(ЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}5Н……M…µБ±•Н}MЎҐ™Рм(ЂЂјјЃ•БС Ѓ™ЅЙµ…Рё(ЂЃҐЂЎЙ‰}‘•БСЎ}Ґ№™ј№‘•БСЎ}™ЅЙµ…РЂффЃб•№ЅМий•БСЎI•№‘•ЙQ…Йќ•СЅЙµ…Рий­ИСLа¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}•БСЎ±Ѕ…РИРм(ЂЃф(ЂЂјјЃ±БЎ„ЃС•НРё(ЂЃб•№ЅМийЅµБ…Й•Х№ЌСҐЅёЃ…±БЎ…}С•НС}™Х№ЌСҐЅёЂфЃЙ‰}ЌЅ±ЅЙЌЅ№СЙЅ°№…±БЎ…}С•НС}•№…‰±”(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЃЙ‰}ЌЅ±ЅЙЌЅ№СЙЅ°№…±БЎ…}™Х№Њ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃб•№ЅМийЅµБ…Й•Х№ЌСҐЅёий­±Э…еМм(ЂЃ™±…ќМЃрфЃХҐ№РМЙ}РЎ…±БЎ…}С•НС}™Х№ЌСҐЅё¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}±БЎ…A…НН%™1•НН}MЎҐ™Рм(ЂЂјјЃ…µµ„ЃЭЙҐСҐ№њё(ЂЃҐЂ …Й•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщќ…µµ…}Й•№‘•Й}С…Йќ•С}…Н}Х№ЅЙґДШ ¤¤Ѓм(ЂЂЂЂјјЃ-••АЃБ…ЙҐСдЃЭҐС ЃНДИиЃќ…µµ„ЃС…Йќ•СМЃҐёЃСЎҐМЃБ…С Ѓ…Й”ЃЌЅ№Щ•ЙС•ђЃЩҐ„(ЂЂЂЂјјЃ•бБ±ҐЌҐРЃa•№ЅМЃA]0Ѓќ…µµ„Ѓ±ЅќҐЊЃҐёЃНЎ…‘•ЙМЃЙ…СЎ•ИЃСЎ…ёЃЩҐ„ЃЎЅНРЃНI(ЂЂЂЂјјЃ…СС…ЌЎµ•№РЃЌЅ№Щ•ЙНҐЅёЃН•µ…№СҐЌМё(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЃб•№ЅМий­5…бЅ±ЅЙI•№‘•ЙQ…Йќ•СМмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃҐЂЎЌЅ±ЅЙ}Ґ№™ЅНmҐt№ЌЅ±ЅЙ}™ЅЙµ…РЂффЃб•№ЅМийЅ±ЅЙI•№‘•ЙQ…Йќ•СЅЙµ…Рий­|б|б|б|б}55¤Ѓм(ЂЂЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}Ѕ№Щ•ЙСЅ±ЅИБQЅ…µµ„ЂррЃ¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф(ЂЃҐЂЎ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬ЂЃ‘•БСЎ}НС•№ЌҐ±}•№…‰±•ђ¤Ѓм(ЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎMС•№ЌҐ°м(ЂЂЂЃҐЂЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№й}•№…‰±”¤Ѓм(ЂЂЂЂЂЃ™±…ќМЃрфЃХҐ№РМЙ}РЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№й™Х№Њ¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎA…НН%™1•НН}MЎҐ™Рм(ЂЂЂЂЂЃҐЂЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№й}ЭЙҐС•}•№…‰±”¤Ѓм(ЂЂЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎ]ЙҐС”м(ЂЂЂЂЂЃф(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂјјЃ%ёЃЌ…Н”ЃНС•№ЌҐ°ЃҐМЃХН•ђЃЭҐСЎЅХРЃ‘•БС ЃС•НСҐ№њЂґЃ…±Э…еМЃБ…НМ°Ѓ…№ђ(ЂЂЂЂЂЂјјЃ‘ЅёќРЃµЅ‘Ґ™дЃСЎ”ЃНСЅЙ•ђЃ‘•БС ё(ЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎA…НН%™1•НМЃр(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎA…НН%™ЕХ…°Ѓр(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎA…НН%™Й•…С•Им(ЂЂЂЃф(ЂЂЂЃҐЂЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№НС•№ЌҐ±}•№…‰±”¤Ѓм(ЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%MС•№ЌҐ±Q•НРм(ЂЂЂЃф(ЂЂЂЂјјЃ!Ґ№РЂґЃҐЃ№ЅРЃ…ББ±ҐЌ…‰±”ЃСјЃСЎ”ЃНЎ…‘•И°ЃЭҐ±°Ѓ№ЅРЃЎ…Щ”Ѓ•™™•ЌРё(ЂЂЂЃҐЂЎ…±БЎ…}С•НС}™Х№ЌСҐЅёЂффЃб•№ЅМийЅµБ…Й•Х№ЌСҐЅёий­±Э…еМЂ(ЂЂЂЂЂЂЂЂ…Й‰}ЌЅ±ЅЙЌЅ№СЙЅ°№…±БЎ…}СЅ}µ…Н­}•№…‰±”¤Ѓм(ЂЂЂЂЂЃ™±…ќМЃрфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}M%•БСЎMС•№ЌҐ±…Й±е]ЙҐС”м(ЂЂЂЃф(ЂЃф(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№™±…ќМЂ„фЃ™±…ќМм(ЂЃНеНС•µ}ЌЅ№НС…№СН|№™±…ќМЂфЃ™±…ќМм((ЂЂјјЃ%№‘•аЃ‰Х™™•ИЃ…‘‘Й•НМЃ™ЅИЃ±Ѕ…‘Ґ№њЃҐёЃСЎ”ЃНЎ…‘•ЙМё(ЂЃҐЂЎ™±…ќМЂЂЎMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}Y•ЙС•б%№‘•б1Ѕ…ђЃр(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•=ЙAЙҐµҐСҐЩ•Y•ЙС•б%№‘•б1Ѕ…ђ¤¤Ѓм(ЂЂЂЃ‘ҐЙСдЃрф(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}±Ѕ…‘}…‘‘Й•НМЂ„фЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ќХ•НС}Ґ№‘•б}‰…Н”м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}±Ѕ…‘}…‘‘Й•НМЂфЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ќХ•НС}Ґ№‘•б}‰…Н”м(ЂЃф((ЂЂјјЃAЙҐµҐСҐЩ”ЃЙ•Н•РЃҐ№‘•аЃ™ЅИЃНЎ…‘•ИµНҐ‘”ЃҐ№‘•аЃ±Ѕ…‘Ґ№њё(ЂЃХҐ№РМЙ}РЃЩ•ЙС•б}Ґ№‘•б}Й•Н•РЂф(ЂЂЂЂЂЂЎ™±…ќМЂЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•=ЙAЙҐµҐСҐЩ•Y•ЙС•б%№‘•бI•Н•Р¤(ЂЂЂЂЂЂЂЂЂЂьЃЙ•ќМ№•РсЙ•њийYQ}5U1Q%}AI%5}%	}IMQ}%9`ш ¤№Й•Н•С}Ґ№‘а(ЂЂЂЂЂЂЂЂЂЂиЂАм(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}Й•Н•РЂ„фЃЩ•ЙС•б}Ґ№‘•б}Й•Н•Рм(ЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}Й•Н•РЂфЃЩ•ЙС•б}Ґ№‘•б}Й•Н•Рм(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№ЌЅµБХС•}µ•µ•бБЅЙС}Щ•ЙС•б}ЌЅХ№РЂ„фЃЌЅµБХС•}µ•µ•бБЅЙС}Щ•ЙС•б}ЌЅХ№Рм(ЂЃНеНС•µ}ЌЅ№НС…№СН|№ЌЅµБХС•}µ•µ•бБЅЙС}Щ•ЙС•б}ЌЅХ№РЂфЃЌЅµБХС•}µ•µ•бБЅЙС}Щ•ЙС•б}ЌЅХ№Рм((ЂЂјјЃ%№‘•аЃЅИЃС•НН•±±…СҐЅёЃ•‘ќ”Ѓ™…ЌСЅИЃ‰Х™™•ИЃ•№‘Ґ…№№•НМё(ЂЃб•№ЅМий№‘Ґ…ёЃќХ•НС}Ґ№‘•б}•№‘Ґ…ёЂфЃЩќС}‘µ…}НҐй”№НЭ…Б}µЅ‘”м(ЂЃҐЂЎЩќС}‘Й…Э}Ґ№ҐСҐ…СЅИ№Ґ№‘•б}НҐй”ЂффЃб•№ЅМий%№‘•бЅЙµ…Рий­%№РДШЂ(ЂЂЂЂЂЃќХ•НС}Ґ№‘•б}•№‘Ґ…ёЂ„фЃб•№ЅМий№‘Ґ…ёий­9Ѕ№”ЂЃќХ•НС}Ґ№‘•б}•№‘Ґ…ёЂ„фЃб•№ЅМий№‘Ґ…ёий¬бҐёДШ¤Ѓм(ЂЂЂЃќХ•НС}Ґ№‘•б}•№‘Ґ…ёЂф(ЂЂЂЂЂЂЂЃќХ•НС}Ґ№‘•б}•№‘Ґ…ёЂффЃб•№ЅМий№‘Ґ…ёий¬бҐёМИЂьЃб•№ЅМий№‘Ґ…ёий¬бҐёДШЂиЃб•№ЅМий№‘Ґ…ёий­9Ѕ№”м(ЂЃф(ЂЃб•№ЅМий№‘Ґ…ёЃҐ№‘•б}•№‘Ґ…ёЂф(ЂЂЂЂЂЂЎ™±…ќМЂЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­MеН±…ќ}ЅµБХС•=ЙAЙҐµҐСҐЩ•Y•ЙС•б%№‘•б1Ѕ…ђ¤(ЂЂЂЂЂЂЂЂЂЂьЃќХ•НС}Ґ№‘•б}•№‘Ґ…ё(ЂЂЂЂЂЂЂЂЂЂиЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№ЎЅНС}НЎ…‘•Й}Ґ№‘•б}•№‘Ґ…ём(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}•№‘Ґ…ёЂ„фЃҐ№‘•б}•№‘Ґ…ём(ЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}•№‘Ґ…ёЂфЃҐ№‘•б}•№‘Ґ…ём((ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№±Ґ№•}±ЅЅБ}Ќ±ЅНҐ№ќ}Ґ№‘•аЂ„ф(ЂЂЂЂЂЂЂЂЂЂЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№±Ґ№•}±ЅЅБ}Ќ±ЅНҐ№ќ}Ґ№‘•ам(ЂЃНеНС•µ}ЌЅ№НС…№СН|№±Ґ№•}±ЅЅБ}Ќ±ЅНҐ№ќ}Ґ№‘•аЂфЃБЙҐµҐСҐЩ•}БЙЅЌ•ННҐ№ќ}Й•НХ±Р№±Ґ№•}±ЅЅБ}Ќ±ЅНҐ№ќ}Ґ№‘•ам((ЂЂјјЃY•ЙС•аЃҐ№‘•аЃЅ™™Н•Рё(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}‰…Н•}Ґ№‘•аЂ„фЃЩќС}Ґ№‘б}Ѕ™™Н•Рм(ЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}‰…Н•}Ґ№‘•аЂфЃЩќС}Ґ№‘б}Ѕ™™Н•Рм((ЂЂјјЃY•ЙС•аЃҐ№‘•аЃЙ…№ќ”ё(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}µҐёЂ„фЃЩќС}µҐ№}ЩСб}Ґ№‘ам(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}µ…аЂ„фЃЩќС}µ…б}ЩСб}Ґ№‘ам(ЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}µҐёЂфЃЩќС}µҐ№}ЩСб}Ґ№‘ам(ЂЃНеНС•µ}ЌЅ№НС…№СН|№Щ•ЙС•б}Ґ№‘•б}µ…аЂфЃЩќС}µ…б}ЩСб}Ґ№‘ам((ЂЂјјЃUН•ИЃЌ±ҐАЃБ±…№•МЂЎUA}9|Њ¤°ЃЭЎ•ёЃ№ЅРЃ1%A}%M	1ё(ЂЂјјЃQЎ”ЃНЎ…‘•ИЃ­№ЅЭМЃЅ№±дЃСЎ”ЃСЅС…°ЃЌЅХ№РЂґЃСҐќЎС±дЃБ…Ќ­Ґ№њЃСЎ”ЃХН•ИЃЌ±ҐА(ЂЂјјЃБ±…№•МЃСЎ…РЃ…Й”Ѓ…ЌСХ…±±дЃХН•ђё(ЂЃҐЂ …Б…}Ќ±}Ќ±ҐБ}Ќ№С°№Ќ±ҐБ}‘ҐН…‰±”¤Ѓм(ЂЂЂЃ™±Ѕ…РЁЃХН•Й}Ќ±ҐБ}Б±…№•}ЭЙҐС•}БСИЂфЃНеНС•µ}ЌЅ№НС…№СН|№ХН•Й}Ќ±ҐБ}Б±…№•НlБtм(ЂЂЂЃХҐ№РМЙ}РЃХН•Й}Ќ±ҐБ}Б±…№•Н}Й•µ…Ґ№Ґ№њЂфЃБ…}Ќ±}Ќ±ҐБ}Ќ№С°№ХЌБ}•№„м(ЂЂЂЃХҐ№РМЙ}РЃХН•Й}Ќ±ҐБ}Б±…№•}Ґ№‘•ам(ЂЂЂЃЭЎҐ±”ЂЎЙ•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎХН•Й}Ќ±ҐБ}Б±…№•Н}Й•µ…Ґ№Ґ№њ°Ђ™ХН•Й}Ќ±ҐБ}Б±…№•}Ґ№‘•а¤¤Ѓм(ЂЂЂЂЂЃХН•Й}Ќ±ҐБ}Б±…№•Н}Й•µ…Ґ№Ґ№њЂфЃшЎU%9PМЙ} Д¤ЂррЃХН•Й}Ќ±ҐБ}Б±…№•}Ґ№‘•а¤м(ЂЂЂЂЂЃЌЅ№НРЃЩЅҐђЁЃХН•Й}Ќ±ҐБ}Б±…№•}Й•ќМЂф(ЂЂЂЂЂЂЂЂЂЂ™Й•ќНma}AU}I}A}1}UA|Б}`Ђ¬ЃХН•Й}Ќ±ҐБ}Б±…№•}Ґ№‘•аЂЁЂСtм(ЂЂЂЂЂЃҐЂЎНСђийµ•µЌµАЎХН•Й}Ќ±ҐБ}Б±…№•}ЭЙҐС•}БСИ°ЃХН•Й}Ќ±ҐБ}Б±…№•}Й•ќМ°ЂРЂЁЃНҐй•ЅЎ™±Ѕ…Р¤¤¤Ѓм(ЂЂЂЂЂЂЂЃ‘ҐЙСдЂфЃСЙХ”м(ЂЂЂЂЂЂЂЃНСђийµ•µЌБдЎХН•Й}Ќ±ҐБ}Б±…№•}ЭЙҐС•}БСИ°ЃХН•Й}Ќ±ҐБ}Б±…№•}Й•ќМ°ЂРЂЁЃНҐй•ЅЎ™±Ѕ…Р¤¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃХН•Й}Ќ±ҐБ}Б±…№•}ЭЙҐС•}БСИЂ¬фЂРм(ЂЂЂЃф(ЂЃф((ЂЂјјЃQ•НН•±±…СҐЅёЃ™…ЌСЅИЃЙ…№ќ”°ЃБ±ХМЂДёАЃ…ЌЌЅЙ‘Ґ№њЃСј(ЂЂјјЃЎССБМијЅЭЭЬ№Н±Ґ‘•НЎ…Й”№№•РЅ‰±…Ќ­‘•ЩҐ±ЩҐ­…МЅ№•бРµќ•№•Й…СҐЅёµќЙ…БЎҐЌМµБЙЅќЙ…µµҐ№њµЅёµб‰ЅаґМШАё(ЂЃ™±Ѕ…РЃС•НН•±±…СҐЅ№}™…ЌСЅЙ}µҐёЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}YQ}!=M}5%9}QMM}1Y0¤Ђ¬ЂДёБм(ЂЃ™±Ѕ…РЃС•НН•±±…СҐЅ№}™…ЌСЅЙ}µ…аЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}YQ}!=M}5a}QMM}1Y0¤Ђ¬ЂДёБм(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№С•НН•±±…СҐЅ№}™…ЌСЅЙ}Й…№ќ•}µҐёЂ„фЃС•НН•±±…СҐЅ№}™…ЌСЅЙ}µҐём(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№С•НН•±±…СҐЅ№}™…ЌСЅЙ}Й…№ќ•}µ…аЂ„фЃС•НН•±±…СҐЅ№}™…ЌСЅЙ}µ…ам(ЂЃНеНС•µ}ЌЅ№НС…№СН|№С•НН•±±…СҐЅ№}™…ЌСЅЙ}Й…№ќ•}µҐёЂфЃС•НН•±±…СҐЅ№}™…ЌСЅЙ}µҐём(ЂЃНеНС•µ}ЌЅ№НС…№СН|№С•НН•±±…СҐЅ№}™…ЌСЅЙ}Й…№ќ•}µ…аЂфЃС•НН•±±…СҐЅ№}™…ЌСЅЙ}µ…ам((ЂЂјјЃЅ№Щ•ЙНҐЅёЃСјЃЎЅНРЃ№ЅЙµ…±Ґй•ђЃ‘•ЩҐЌ”ЃЌЅЅЙ‘Ґ№…С•Мё(ЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂМмЂ¬­¤¤Ѓм(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№№‘Ќ}НЌ…±•mҐtЂ„фЃЩҐ•ЭБЅЙС}Ґ№™ј№№‘Ќ}НЌ…±•mҐtм(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№№‘Ќ}Ѕ™™Н•СmҐtЂ„фЃЩҐ•ЭБЅЙС}Ґ№™ј№№‘Ќ}Ѕ™™Н•СmҐtм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№№‘Ќ}НЌ…±•mҐtЂфЃЩҐ•ЭБЅЙС}Ґ№™ј№№‘Ќ}НЌ…±•mҐtм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№№‘Ќ}Ѕ™™Н•СmҐtЂфЃЩҐ•ЭБЅЙС}Ґ№™ј№№‘Ќ}Ѕ™™Н•СmҐtм(ЂЃф((ЂЂјјЃAЅҐ№РЃНҐй”ё(ЂЃҐЂЎЩќС}‘Й…Э}Ґ№ҐСҐ…СЅИ№БЙҐµ}СеБ”ЂффЃб•№ЅМийAЙҐµҐСҐЩ•QеБ”ий­AЅҐ№С1ҐНР¤Ѓм(ЂЂЂЃ…ХСјЃБ…}НХ}БЅҐ№С}µҐ№µ…аЂфЃЙ•ќМ№•РсЙ•њийA}MU}A=%9Q}5%95`ш ¤м(ЂЂЂЃ…ХСјЃБ…}НХ}БЅҐ№С}НҐй”ЂфЃЙ•ќМ№•РсЙ•њийA}MU}A=%9Q}M%iш ¤м(ЂЂЂЃ™±Ѕ…РЃБЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µҐёЂфЃ™±Ѕ…РЎБ…}НХ}БЅҐ№С}µҐ№µ…а№µҐ№}НҐй”¤ЂЁЂ ИёБЂјЂДШёБ¤м(ЂЂЂЃ™±Ѕ…РЃБЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µ…аЂфЃ™±Ѕ…РЎБ…}НХ}БЅҐ№С}µҐ№µ…а№µ…б}НҐй”¤ЂЁЂ ИёБЂјЂДШёБ¤м(ЂЂЂЃ™±Ѕ…РЃБЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•Й}аЂфЃ™±Ѕ…РЎБ…}НХ}БЅҐ№С}НҐй”№ЭҐ‘С ¤ЂЁЂ ИёБЂјЂДШёБ¤м(ЂЂЂЃ™±Ѕ…РЃБЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•Й}дЂфЃ™±Ѕ…РЎБ…}НХ}БЅҐ№С}НҐй”№Ў•ҐќЎР¤ЂЁЂ ИёБЂјЂДШёБ¤м(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µҐёЂ„фЃБЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µҐём(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µ…аЂ„фЃБЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µ…ам(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•ЙlБtЂ„фЃБЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•Й}ам(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•ЙlЕtЂ„фЃБЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•Й}дм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µҐёЂфЃБЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µҐём(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µ…аЂфЃБЅҐ№С}Щ•ЙС•б}‘Ґ…µ•С•Й}µ…ам(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•ЙlБtЂфЃБЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•Й}ам(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•ЙlЕtЂфЃБЅҐ№С}ЌЅ№НС…№С}‘Ґ…µ•С•Й}дм(ЂЂЂЂјјЂИЃ‰•Ќ…ХН”ЂДЃҐёЃСЎ”Ѓ9ЃҐМЃЎ…±ЃЅЃСЎ”ЃЩҐ•ЭБЅЙРќМЃ…бҐМ°ЂАёФЃ™ЅИЃ‘Ґ…µ•С•И(ЂЂЂЂјјЃСјЃЙ…‘ҐХМЃЌЅ№Щ•ЙНҐЅёЃСјЃ…ЩЅҐђЃµХ±СҐБ±еҐ№њЃСЎ”ЃБ•ИµЩ•ЙС•аЃ‘Ґ…µ•С•ИЃ‰дЃ…ё(ЂЂЂЂјјЃ…‘‘ҐСҐЅ№…°ЃЌЅ№НС…№РЃҐёЃСЎ”ЃНЎ…‘•Иё(ЂЂЂЃ™±Ѕ…РЃБЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХН}аЂф(ЂЂЂЂЂЂЂЂ јЁЂАёХЂЁЂИёБЂЁЂЁјЃ™±Ѕ…РЎ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а¤¤Ђј(ЂЂЂЂЂЂЂЃНСђийµ…аЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СlБt°ЃХҐ№РМЙ}Р Д¤¤м(ЂЂЂЃ™±Ѕ…РЃБЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХН}дЂф(ЂЂЂЂЂЂЂЂ јЁЂАёХЂЁЂИёБЂЁЂЁјЃ™±Ѕ…РЎ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д¤¤Ђј(ЂЂЂЂЂЂЂЃНСђийµ…аЎЩҐ•ЭБЅЙС}Ґ№™ј№бе}•бС•№СlЕt°ЃХҐ№РМЙ}Р Д¤¤м(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХНlБtЂ„ф(ЂЂЂЂЂЂЂЂЂЂЂЂЃБЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХН}ам(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХНlЕtЂ„ф(ЂЂЂЂЂЂЂЂЂЂЂЂЃБЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХН}дм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХНlБtЂф(ЂЂЂЂЂЂЂЃБЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХН}ам(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№БЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХНlЕtЂф(ЂЂЂЂЂЂЂЃБЅҐ№С}НЌЙ••№}‘Ґ…µ•С•Й}СЅ}№‘Ќ}Й…‘ҐХН}дм(ЂЃф((ЂЂјјЃQ•бСХЙ”ЃНҐќ№•‘№•НМЂјЃќ…µµ„ё(ЂЃХҐ№РМЙ}РЃС•бСХЙ•Н}Й•НЅ±ХСҐЅ№}НЌ…±•ђЂфЂАм(ЂЃм(ЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•Н}Й•µ…Ґ№Ґ№њЂфЃХН•‘}С•бСХЙ•}µ…Н¬м(ЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}Ґ№‘•ам(ЂЂЂЃЭЎҐ±”ЂЎЙ•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎС•бСХЙ•Н}Й•µ…Ґ№Ґ№њ°Ђ™С•бСХЙ•}Ґ№‘•а¤¤Ѓм(ЂЂЂЂЂЃС•бСХЙ•Н}Й•µ…Ґ№Ґ№њЂфЃшЎU%9PМЙ} Д¤ЂррЃС•бСХЙ•}Ґ№‘•а¤м(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НҐќ№Н}ХҐ№РЂфЃНеНС•µ}ЌЅ№НС…№СН|№С•бСХЙ•}НЭҐйй±•‘}НҐќ№НmС•бСХЙ•}Ґ№‘•аЂшшЂЙtм(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НҐќ№Н}НЎҐ™РЂфЂаЂЁЂЎС•бСХЙ•}Ґ№‘•аЂЂМ¤м(ЂЂЂЂЂЃХҐ№Рб}РЃС•бСХЙ•}НҐќ№МЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ•СЌСҐЩ•Q•бСХЙ•MЭҐйй±•‘MҐќ№МЎС•бСХЙ•}Ґ№‘•а¤м(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НҐќ№Н}НЎҐ™С•ђЂфЃХҐ№РМЙ}РЎС•бСХЙ•}НҐќ№М¤ЂррЃС•бСХЙ•}НҐќ№Н}НЎҐ™Рм(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НҐќ№Н}µ…Н¬ЂфЂ ЎU%9PМЙ} Д¤ЂррЂа¤ЂґЂД¤ЂррЃС•бСХЙ•}НҐќ№Н}НЎҐ™Рм(ЂЂЂЂЂЃ‘ҐЙСдЃрфЂЎС•бСХЙ•}НҐќ№Н}ХҐ№РЂЃС•бСХЙ•}НҐќ№Н}µ…Н¬¤Ђ„фЃС•бСХЙ•}НҐќ№Н}НЎҐ™С•ђм(ЂЂЂЂЂЃС•бСХЙ•}НҐќ№Н}ХҐ№РЂфЂЎС•бСХЙ•}НҐќ№Н}ХҐ№РЂЃщС•бСХЙ•}НҐќ№Н}µ…Н¬¤ЃрЃС•бСХЙ•}НҐќ№Н}НЎҐ™С•ђм(ЂЂЂЂЂЃС•бСХЙ•Н}Й•НЅ±ХСҐЅ№}НЌ…±•ђЃрф(ЂЂЂЂЂЂЂЂЂЃХҐ№РМЙ}РЎС•бСХЙ•}Ќ…ЌЎ•|ґщ%НЌСҐЩ•Q•бСХЙ•I•НЅ±ХСҐЅ№MЌ…±•ђЎС•бСХЙ•}Ґ№‘•а¤¤ЂррЃС•бСХЙ•}Ґ№‘•ам(ЂЂЂЃф(ЂЃф(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№С•бСХЙ•Н}Й•НЅ±ХСҐЅ№}НЌ…±•ђЂ„фЃС•бСХЙ•Н}Й•НЅ±ХСҐЅ№}НЌ…±•ђм(ЂЃНеНС•µ}ЌЅ№НС…№СН|№С•бСХЙ•Н}Й•НЅ±ХСҐЅ№}НЌ…±•ђЂфЃС•бСХЙ•Н}Й•НЅ±ХСҐЅ№}НЌ…±•ђм((ЂЂјјЃQ•бСХЙ”ЃЎЅНРЃНЭҐйй±”ЃҐёЃСЎ”ЃНЎ…‘•Иё(ЂЃҐЂ …•СYХ±­…№•ЩҐЌ” ¤ґщБЙЅБ•ЙСҐ•М ¤№Ґµ…ќ•YҐ•ЭЅЙµ…СMЭҐйй±”¤Ѓм(ЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•Н}Й•µ…Ґ№Ґ№њЂфЃХН•‘}С•бСХЙ•}µ…Н¬м(ЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}Ґ№‘•ам(ЂЂЂЃЭЎҐ±”ЂЎЙ•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎС•бСХЙ•Н}Й•µ…Ґ№Ґ№њ°Ђ™С•бСХЙ•}Ґ№‘•а¤¤Ѓм(ЂЂЂЂЂЃС•бСХЙ•Н}Й•µ…Ґ№Ґ№њЂфЃшЎU%9PМЙ} Д¤ЂррЃС•бСХЙ•}Ґ№‘•а¤м(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НЭҐйй±•Н}ХҐ№РЂфЃНеНС•µ}ЌЅ№НС…№СН|№С•бСХЙ•}НЭҐйй±•НmС•бСХЙ•}Ґ№‘•аЂшшЂЕtм(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НЭҐйй±•}НЎҐ™РЂфЂДИЂЁЂЎС•бСХЙ•}Ґ№‘•аЂЂД¤м(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НЭҐйй±”ЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ•СЌСҐЩ•Q•бСХЙ•!ЅНСMЭҐйй±”ЎС•бСХЙ•}Ґ№‘•а¤м(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НЭҐйй±•}НЎҐ™С•ђЂфЃХҐ№РМЙ}РЎС•бСХЙ•}НЭҐйй±”¤ЂррЃС•бСХЙ•}НЭҐйй±•}НЎҐ™Рм(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}НЭҐйй±•}µ…Н¬ЂфЂ ЎU%9PМЙ} Д¤ЂррЂДИ¤ЂґЂД¤ЂррЃС•бСХЙ•}НЭҐйй±•}НЎҐ™Рм(ЂЂЂЂЂЃ‘ҐЙСдЃрфЂЎС•бСХЙ•}НЭҐйй±•Н}ХҐ№РЂЃС•бСХЙ•}НЭҐйй±•}µ…Н¬¤Ђ„фЃС•бСХЙ•}НЭҐйй±•}НЎҐ™С•ђм(ЂЂЂЂЂЃС•бСХЙ•}НЭҐйй±•Н}ХҐ№РЂф(ЂЂЂЂЂЂЂЂЂЂЎС•бСХЙ•}НЭҐйй±•Н}ХҐ№РЂЃщС•бСХЙ•}НЭҐйй±•}µ…Н¬¤ЃрЃС•бСХЙ•}НЭҐйй±•}НЎҐ™С•ђм(ЂЂЂЃф(ЂЃф((ЂЂјјЃ±БЎ„ЃС•НРё(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№…±БЎ…}С•НС}Й•™•Й•№Ќ”Ђ„фЃЙ‰}…±БЎ…}Й•м(ЂЃНеНС•µ}ЌЅ№НС…№СН|№…±БЎ…}С•НС}Й•™•Й•№Ќ”ЂфЃЙ‰}…±БЎ…}Й•м(ЂЃХҐ№РМЙ}РЃ…±БЎ…}СЅ}µ…Н¬Ђф(ЂЂЂЂЂЃЙ‰}ЌЅ±ЅЙЌЅ№СЙЅ°№…±БЎ…}СЅ}µ…Н­}•№…‰±”ЂьЂЎЙ‰}ЌЅ±ЅЙЌЅ№СЙЅ°№Щ…±Х”ЂшшЂИР¤ЃрЂЎU%9PМЙ} Д¤ЂррЂа¤ЂиЂАм(ЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№…±БЎ…}СЅ}µ…Н¬Ђ„фЃ…±БЎ…}СЅ}µ…Н¬м(ЂЃНеНС•µ}ЌЅ№НС…№СН|№…±БЎ…}СЅ}µ…Н¬ЂфЃ…±БЎ…}СЅ}µ…Н¬м((ЂЃХҐ№РМЙ}РЃ•‘Й…µ}СҐ±•}‘ЭЅЙ‘Н}НЌ…±•ђЂфЃб•№ЅМий­‘Й…µQҐ±•]Ґ‘СЎM…µБ±•МЂЁ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃб•№ЅМий­‘Й…µQҐ±•!•ҐќЎСM…µБ±•МЂЁ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЎ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}аЂЁЃ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д¤м((ЂЂјјЃI4ЃБҐСЌ Ѓ™ЅИЃM$ЃЙ•№‘•ИЃС…Йќ•РЃЭЙҐСҐ№њё(ЂЃҐЂЎ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬¤Ѓм(ЂЂЂЂјјЃ±Ґќё°ЃСЎ•ёЃµХ±СҐБ±дЃ‰дЂМЙ‰БАЃСҐ±”ЃНҐй”ЃҐёЃ‘ЭЅЙ‘Мё(ЂЂЂЃХҐ№РМЙ}РЃ•‘Й…µ|МЙ‰ББ}СҐ±•}БҐСЌЎ}‘ЭЅЙ‘Н}НЌ…±•ђЂф(ЂЂЂЂЂЂЂЂ ЎЙ‰}НХЙ™…Ќ•}Ґ№™ј№НХЙ™…Ќ•}БҐСЌ ЂЁ(ЂЂЂЂЂЂЂЂЂЂЎЙ‰}НХЙ™…Ќ•}Ґ№™ј№µН……}Н…µБ±•МЂшфЃб•№ЅМий5Н……M…µБ±•Мий¬С`ЂьЂИЂиЂД¤¤Ђ¬(ЂЂЂЂЂЂЂЂЂЎб•№ЅМий­‘Й…µQҐ±•]Ґ‘СЎM…µБ±•МЂґЂД¤¤Ђј(ЂЂЂЂЂЂЂЃб•№ЅМий­‘Й…µQҐ±•]Ґ‘СЎM…µБ±•МЂЁЃ•‘Й…µ}СҐ±•}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ|МЙ‰ББ}СҐ±•}БҐСЌЎ}‘ЭЅЙ‘Н}НЌ…±•ђЂ„ф(ЂЂЂЂЂЂЂЂЂЂЂЂЃ•‘Й…µ|МЙ‰ББ}СҐ±•}БҐСЌЎ}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ|МЙ‰ББ}СҐ±•}БҐСЌЎ}‘ЭЅЙ‘Н}НЌ…±•ђЂфЃ•‘Й…µ|МЙ‰ББ}СҐ±•}БҐСЌЎ}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЃф((ЂЂјјЃЅ±ЅИЃ•бБЅ№•№РЃ‰Ґ…МЃ…№ђЃM$ЃЙ•№‘•ИЃС…Йќ•РЃЭЙҐСҐ№њё(ЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЃб•№ЅМий­5…бЅ±ЅЙI•№‘•ЙQ…Йќ•СМмЂ¬­¤¤Ѓм(ЂЂЂЃЙ•њийI	}=1=I}%9<ЃЌЅ±ЅЙ}Ґ№™јЂфЃЌЅ±ЅЙ}Ґ№™ЅНmҐtм(ЂЂЂЂјјЃбБЅ№•№РЃ‰Ґ…МЃҐМЃҐёЃ‰ҐСМЂИАиИФЃЅЃI	}=1=I}%9<ё(ЂЂЂЃҐ№РМЙ}РЃЌЅ±ЅЙ}•бБ}‰Ґ…МЂфЃЌЅ±ЅЙ}Ґ№™ј№ЌЅ±ЅЙ}•бБ}‰Ґ…Мм(ЂЂЂЃҐЂЎЙ•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ•СA…С  ¤ЂффЃI•№‘•ЙQ…Йќ•С…ЌЎ”ийA…С ий­!ЅНСI•№‘•ЙQ…Йќ•СМЂ(ЂЂЂЂЂЂЂЂЎЌЅ±ЅЙ}Ґ№™ј№ЌЅ±ЅЙ}™ЅЙµ…РЂффЃб•№ЅМийЅ±ЅЙI•№‘•ЙQ…Йќ•СЅЙµ…Рий­|ДЩ|ДШЂ(ЂЂЂЂЂЂЂЂЂЂЂЂЂ…Й•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ%НҐб•‘IДЩQЙХ№Ќ…С•‘QЅ5Ґ№ХМЕQјД ¤Ѓср(ЂЂЂЂЂЂЂЂЃЌЅ±ЅЙ}Ґ№™ј№ЌЅ±ЅЙ}™ЅЙµ…РЂффЃб•№ЅМийЅ±ЅЙI•№‘•ЙQ…Йќ•СЅЙµ…Рий­|ДЩ|ДЩ|ДЩ|ДШЂ(ЂЂЂЂЂЂЂЂЂЂЂЂЂ…Й•№‘•Й}С…Йќ•С}Ќ…ЌЎ•|ґщ%НҐб•‘I	ДЩQЙХ№Ќ…С•‘QЅ5Ґ№ХМЕQјД ¤¤¤Ѓм(ЂЂЂЂЂЂјјЃI•µ…АЃ™ЙЅґЂґМИёёёМИЃСјЂґДёёёДЃ‰дЃ‘ҐЩҐ‘Ґ№њЃСЎ”ЃЅХСБХРЃЩ…±Х•МЃ‰дЂМИ°(ЂЂЂЂЂЂјјЃ±ЅНҐ№њЃ‰±•№‘Ґ№њЃЌЅЙЙ•ЌС№•НМ°Ѓ‰ХРЃќ•ССҐ№њЃСЎ”Ѓ™Х±°ЃЙ…№ќ”ё(ЂЂЂЂЂЃЌЅ±ЅЙ}•бБ}‰Ґ…МЂґфЂФм(ЂЂЂЃф(ЂЂЂЃ™±Ѕ…РЃЌЅ±ЅЙ}•бБ}‰Ґ…Н}НЌ…±”м(ЂЂЂЂ©Й•Ґ№С•ЙБЙ•С}Ќ…НРсҐ№РМЙ}РЁш ™ЌЅ±ЅЙ}•бБ}‰Ґ…Н}НЌ…±”¤Ђф(ЂЂЂЂЂЂЂЃU%9PМЙ} БаНаААААА¤Ђ¬ЂЎЌЅ±ЅЙ}•бБ}‰Ґ…МЂррЂИМ¤м(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№ЌЅ±ЅЙ}•бБ}‰Ґ…НmҐtЂ„фЃЌЅ±ЅЙ}•бБ}‰Ґ…Н}НЌ…±”м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№ЌЅ±ЅЙ}•бБ}‰Ґ…НmҐtЂфЃЌЅ±ЅЙ}•бБ}‰Ґ…Н}НЌ…±”м(ЂЂЂЃҐЂЎ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬¤Ѓм(ЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}­••Б}µ…Н­mҐulБtЂ„фЃЙС}­••Б}µ…Н­НmҐulБtм(ЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}­••Б}µ…Н­mҐulБtЂфЃЙС}­••Б}µ…Н­НmҐulБtм(ЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}­••Б}µ…Н­mҐulЕtЂ„фЃЙС}­••Б}µ…Н­НmҐulЕtм(ЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}­••Б}µ…Н­mҐulЕtЂфЃЙС}­••Б}µ…Н­НmҐulЕtм(ЂЂЂЂЂЃҐЂЎЙС}­••Б}µ…Н­НmҐulБtЂ„фЃU%9PМЙ}5`ЃсрЃЙС}­••Б}µ…Н­НmҐulЕtЂ„фЃU%9PМЙ}5`¤Ѓм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃЙС}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђЂфЃЌЅ±ЅЙ}Ґ№™ј№ЌЅ±ЅЙ}‰…Н”ЂЁЃ•‘Й…µ}СҐ±•}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•‘mҐtЂ„фЃЙС}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•‘mҐtЂфЃЙС}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃ™ЅЙµ…С}™±…ќМЂфЃI•№‘•ЙQ…Йќ•С…ЌЎ”ий‘‘AM%Ѕ±ЅЙЅЙµ…С±…ќМЎЌЅ±ЅЙ}Ґ№™ј№ЌЅ±ЅЙ}™ЅЙµ…Р¤м(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}™ЅЙµ…С}™±…ќНmҐtЂ„фЃ™ЅЙµ…С}™±…ќМм(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}™ЅЙµ…С}™±…ќНmҐtЂфЃ™ЅЙµ…С}™±…ќМм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃ‰±•№‘}™…ЌСЅЙН}ЅБМЂф(ЂЂЂЂЂЂЂЂЂЂЂЃЙ•ќНmЙ•њийI	}	19=9QI=0ийЙС}Й•ќҐНС•Й}Ґ№‘ҐЌ•НmҐutЂЂБаЕЕм(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}‰±•№‘}™…ЌСЅЙН}ЅБНmҐtЂ„фЃ‰±•№‘}™…ЌСЅЙН}ЅБМм(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}‰±•№‘}™…ЌСЅЙН}ЅБНmҐtЂфЃ‰±•№‘}™…ЌСЅЙН}ЅБМм(ЂЂЂЂЂЂЂЂјјЃ…ёќРЃ‘јЃ™±Ѕ…РЃЌЅµБ…ЙҐНЅ№МЃЎ•Й”Ѓ‰•Ќ…ХН”Ѓ9…9МЃЭЅХ±ђЃЙ•НХ±РЃҐёЃ…±Э…еМ(ЂЂЂЂЂЂЂЂјјЃН•ССҐ№њЃСЎ”Ѓ‘ҐЙСдЃ™±…њё(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрф(ЂЂЂЂЂЂЂЂЂЂЂЃНСђийµ•µЌµАЎНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}Ќ±…µБmҐt°ЃЙС}Ќ±…µБmҐt°ЂРЂЁЃНҐй•ЅЎ™±Ѕ…Р¤¤Ђ„фЂАм(ЂЂЂЂЂЂЂЃНСђийµ•µЌБдЎНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}ЙС}Ќ±…µБmҐt°ЃЙС}Ќ±…µБmҐt°ЂРЂЁЃНҐй•ЅЎ™±Ѕ…Р¤¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф((ЂЃҐЂЎ•‘Й…µ}™Й…ќµ•№С}НЎ…‘•Й}Ґ№С•Й±ЅЌ¬¤Ѓм(ЂЂЂЃХҐ№РМЙ}РЃ‘•БСЎ}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђЂфЃЙ‰}‘•БСЎ}Ґ№™ј№‘•БСЎ}‰…Н”ЂЁЃ•‘Й…µ}СҐ±•}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‘•БСЎ}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђЂ„фЃ‘•БСЎ}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‘•БСЎ}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђЂфЃ‘•БСЎ}‰…Н•}‘ЭЅЙ‘Н}НЌ…±•ђм((ЂЂЂЂјјЃЅИЃ№ЅёµБЅ±еќЅ№М°Ѓ™ЙЅ№РЃБЅ±еќЅёЃЅ™™Н•РЃҐМЃХН•ђ°Ѓ…№ђЃҐРќМЃ•№…‰±•ђЃҐ(ЂЂЂЂјјЃA=1e}=MQ}AI}9	1ЃҐМЃН•Р°Ѓ™ЅИЃБЅ±еќЅ№М°ЃН•Б…Й…С”Ѓ™ЙЅ№РЃ…№ђЃ‰…Ќ¬(ЂЂЂЂјјЃ…Й”ЃХН•ђё(ЂЂЂЃ™±Ѕ…РЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”ЂфЂАёБ°ЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•РЂфЂАёБм(ЂЂЂЃ™±Ѕ…РЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”ЂфЂАёБ°ЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•РЂфЂАёБм(ЂЂЂЃҐЂЎБЙҐµҐСҐЩ•}БЅ±еќЅ№…°¤Ѓм(ЂЂЂЂЂЃҐЂЎБ…}НХ}НЌ}µЅ‘•}Ќ№С°№БЅ±е}Ѕ™™Н•С}™ЙЅ№С}•№…‰±”¤Ѓм(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”ЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}A}MU}A=1e}=MQ}I=9Q}M1¤м(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•РЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}A}MU}A=1e}=MQ}I=9Q}=MP¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃҐЂЎБ…}НХ}НЌ}µЅ‘•}Ќ№С°№БЅ±е}Ѕ™™Н•С}‰…Ќ­}•№…‰±”¤Ѓм(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”ЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}A}MU}A=1e}=MQ}	-}M1¤м(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•РЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}A}MU}A=1e}=MQ}	-}=MP¤м(ЂЂЂЂЂЃф(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЃҐЂЎБ…}НХ}НЌ}µЅ‘•}Ќ№С°№БЅ±е}Ѕ™™Н•С}Б…Й…}•№…‰±”¤Ѓм(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”ЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}A}MU}A=1e}=MQ}I=9Q}M1¤м(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•РЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}A}MU}A=1e}=MQ}I=9Q}=MP¤м(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”ЂфЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”м(ЂЂЂЂЂЂЂЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•РЂфЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•Рм(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЂЂЂјјЃ]ҐС Ѓ№ЅёµНЕХ…Й”ЃЙ•НЅ±ХСҐЅёЃНЌ…±Ґ№њ°Ѓµ…­”ЃНХЙ”ЃСЎ”ЃЭЅЙНРµЌ…Н”ЃҐµБ…ЌРЃҐМ(ЂЂЂЂјјЃЙ•Щ•ЙС•ђЂЎН±ЅБ”ЃЅ№±дЃ…±Ѕ№њЃСЎ”ЃНЌ…±•ђЃ…бҐМ¤°ЃСЎХМЃµ…аёЃ5ЅЙ”Ѓ‰Ґ…МЃҐМ(ЂЂЂЂјјЃ‰•СС•ИЃСЎ…ёЃ±•НМЃ‰Ґ…М°Ѓ‰•Ќ…ХН”Ѓ±•НМЃ‰Ґ…МЃµ•…№МЃhЃ™ҐќЎСҐ№њЃЭҐС ЃСЎ”(ЂЂЂЂјјЃ‰…Ќ­ќЙЅХ№ђЃҐМЃµЅЙ”Ѓ±Ґ­•±дё(ЂЂЂЃ™±Ѕ…РЃБЅ±е}Ѕ™™Н•С}НЌ…±•}™…ЌСЅИЂфЃб•№ЅМий­AЅ±еќЅ№=™™Н•СMЌ…±•MХ‰БҐб•±U№ҐРЂЁ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНСђийµ…аЎ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}а°Ѓ‘Й…Э}Й•НЅ±ХСҐЅ№}НЌ…±•}д¤м(ЂЂЂЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”ЂЁфЃБЅ±е}Ѕ™™Н•С}НЌ…±•}™…ЌСЅИм(ЂЂЂЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”ЂЁфЃБЅ±е}Ѕ™™Н•С}НЌ…±•}™…ЌСЅИм(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”Ђ„фЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”ЂфЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}НЌ…±”м(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•РЂ„фЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•Рм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•РЂфЃБЅ±е}Ѕ™™Н•С}™ЙЅ№С}Ѕ™™Н•Рм(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”Ђ„фЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”ЂфЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}НЌ…±”м(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•РЂ„фЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•Рм(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}БЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•РЂфЃБЅ±е}Ѕ™™Н•С}‰…Ќ­}Ѕ™™Н•Рм((ЂЂЂЃҐЂЎ‘•БСЎ}НС•№ЌҐ±}•№…‰±•ђЂЃ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№НС•№ЌҐ±}•№…‰±”¤Ѓм(ЂЂЂЂЂЃХҐ№РМЙ}РЃНС•№ЌҐ±}™ЙЅ№С}Й•™•Й•№Ќ•}µ…Н­МЂфЃЙ‰}НС•№ЌҐ±Й•™µ…Н¬№Щ…±Х”ЂЂБбм(ЂЂЂЂЂЃ‘ҐЙСдЃрф(ЂЂЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}™ЙЅ№С}Й•™•Й•№Ќ•}µ…Н­МЂ„фЃНС•№ЌҐ±}™ЙЅ№С}Й•™•Й•№Ќ•}µ…Н­Мм(ЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}™ЙЅ№С}Й•™•Й•№Ќ•}µ…Н­МЂфЃНС•№ЌҐ±}™ЙЅ№С}Й•™•Й•№Ќ•}µ…Н­Мм(ЂЂЂЂЂЃХҐ№РМЙ}РЃНС•№ЌҐ±}™Х№Ќ}ЅБМЂфЂЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№Щ…±Х”ЂшшЂа¤ЂЂ  ДЂррЂДИ¤ЂґЂД¤м(ЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}™ЙЅ№С}™Х№Ќ}ЅБМЂ„фЃНС•№ЌҐ±}™Х№Ќ}ЅБМм(ЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}™ЙЅ№С}™Х№Ќ}ЅБМЂфЃНС•№ЌҐ±}™Х№Ќ}ЅБМм((ЂЂЂЂЂЃҐЂЎБЙҐµҐСҐЩ•}БЅ±еќЅ№…°ЂЃ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№‰…Ќ­™…Ќ•}•№…‰±”¤Ѓм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃНС•№ЌҐ±}‰…Ќ­}Й•™•Й•№Ќ•}µ…Н­МЂфЃЙ‰}НС•№ЌҐ±Й•™µ…Н­}‰№Щ…±Х”ЂЂБбм(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрф(ЂЂЂЂЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}‰…Ќ­}Й•™•Й•№Ќ•}µ…Н­МЂ„фЃНС•№ЌҐ±}‰…Ќ­}Й•™•Й•№Ќ•}µ…Н­Мм(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}‰…Ќ­}Й•™•Й•№Ќ•}µ…Н­МЂфЃНС•№ЌҐ±}‰…Ќ­}Й•™•Й•№Ќ•}µ…Н­Мм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃНС•№ЌҐ±}™Х№Ќ}ЅБН}‰ЂфЂЎ№ЅЙµ…±Ґй•‘}‘•БСЎ}ЌЅ№СЙЅ°№Щ…±Х”ЂшшЂИА¤ЂЂ  ДЂррЂДИ¤ЂґЂД¤м(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}‰…Ќ­}™Х№Ќ}ЅБМЂ„фЃНС•№ЌҐ±}™Х№Ќ}ЅБН}‰м(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}‰…Ќ­}™Х№Ќ}ЅБМЂфЃНС•№ЌҐ±}™Х№Ќ}ЅБН}‰м(ЂЂЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЂЂЃ‘ҐЙСдЃрфЃНСђийµ•µЌµАЎНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}‰…Ќ¬°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}™ЙЅ№Р°ЂИЂЁЃНҐй•ЅЎХҐ№РМЙ}Р¤¤Ђ„фЂАм(ЂЂЂЂЂЂЂЃНСђийµ•µЌБдЎНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}‰…Ќ¬°ЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}НС•№ЌҐ±}™ЙЅ№Р°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂИЂЁЃНҐй•ЅЎХҐ№РМЙ}Р¤¤м(ЂЂЂЂЂЃф(ЂЂЂЃф((ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlБtЂ„фЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}I¤м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlБtЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}I¤м(ЂЂЂЃ‘ҐЙСдЃрф(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlЕtЂ„фЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}I8¤м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlЕtЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}I8¤м(ЂЂЂЃ‘ҐЙСдЃрфЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlЙtЂ„фЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}	1U¤м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlЙtЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}	1U¤м(ЂЂЂЃ‘ҐЙСдЃрф(ЂЂЂЂЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlНtЂ„фЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}1A!¤м(ЂЂЂЃНеНС•µ}ЌЅ№НС…№СН|№•‘Й…µ}‰±•№‘}ЌЅ№НС…№СlНtЂфЃЙ•ќМ№•Рс™±Ѕ…РшЎa}AU}I}I	}	19}1A!¤м(ЂЃф((ЂЃҐЂЎ‘ҐЙСд¤Ѓм(ЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЂЂЃшЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙMеНС•ґ¤м(ЂЃф)ф()‰ЅЅ°ЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийUБ‘…С•	Ґ№‘Ґ№ќМЎЌЅ№НРЃYХ±­…№MЎ…‘•ИЁЃЩ•ЙС•б}НЎ…‘•И°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃЌЅ№НРЃYХ±­…№MЎ…‘•ИЁЃБҐб•±}НЎ…‘•И¤Ѓм(ЌҐЃa}AU}%9}I%9}I]}M=AL(ЂЃM=A}БЙЅ™Ґ±•}ЌБХ} ‰ќБФ€¤м(Ќ•№‘ҐЂЂјјЃa}AU}%9}I%9}I]}M=AL((ЂЃЌЅ№НРЃI•ќҐНС•ЙҐ±”ЃЙ•ќМЂфЂ©Й•ќҐНС•Й}™Ґ±•|м((ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ЁЃЌЅ№НРЃЩХ±­…№}‘•ЩҐЌ”ЂфЃ•СYХ±­…№•ЩҐЌ” ¤м(ЂЃЌЅ№НРЃХ¤ийЩХ±­…ёийYХ±­…№•ЩҐЌ”ийХ№ЌСҐЅ№МЃ‘™ёЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ™Х№ЌСҐЅ№М ¤м(ЂЃЌЅ№НРЃY­•ЩҐЌ”Ѓ‘•ЩҐЌ”ЂфЃЩХ±­…№}‘•ЩҐЌ”ґщ‘•ЩҐЌ” ¤м((ЂЂјјЃ%№Щ…±Ґ‘…С”ЃЌЅ№НС…№РЃ‰Х™™•ЙМЃ…№ђЃ‘•НЌЙҐБСЅЙМЃ™ЅИЃЌЎ…№ќ•ђЃ‘…С„ё((ЂЂјјЃ±Ѕ…РЃЌЅ№НС…№СМё(ЂЂјјЃQЎ•Н”Ѓ…Й”ЃСЎ”ЃЌЅ№НС…№РЃ‰…Н”Ѓ…‘‘Й•НН•МЅЙ…№ќ•МЃ™ЅИЃНЎ…‘•ЙМё(ЂЂјјЃ]”ЃЎ…Щ”ЃСЎ•Н”ЃЎ…Й‘ЌЅ‘•ђЃЙҐќЎРЃ№ЅЬЃЌ…ХН”Ѓ№ЅСЎҐ№њЃН••µМЃСјЃ‘Ґ™™•ИЃЅёЃСЎ”Ѓa‰Ѕа(ЂЂјјЂМШАЂЎЎЅЭ•Щ•И°Ѓ=Б•№0ЃLЃЅёЃ‘Й•№јЂИААЃЅёЃ№‘ЙЅҐђЃЎ…МЃ‘Ґ™™•Й•№РЃЙ…№ќ•М¤ё(ЂЃ…НН•ЙС}СЙХ”ЎЙ•ќНma}AU}I}ME}YM}=9MQtЂффЂБаААБАААЃср(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•ќНma}AU}I}ME}YM}=9MQtЂффЂБаАААААААА¤м(ЂЃ…НН•ЙС}СЙХ”ЎЙ•ќНma}AU}I}ME}AM}=9MQtЂффЂБаААБДААЃср(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃЙ•ќНma}AU}I}ME}AM}=9MQtЂффЂБаАААААААА¤м(ЂЂјјЃЎ•Ќ¬ЃҐЃСЎ”Ѓ™±Ѕ…РЃЌЅ№НС…№РЃ±…еЅХРЃҐМЃНСҐ±°ЃСЎ”ЃН…µ”Ѓ…№ђЃќ•РЃСЎ”ЃЌЅХ№СМё(ЂЃЌЅ№НРЃMЎ…‘•ИийЅ№НС…№СI•ќҐНС•Й5…АЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•аЂф(ЂЂЂЂЂЃЩ•ЙС•б}НЎ…‘•ИґщЌЅ№НС…№С}Й•ќҐНС•Й}µ…А ¤м(ЂЃХҐ№РМЙ}РЃ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}Щ•ЙС•аЂфЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•а№™±Ѕ…С}ЌЅХ№Рм(ЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂРмЂ¬­¤¤Ѓм(ЂЂЂЃҐЂЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•б}mҐtЂ„фЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•а№™±Ѕ…С}‰ҐСµ…БmҐt¤Ѓм(ЂЂЂЂЂЃЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•б}mҐtЂфЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•а№™±Ѕ…С}‰ҐСµ…БmҐtм(ЂЂЂЂЂЂјјЃ%Ѓ№јЃ™±Ѕ…РЃЌЅ№НС…№СМЃ…РЃ…±°°Ѓ…№дЃ‰Х™™•ИЃЌ…ёЃ‰”ЃЙ•ХН•ђЃ™ЅИЃСЎ•ґ°ЃНјЃ№ЅР(ЂЂЂЂЂЂјјЃҐ№Щ…±Ґ‘…СҐ№њё(ЂЂЂЂЂЃҐЂЎ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}Щ•ЙС•а¤Ѓм(ЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЂЂЂЂЂЂЃшЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СY•ЙС•а¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃф(ЂЃХҐ№РМЙ}РЃ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}БҐб•°ЂфЂАм(ЂЃҐЂЎБҐб•±}НЎ…‘•ИЂ„фЃ№Х±±БСИ¤Ѓм(ЂЂЂЃЌЅ№НРЃMЎ…‘•ИийЅ№НС…№СI•ќҐНС•Й5…АЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•°Ђф(ЂЂЂЂЂЂЂЃБҐб•±}НЎ…‘•ИґщЌЅ№НС…№С}Й•ќҐНС•Й}µ…А ¤м(ЂЂЂЃ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}БҐб•°ЂфЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•°№™±Ѕ…С}ЌЅХ№Рм(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂРмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃҐЂЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±}mҐtЂ„фЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•°№™±Ѕ…С}‰ҐСµ…БmҐt¤Ѓм(ЂЂЂЂЂЂЂЃЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±}mҐtЂфЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•°№™±Ѕ…С}‰ҐСµ…БmҐtм(ЂЂЂЂЂЂЂЃҐЂЎ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}БҐб•°¤Ѓм(ЂЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃшЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СAҐб•°¤м(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃНСђийµ•µН•РЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±|°ЂА°ЃНҐй•ЅЎЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±|¤¤м(ЂЃф((ЂЂјјЃ]ЙҐС”ЃСЎ”Ѓ№•ЬЃЌЅ№НС…№РЃ‰Х™™•ЙМё(ЂЃЌЅ№НС•бБИЃХҐ№РМЙ}РЃ­±±Ѕ№НС…№С	Х™™•ЙН5…Н¬Ђф(ЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙЅХ№Р¤ЂґЂДм(ЂЃ…НН•ЙС}й•ЙјЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЂЃщ­±±Ѕ№НС…№С	Х™™•ЙН5…Н¬¤м(ЂЃҐЂ ЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЂЃ­±±Ѕ№НС…№С	Х™™•ЙН5…Н¬¤Ђ„фЃ­±±Ѕ№НС…№С	Х™™•ЙН5…Н¬¤Ѓм(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЂЂЃшЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СЅ№НС…№СМ¤м(ЂЂЂЃНҐй•}РЃХ№Ґ™ЅЙµ}‰Х™™•Й}…±Ґќ№µ•№РЂф(ЂЂЂЂЂЂЂЃНҐй•}РЎЩХ±­…№}‘•ЩҐЌ”ґщБЙЅБ•ЙСҐ•М ¤№µҐ№U№Ґ™ЅЙµ	Х™™•Й=™™Н•С±Ґќ№µ•№Р¤м(ЂЂЂЂјјЃMеНС•ґЃЌЅ№НС…№СМё(ЂЂЂЃҐЂ „ЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙMеНС•ґ¤¤¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ	Х™™•Й%№™јЃ‰Х™™•Й}Ґ№™јЂф(ЂЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•Й}Ґ№™ЅН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙMеНС•µtм(ЂЂЂЂЂЃХҐ№Рб}РЁЃµ…ББҐ№њЂфЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщI•ЕХ•НР (ЂЂЂЂЂЂЂЂЂЃ™Й…µ•}ЌХЙЙ•№С|°ЃНҐй•ЅЎMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИийMеНС•µЅ№НС…№СМ¤°ЃХ№Ґ™ЅЙµ}‰Х™™•Й}…±Ґќ№µ•№Р°(ЂЂЂЂЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№‰Х™™•И°Ѓ‰Х™™•Й}Ґ№™ј№Ѕ™™Н•Р¤м(ЂЂЂЂЂЃҐЂ …µ…ББҐ№њ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Й…№ќ”ЂфЃНҐй•ЅЎMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИийMеНС•µЅ№НС…№СМ¤м(ЂЂЂЂЂЃНСђийµ•µЌБдЎµ…ББҐ№њ°Ђ™НеНС•µ}ЌЅ№НС…№СН|°ЃНҐй•ЅЎMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИийMеНС•µЅ№НС…№СМ¤¤м(ЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЃрфЃU%9PМЙ} Д¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙMеНС•ґм(ЂЂЂЃф(ЂЂЂЂјјЃY•ЙС•аЃНЎ…‘•ИЃ™±Ѕ…РЃЌЅ№НС…№СМё(ЂЂЂЃҐЂ „ЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СY•ЙС•а¤¤¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ	Х™™•Й%№™јЃ‰Х™™•Й}Ґ№™јЂф(ЂЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•Й}Ґ№™ЅН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СY•ЙС•бtм(ЂЂЂЂЂЂјјЃЩ•ёЃҐЃСЎ”ЃНЎ…‘•ИЃ‘Ѕ•НёќРЃ№••ђЃ…№дЃ™±Ѕ…РЃЌЅ№НС…№СМ°Ѓ„ЃЩ…±ҐђЃ‰Ґ№‘Ґ№њ(ЂЂЂЂЂЂјјЃµХНРЃНСҐ±°Ѓ‰”ЃБЙЅЩҐ‘•ђЂЎСЎ”ЃБҐБ•±Ґ№”Ѓ±…еЅХРЃ…±Э…еМЃЎ…МЃ™±Ѕ…РЃЌЅ№НС…№СМ°(ЂЂЂЂЂЂјјЃ™ЅИЃ‰ЅС ЃСЎ”ЃЩ•ЙС•аЃНЎ…‘•ИЃ…№ђЃСЎ”ЃБҐб•°ЃНЎ…‘•И¤°ЃНјЃҐЃСЎ”Ѓ™ҐЙНРЃ‘Й…Ь(ЂЂЂЂЂЂјјЃҐёЃСЎ”Ѓ™Й…µ”Ѓ‘Ѕ•НёќРЃЎ…Щ”Ѓ™±Ѕ…РЃЌЅ№НС…№СМЃ…РЃ…±°°ЃНСҐ±°Ѓ…±±ЅЌ…С”Ѓ„(ЂЂЂЂЂЂјјЃ‘ХµµдЃ‰Х™™•Иё(ЂЂЂЂЂЃНҐй•}РЃ™±Ѕ…С}ЌЅ№НС…№СН}НҐй”Ђф(ЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂРЂЁЃНСђийµ…аЎ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}Щ•ЙС•а°ЃU%9PМЙ} Д¤¤м(ЂЂЂЂЂЃХҐ№Рб}РЁЃµ…ББҐ№њЂфЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщI•ЕХ•НРЎ™Й…µ•}ЌХЙЙ•№С|°Ѓ™±Ѕ…С}ЌЅ№НС…№СН}НҐй”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}…±Ґќ№µ•№Р°Ѓ‰Х™™•Й}Ґ№™ј№‰Х™™•И°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Ѕ™™Н•Р¤м(ЂЂЂЂЂЃҐЂ …µ…ББҐ№њ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Й…№ќ”ЂфЃY­•ЩҐЌ•MҐй”Ў™±Ѕ…С}ЌЅ№НС…№СН}НҐй”¤м(ЂЂЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂРмЂ¬­¤¤Ѓм(ЂЂЂЂЂЂЂЃХҐ№РШС}РЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}•№СЙдЂфЃЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}Щ•ЙС•б}mҐtм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃ™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•ам(ЂЂЂЂЂЂЂЃЭЎҐ±”ЂЎЙ•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}•№СЙд°Ђ™™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•а¤¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}•№СЙдЂфЃш ЕХ±°ЂррЃ™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•а¤м(ЂЂЂЂЂЂЂЂЂЃНСђийµ•µЌБд (ЂЂЂЂЂЂЂЂЂЂЂЂЂЃµ…ББҐ№њ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™Й•ќНma}AU}I}M!I}=9MQ9Q|ААБ}`Ђ¬ЂЎ¤ЂррЂа¤Ђ¬ЂЎ™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•аЂррЂИҐt°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂР¤м(ЂЂЂЂЂЂЂЂЂЃµ…ББҐ№њЂ¬фЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂРм(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЃрфЃU%9PМЙ} Д¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СY•ЙС•ам(ЂЂЂЃф(ЂЂЂЂјјЃAҐб•°ЃНЎ…‘•ИЃ™±Ѕ…РЃЌЅ№НС…№СМё(ЂЂЂЃҐЂ „ЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СAҐб•°¤¤¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ	Х™™•Й%№™јЃ‰Х™™•Й}Ґ№™јЂф(ЂЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•Й}Ґ№™ЅН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СAҐб•±tм(ЂЂЂЂЂЃНҐй•}РЃ™±Ѕ…С}ЌЅ№НС…№СН}НҐй”Ђф(ЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂРЂЁЃНСђийµ…аЎ™±Ѕ…С}ЌЅ№НС…№С}ЌЅХ№С}БҐб•°°ЃU%9PМЙ} Д¤¤м(ЂЂЂЂЂЃХҐ№Рб}РЁЃµ…ББҐ№њЂфЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщI•ЕХ•НРЎ™Й…µ•}ЌХЙЙ•№С|°Ѓ™±Ѕ…С}ЌЅ№НС…№СН}НҐй”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}…±Ґќ№µ•№Р°Ѓ‰Х™™•Й}Ґ№™ј№‰Х™™•И°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Ѕ™™Н•Р¤м(ЂЂЂЂЂЃҐЂ …µ…ББҐ№њ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Й…№ќ”ЂфЃY­•ЩҐЌ•MҐй”Ў™±Ѕ…С}ЌЅ№НС…№СН}НҐй”¤м(ЂЂЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЂРмЂ¬­¤¤Ѓм(ЂЂЂЂЂЂЂЃХҐ№РШС}РЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}•№СЙдЂфЃЌХЙЙ•№С}™±Ѕ…С}ЌЅ№НС…№С}µ…Б}БҐб•±}mҐtм(ЂЂЂЂЂЂЂЃХҐ№РМЙ}РЃ™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•ам(ЂЂЂЂЂЂЂЃЭЎҐ±”ЂЎЙ•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}•№СЙд°Ђ™™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•а¤¤Ѓм(ЂЂЂЂЂЂЂЂЂЃ™±Ѕ…С}ЌЅ№НС…№С}µ…Б}•№СЙдЂфЃш ЕХ±°ЂррЃ™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•а¤м(ЂЂЂЂЂЂЂЂЂЃНСђийµ•µЌБд (ЂЂЂЂЂЂЂЂЂЂЂЂЂЃµ…ББҐ№њ°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂ™Й•ќНma}AU}I}M!I}=9MQ9Q|ИФЩ}`Ђ¬ЂЎ¤ЂррЂа¤Ђ¬ЂЎ™±Ѕ…С}ЌЅ№НС…№С}Ґ№‘•аЂррЂИҐt°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂР¤м(ЂЂЂЂЂЂЂЂЂЃµ…ББҐ№њЂ¬фЃНҐй•ЅЎ™±Ѕ…Р¤ЂЁЂРм(ЂЂЂЂЂЂЂЃф(ЂЂЂЂЂЃф(ЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЃрфЃU%9PМЙ} Д¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й±Ѕ…СAҐб•°м(ЂЂЂЃф(ЂЂЂЂјјЃ	ЅЅ°Ѓ…№ђЃ±ЅЅАЃЌЅ№НС…№СМё(ЂЂЂЃҐЂ „ЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й	ЅЅ±1ЅЅА¤¤¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ	Х™™•Й%№™јЃ‰Х™™•Й}Ґ№™јЂф(ЂЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•Й}Ґ№™ЅН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й	ЅЅ±1ЅЅБtм(ЂЂЂЂЂЃЌЅ№НС•бБИЃНҐй•}РЃ­	ЅЅ±1ЅЅБЅ№НС…№СНMҐй”ЂфЃНҐй•ЅЎХҐ№РМЙ}Р¤ЂЁЂ аЂ¬ЂМИ¤м(ЂЂЂЂЂЃХҐ№Рб}РЁЃµ…ББҐ№њЂфЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщI•ЕХ•НРЎ™Й…µ•}ЌХЙЙ•№С|°Ѓ­	ЅЅ±1ЅЅБЅ№НС…№СНMҐй”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}…±Ґќ№µ•№Р°Ѓ‰Х™™•Й}Ґ№™ј№‰Х™™•И°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Ѕ™™Н•Р¤м(ЂЂЂЂЂЃҐЂ …µ…ББҐ№њ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Й…№ќ”ЂфЃY­•ЩҐЌ•MҐй”Ў­	ЅЅ±1ЅЅБЅ№НС…№СНMҐй”¤м(ЂЂЂЂЂЃНСђийµ•µЌБдЎµ…ББҐ№њ°Ђ™Й•ќНma}AU}I}M!I}=9MQ9Q}	==1|ААБ|АМЕt°Ѓ­	ЅЅ±1ЅЅБЅ№НС…№СНMҐй”¤м(ЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЃрфЃU%9PМЙ} Д¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й	ЅЅ±1ЅЅАм(ЂЂЂЃф(ЂЂЂЂјјЃ•СЌ ЃЌЅ№НС…№СМё(ЂЂЂЃҐЂ „ЎЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й•СЌ ¤¤¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ	Х™™•Й%№™јЃ‰Х™™•Й}Ґ№™јЂф(ЂЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•Й}Ґ№™ЅН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й•СЌЎtм(ЂЂЂЂЂЃЌЅ№НС•бБИЃНҐй•}РЃ­•СЌЎЅ№НС…№СНMҐй”ЂфЃНҐй•ЅЎХҐ№РМЙ}Р¤ЂЁЂШЂЁЂМИм(ЂЂЂЂЂЃХҐ№Рб}РЁЃµ…ББҐ№њЂфЃХ№Ґ™ЅЙµ}‰Х™™•Й}БЅЅ±|ґщI•ЕХ•НРЎ™Й…µ•}ЌХЙЙ•№С|°Ѓ­•СЌЎЅ№НС…№СНMҐй”°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃХ№Ґ™ЅЙµ}‰Х™™•Й}…±Ґќ№µ•№Р°Ѓ‰Х™™•Й}Ґ№™ј№‰Х™™•И°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Ѕ™™Н•Р¤м(ЂЂЂЂЂЃҐЂ …µ…ББҐ№њ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‰Х™™•Й}Ґ№™ј№Й…№ќ”ЂфЃY­•ЩҐЌ•MҐй”Ў­•СЌЎЅ№НС…№СНMҐй”¤м(ЂЂЂЂЂЃНСђийµ•µЌБдЎµ…ББҐ№њ°Ђ™Й•ќНma}AU}I}M!I}=9MQ9Q}Q!|АБ|Бt°Ѓ­•СЌЎЅ№НС…№СНMҐй”¤м(ЂЂЂЂЂЃЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•ЙН}ХБ}СЅ}‘…С•|ЃрфЃU%9PМЙ} Д¤(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•Й•СЌ м(ЂЂЂЃф(ЂЃф((ЂЂјјЃQ•бСХЙ•МЃ…№ђЃН…µБ±•ЙМё(ЂЃЌЅ№НРЃНСђийЩ•ЌСЅИсYХ±­…№MЎ…‘•ИийM…µБ±•Й	Ґ№‘Ґ№њшЃН…µБ±•ЙН}Щ•ЙС•аЂф(ЂЂЂЂЂЃЩ•ЙС•б}НЎ…‘•Иґщ•СM…µБ±•Й	Ґ№‘Ґ№ќН™С•ЙQЙ…№Н±…СҐЅё ¤м(ЂЃЌЅ№НРЃНСђийЩ•ЌСЅИсYХ±­…№MЎ…‘•ИийQ•бСХЙ•	Ґ№‘Ґ№њшЃС•бСХЙ•Н}Щ•ЙС•аЂф(ЂЂЂЂЂЃЩ•ЙС•б}НЎ…‘•Иґщ•СQ•бСХЙ•	Ґ№‘Ґ№ќН™С•ЙQЙ…№Н±…СҐЅё ¤м(ЂЃХҐ№РМЙ}РЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•аЂфЃХҐ№РМЙ}РЎН…µБ±•ЙН}Щ•ЙС•а№НҐй” ¤¤м(ЂЃХҐ№РМЙ}РЃС•бСХЙ•}ЌЅХ№С}Щ•ЙС•аЂфЃХҐ№РМЙ}РЎС•бСХЙ•Н}Щ•ЙС•а№НҐй” ¤¤м(ЂЃЌЅ№НРЃНСђийЩ•ЌСЅИсYХ±­…№MЎ…‘•ИийM…µБ±•Й	Ґ№‘Ґ№њшЁЃН…µБ±•ЙН}БҐб•°м(ЂЃЌЅ№НРЃНСђийЩ•ЌСЅИсYХ±­…№MЎ…‘•ИийQ•бСХЙ•	Ґ№‘Ґ№њшЁЃС•бСХЙ•Н}БҐб•°м(ЂЃХҐ№РМЙ}РЃН…µБ±•Й}ЌЅХ№С}БҐб•°°ЃС•бСХЙ•}ЌЅХ№С}БҐб•°м(ЂЃҐЂЎБҐб•±}НЎ…‘•И¤Ѓм(ЂЂЂЃН…µБ±•ЙН}БҐб•°ЂфЂ™БҐб•±}НЎ…‘•Иґщ•СM…µБ±•Й	Ґ№‘Ґ№ќН™С•ЙQЙ…№Н±…СҐЅё ¤м(ЂЂЂЃС•бСХЙ•Н}БҐб•°ЂфЂ™БҐб•±}НЎ…‘•Иґщ•СQ•бСХЙ•	Ґ№‘Ґ№ќН™С•ЙQЙ…№Н±…СҐЅё ¤м(ЂЂЂЃН…µБ±•Й}ЌЅХ№С}БҐб•°ЂфЃХҐ№РМЙ}РЎН…µБ±•ЙН}БҐб•°ґщНҐй” ¤¤м(ЂЂЂЃС•бСХЙ•}ЌЅХ№С}БҐб•°ЂфЃХҐ№РМЙ}РЎС•бСХЙ•Н}БҐб•°ґщНҐй” ¤¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃН…µБ±•ЙН}БҐб•°ЂфЃ№Х±±БСИм(ЂЂЂЃС•бСХЙ•Н}БҐб•°ЂфЃ№Х±±БСИм(ЂЂЂЃН…µБ±•Й}ЌЅХ№С}БҐб•°ЂфЂАм(ЂЂЂЃС•бСХЙ•}ЌЅХ№С}БҐб•°ЂфЂАм(ЂЃф(ЂЂјјЃQ=<ЎQЙҐ…№њН°¤иЃI•ХН”ЃС•бСХЙ”Ѓ…№ђЃН…µБ±•ИЃ‰Ґ№‘Ґ№ќМЃҐЃ№ЅРЃЌЎ…№ќ•ђё(ЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЃш ЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НY•ЙС•а¤Ѓр(ЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НAҐб•°¤¤м((ЂЂјјЃ5…­”ЃНХЙ”Ѓ№•ЬЃ‘•НЌЙҐБСЅИЃН•СМЃ…Й”Ѓ‰ЅХ№ђЃСјЃСЎ”ЃЌЅµµ…№ђЃ‰Х™™•Иё((ЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}‰ЅХ№‘}ХБ}СЅ}‘…С•|Ђф(ЂЂЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|м((ЂЂјјЃҐ±°ЃСЎ”ЃС•бСХЙ”Ѓ…№ђЃН…µБ±•ИЃЭЙҐС”ЃҐµ…ќ”ЃҐ№™ЅМё((ЂЃ‰ЅЅ°ЃЭЙҐС•}Щ•ЙС•б}С•бСХЙ•МЂф(ЂЂЂЂЂЂЎС•бСХЙ•}ЌЅХ№С}Щ•ЙС•аЃсрЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•а¤Ђ(ЂЂЂЂЂЂ„ЎЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НY•ЙС•а¤¤м(ЂЃ‰ЅЅ°ЃЭЙҐС•}БҐб•±}С•бСХЙ•МЂф(ЂЂЂЂЂЂЎС•бСХЙ•}ЌЅХ№С}БҐб•°ЃсрЃН…µБ±•Й}ЌЅХ№С}БҐб•°¤Ђ(ЂЂЂЂЂЂ„ЎЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НAҐб•°¤¤м(ЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№Ќ±•…И ¤м(ЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№Й•Н•ЙЩ” (ЂЂЂЂЂЂЎЭЙҐС•}Щ•ЙС•б}С•бСХЙ•МЂьЃС•бСХЙ•}ЌЅХ№С}Щ•ЙС•аЂ¬ЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•аЂиЂА¤Ђ¬(ЂЂЂЂЂЂЎЭЙҐС•}БҐб•±}С•бСХЙ•МЂьЃС•бСХЙ•}ЌЅХ№С}БҐб•°Ђ¬ЃН…µБ±•Й}ЌЅХ№С}БҐб•°ЂиЂА¤¤м(ЂЃНҐй•}РЃЩ•ЙС•б}С•бСХЙ•}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•РЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№НҐй” ¤м(ЂЃҐЂЎЭЙҐС•}Щ•ЙС•б}С•бСХЙ•МЂЃС•бСХЙ•}ЌЅХ№С}Щ•ЙС•а¤Ѓм(ЂЂЂЃ™ЅИЂЎЌЅ№НРЃYХ±­…№MЎ…‘•ИийQ•бСХЙ•	Ґ№‘Ґ№њЃС•бСХЙ•}‰Ґ№‘Ґ№њЂиЃС•бСХЙ•Н}Щ•ЙС•а¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™јЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№•µБ±…Ќ•}‰…Ќ¬ ¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Ґµ…ќ•YҐ•ЬЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ•СЌСҐЩ•	Ґ№‘Ґ№ќ=Й9Х±±%µ…ќ•YҐ•Ь (ЂЂЂЂЂЂЂЂЂЃС•бСХЙ•}‰Ґ№‘Ґ№њ№™•СЌЎ}ЌЅ№НС…№Р°ЃС•бСХЙ•}‰Ґ№‘Ґ№њ№‘Ґµ•№НҐЅё°(ЂЂЂЂЂЂЂЂЂЃ‰ЅЅ°ЎС•бСХЙ•}‰Ґ№‘Ґ№њ№ҐН}НҐќ№•ђ¤¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Ґµ…ќ•1…еЅХРЂфЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Ґµ…ќ•YҐ•ЬЂ„фЃY-}9U11}!91(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЃY-}%5}1e=UQ}M!I}I}=91e}=AQ%50(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃY-}%5}1e=UQ}U9%9м(ЂЂЂЃф(ЂЃф(ЂЃНҐй•}РЃЩ•ЙС•б}Н…µБ±•Й}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•РЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№НҐй” ¤м(ЂЃҐЂЎЭЙҐС•}Щ•ЙС•б}С•бСХЙ•МЂЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•а¤Ѓм(ЂЂЂЃ™ЅИЂЎЌЅ№НРЃНСђийБ…ҐИсYХ±­…№Q•бСХЙ•…ЌЎ”ийM…µБ±•ЙA…Й…µ•С•ЙМ°ЃY­M…µБ±•ИшЃН…µБ±•Й}Б…ҐИЂи(ЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}Н…µБ±•ЙН}Щ•ЙС•б|¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™јЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№•µБ±…Ќ•}‰…Ќ¬ ¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Н…µБ±•ИЂфЃН…µБ±•Й}Б…ҐИ№Н•ЌЅ№ђм(ЂЂЂЃф(ЂЃф(ЂЃНҐй•}РЃБҐб•±}С•бСХЙ•}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•РЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№НҐй” ¤м(ЂЃҐЂЎЭЙҐС•}БҐб•±}С•бСХЙ•МЂЃС•бСХЙ•}ЌЅХ№С}БҐб•°¤Ѓм(ЂЂЂЃ™ЅИЂЎЌЅ№НРЃYХ±­…№MЎ…‘•ИийQ•бСХЙ•	Ґ№‘Ґ№њЃС•бСХЙ•}‰Ґ№‘Ґ№њЂиЂ©С•бСХЙ•Н}БҐб•°¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™јЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№•µБ±…Ќ•}‰…Ќ¬ ¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Ґµ…ќ•YҐ•ЬЂфЃС•бСХЙ•}Ќ…ЌЎ•|ґщ•СЌСҐЩ•	Ґ№‘Ґ№ќ=Й9Х±±%µ…ќ•YҐ•Ь (ЂЂЂЂЂЂЂЂЂЃС•бСХЙ•}‰Ґ№‘Ґ№њ№™•СЌЎ}ЌЅ№НС…№Р°ЃС•бСХЙ•}‰Ґ№‘Ґ№њ№‘Ґµ•№НҐЅё°(ЂЂЂЂЂЂЂЂЂЃ‰ЅЅ°ЎС•бСХЙ•}‰Ґ№‘Ґ№њ№ҐН}НҐќ№•ђ¤¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Ґµ…ќ•1…еЅХРЂфЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Ґµ…ќ•YҐ•ЬЂ„фЃY-}9U11}!91(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЃY-}%5}1e=UQ}M!I}I}=91e}=AQ%50(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃY-}%5}1e=UQ}U9%9м(ЂЂЂЃф(ЂЃф(ЂЃНҐй•}РЃБҐб•±}Н…µБ±•Й}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•РЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№НҐй” ¤м(ЂЃҐЂЎЭЙҐС•}БҐб•±}С•бСХЙ•МЂЃН…µБ±•Й}ЌЅХ№С}БҐб•°¤Ѓм(ЂЂЂЃ™ЅИЂЎЌЅ№НРЃНСђийБ…ҐИсYХ±­…№Q•бСХЙ•…ЌЎ”ийM…µБ±•ЙA…Й…µ•С•ЙМ°ЃY­M…µБ±•ИшЃН…µБ±•Й}Б…ҐИЂи(ЂЂЂЂЂЂЂЂЃЌХЙЙ•№С}Н…µБ±•ЙН}БҐб•±|¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™јЂфЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№•µБ±…Ќ•}‰…Ќ¬ ¤м(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Ґµ…ќ•}Ґ№™ј№Н…µБ±•ИЂфЃН…µБ±•Й}Б…ҐИ№Н•ЌЅ№ђм(ЂЂЂЃф(ЂЃф((ЂЂјјЃ]ЙҐС”ЃСЎ”Ѓ№•ЬЃ‘•НЌЙҐБСЅИЃН•СМё((ЂЂјјЃЅ№Н•ЌХСҐЩ”Ѓ‰Ґ№‘Ґ№ќМЃХБ‘…С•ђЃЩҐ„Ѓ„ЃНҐ№ќ±”ЃY­]ЙҐС••НЌЙҐБСЅЙM•РЃµХНРЃЎ…Щ”(ЂЂјјЃҐ‘•№СҐЌ…°ЃНС…ќ”Ѓ™±…ќМ°Ѓ‰ХРЃ™ЅИЃСЎ”ЃЌЅ№НС…№СМЃСЎ•дЃЩ…ЙдёЃA±ХМЃЩ•ЙС•аЃ…№ђ(ЂЂјјЃБҐб•°ЃС•бСХЙ”ЃҐµ…ќ•МЃ…№ђЃН…µБ±•ЙМё(ЂЃНСђий…ЙЙ…дсY­]ЙҐС••НЌЙҐБСЅЙM•Р°ЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙЅХ№РЂ¬ЂИЂЁЂИш(ЂЂЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•СМм(ЂЃХҐ№РМЙ}РЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№РЂфЂАм(ЂЃХҐ№РМЙ}РЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}‰ҐСМЂфЂАм(ЂЃЌЅ№НРЃ‰ЅЅ°Ѓ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН”Ђф(ЂЂЂЂЂЃIaYI}PЎќБХ}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}…‘©…Ќ•№С}Й•ХН”¤м(ЂЃЌЅ№НРЃ‰ЅЅ°ЃЌЅ±±•ЌС}…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН•}НС…СМЂф(ЂЂЂЂЂЃ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН”ЂЃIaYI}PЎќБХ}№…СҐЩ•}НС…СМ¤м(ЂЃ‰ЅЅ°ЃНСЅЙ•}…‘©…Ќ•№С}Щ•ЙС•б}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃ™…±Н”м(ЂЃ‰ЅЅ°ЃНСЅЙ•}…‘©…Ќ•№С}БҐб•±}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃ™…±Н”м(ЂЃY­•НЌЙҐБСЅЙM•РЃ…‘©…Ќ•№С}Щ•ЙС•б}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃY-}9U11}!91м(ЂЃY­•НЌЙҐБСЅЙM•РЃ…‘©…Ќ•№С}БҐб•±}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃY-}9U11}!91м(ЂЃ…НН•ЙС}№ЅС}й•ЙјЎЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СMЎ…Й•‘5•µЅЙе№‘‘Й…ґ¤¤м(ЂЂјјЃЅ№НС…№РЃ‰Х™™•ЙМё(ЂЃҐЂ „ЎЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|Ђ(ЂЂЂЂЂЂЂЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СЅ№НС…№СМ¤¤¤Ѓм(ЂЂЂЃY­•НЌЙҐБСЅЙM•РЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЃҐЂ …ЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••|№•µБСд ¤¤Ѓм(ЂЂЂЂЂЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•РЂфЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••|№‰…Ќ¬ ¤м(ЂЂЂЂЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}™Й••|№БЅБ}‰…Ќ¬ ¤м(ЂЂЂЃфЃ•±Н”Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙAЅЅ±MҐй”ЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}ЌЅХ№Рм(ЂЂЂЂЂЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}ЌЅХ№Р№СеБ”ЂфЃY-}MI%AQ=I}QeA}U9%=I5}	UHм(ЂЂЂЂЂЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}ЌЅХ№Р№‘•НЌЙҐБСЅЙЅХ№РЂфЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙЅХ№Рм(ЂЂЂЂЂЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•РЂфЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}…±±ЅЌ…СЅЙ}Х№Ґ™ЅЙµ}‰Х™™•Й|№±±ЅЌ…С” (ЂЂЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}ЌЅ№НС…№СН|°Ђ™ЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}ЌЅХ№Р°ЂД¤м(ЂЂЂЂЂЃҐЂЎЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•РЂффЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЂЂЃЌЅ№НС…№СН}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙН}ХН•‘|№•µБ±…Ќ•}‰…Ќ¬Ў™Й…µ•}ЌХЙЙ•№С|°ЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•Р¤м(ЂЂЂЂјјЃЅ№Н•ЌХСҐЩ”Ѓ‰Ґ№‘Ґ№ќМЃХБ‘…С•ђЃЩҐ„Ѓ„ЃНҐ№ќ±”ЃY­]ЙҐС••НЌЙҐБСЅЙM•РЃµХНРЃЎ…Щ”(ЂЂЂЂјјЃҐ‘•№СҐЌ…°ЃНС…ќ”Ѓ™±…ќМ°Ѓ‰ХРЃ™ЅИЃСЎ”ЃЌЅ№НС…№СМЃСЎ•дЃЩ…Йдё(ЂЂЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­Ѕ№НС…№С	Х™™•ЙЅХ№РмЂ¬­¤¤Ѓм(ЂЂЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЃЭЙҐС•}ЌЅ№НС…№СМЂфЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•СНmЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№Р¬­tм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№НQеБ”ЂфЃY-}MQIUQUI}QeA}]I%Q}MI%AQ=I}MPм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№‘НСM•РЂфЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№‘НС	Ґ№‘Ґ№њЂфЃ¤м(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№‘НСЙЙ…е±•µ•№РЂфЂАм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№‘•НЌЙҐБСЅЙЅХ№РЂфЂДм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№‘•НЌЙҐБСЅЙQеБ”ЂфЃY-}MI%AQ=I}QeA}U9%=I5}	UHм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№Б%µ…ќ•%№™јЂфЃ№Х±±БСИм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№Б	Х™™•Й%№™јЂфЂ™ЌХЙЙ•№С}ЌЅ№НС…№С}‰Х™™•Й}Ґ№™ЅН}mҐtм(ЂЂЂЂЂЃЭЙҐС•}ЌЅ№НС…№СМ№БQ•б•±	Х™™•ЙYҐ•ЬЂфЃ№Х±±БСИм(ЂЂЂЃф(ЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}‰ҐСМЃрфЃU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СЅ№НС…№СМм(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СЅ№НС…№СНtЂф(ЂЂЂЂЂЂЂЃЌЅ№НС…№СН}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЃф(ЂЂјјЃY•ЙС•аЃНЎ…‘•ИЃС•бСХЙ•МЃ…№ђЃН…µБ±•ЙМё(ЂЃҐЂЎЭЙҐС•}Щ•ЙС•б}С•бСХЙ•М¤Ѓм(ЂЂЂЃY­•НЌЙҐБСЅЙM•С1…еЅХРЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРЂф(ЂЂЂЂЂЂЂЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•}±…еЅХС|ґщ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}С•бСХЙ•Н}Щ•ЙС•б}Й• ¤м(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃС•бСХЙ•}Ґ№™ЅМЂф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃЩ•ЙС•б}С•бСХЙ•}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Рм(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃН…µБ±•Й}Ґ№™ЅМЂф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃЩ•ЙС•б}Н…µБ±•Й}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Рм(ЂЂЂЃY­•НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}Н•РЂфЃY-}9U11}!91м(ЂЂЂЃҐЂЎ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН”¤Ѓм(ЂЂЂЂЂЃҐЂЎЌЅ±±•ЌС}…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН•}НС…СМ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•аийБ•Йий%№ЌЙ•µ•№СЅХ№С•И (ЂЂЂЂЂЂЂЂЂЂЂЃЙ•аийБ•ЙийЅХ№С•Й%ђий­Q•бСХЙ••НЌЙҐБСЅЙM•С‘©…Ќ•№СI•ХН•1ЅЅ­ХБМ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•РЂф(ЂЂЂЂЂЂЂЂЂЃҐ№‘‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•РЎСЙХ”°Ѓ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃС•бСХЙ•}ЌЅХ№С}Щ•ЙС•а°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•а°ЃС•бСХЙ•}Ґ№™ЅМ°ЃН…µБ±•Й}Ґ№™ЅМ¤м(ЂЂЂЂЂЃҐЂЎЌЅ±±•ЌС}…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН•}НС…СМ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•аийБ•Йий%№ЌЙ•µ•№СЅХ№С•И (ЂЂЂЂЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•РЂ„фЃY-}9U11}!91(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЃЙ•аийБ•ЙийЅХ№С•Й%ђий­Q•бСХЙ••НЌЙҐБСЅЙM•С‘©…Ќ•№СI•ХН•!ҐСМ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃЙ•аийБ•ЙийЅХ№С•Й%ђий­Q•бСХЙ••НЌЙҐБСЅЙM•С‘©…Ќ•№СI•ХН•5ҐНН•М¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЂЂЃҐЂЎ‘•НЌЙҐБСЅЙ}Н•РЂффЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЁЃЭЙҐС•}С•бСХЙ•МЂф(ЂЂЂЂЂЂЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•СМ№‘…С„ ¤Ђ¬ЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№Рм(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№РЂфЃ]ЙҐС•QЙ…№НҐ•№СQ•бСХЙ•	Ґ№‘Ґ№ќМ (ЂЂЂЂЂЂЂЂЂЃСЙХ”°ЃС•бСХЙ•}ЌЅХ№С}Щ•ЙС•а°ЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•а°Ѓ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃС•бСХЙ•}Ґ№™ЅМ°(ЂЂЂЂЂЂЂЂЂЃН…µБ±•Й}Ґ№™ЅМ°ЃЭЙҐС•}С•бСХЙ•М¤м(ЂЂЂЂЂЃҐЂ …С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Р¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•РЂфЃЭЙҐС•}С•бСХЙ•НlБt№‘НСM•Рм(ЂЂЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№РЂ¬фЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Рм(ЂЂЂЂЂЃНСЅЙ•}…‘©…Ќ•№С}Щ•ЙС•б}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН”м(ЂЂЂЂЂЃ…‘©…Ќ•№С}Щ•ЙС•б}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃ‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЃф(ЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}‰ҐСМЃрфЃU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НY•ЙС•ам(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НY•ЙС•бtЂф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•Рм(ЂЃф(ЂЂјјЃAҐб•°ЃНЎ…‘•ИЃС•бСХЙ•МЃ…№ђЃН…µБ±•ЙМё(ЂЃҐЂЎЭЙҐС•}БҐб•±}С•бСХЙ•М¤Ѓм(ЂЂЂЃY­•НЌЙҐБСЅЙM•С1…еЅХРЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРЂф(ЂЂЂЂЂЂЂЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•}±…еЅХС|ґщ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}С•бСХЙ•Н}БҐб•±}Й• ¤м(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃС•бСХЙ•}Ґ№™ЅМЂф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃБҐб•±}С•бСХЙ•}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Рм(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃН…µБ±•Й}Ґ№™ЅМЂф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃБҐб•±}Н…µБ±•Й}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Рм(ЂЂЂЃY­•НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}Н•РЂфЃY-}9U11}!91м(ЂЂЂЃҐЂЎ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН”¤Ѓм(ЂЂЂЂЂЃҐЂЎЌЅ±±•ЌС}…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН•}НС…СМ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•аийБ•Йий%№ЌЙ•µ•№СЅХ№С•И (ЂЂЂЂЂЂЂЂЂЂЂЃЙ•аийБ•ЙийЅХ№С•Й%ђий­Q•бСХЙ••НЌЙҐБСЅЙM•С‘©…Ќ•№СI•ХН•1ЅЅ­ХБМ¤м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•РЂф(ЂЂЂЂЂЂЂЂЂЃҐ№‘‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•РЎ™…±Н”°Ѓ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃС•бСХЙ•}ЌЅХ№С}БҐб•°°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃН…µБ±•Й}ЌЅХ№С}БҐб•°°ЃС•бСХЙ•}Ґ№™ЅМ°ЃН…µБ±•Й}Ґ№™ЅМ¤м(ЂЂЂЂЂЃҐЂЎЌЅ±±•ЌС}…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН•}НС…СМ¤Ѓм(ЂЂЂЂЂЂЂЃЙ•аийБ•Йий%№ЌЙ•µ•№СЅХ№С•И (ЂЂЂЂЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•РЂ„фЃY-}9U11}!91(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂьЃЙ•аийБ•ЙийЅХ№С•Й%ђий­Q•бСХЙ••НЌЙҐБСЅЙM•С‘©…Ќ•№СI•ХН•!ҐСМ(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂиЃЙ•аийБ•ЙийЅХ№С•Й%ђий­Q•бСХЙ••НЌЙҐБСЅЙM•С‘©…Ќ•№СI•ХН•5ҐНН•М¤м(ЂЂЂЂЂЃф(ЂЂЂЃф(ЂЂЂЃҐЂЎ‘•НЌЙҐБСЅЙ}Н•РЂффЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЁЃЭЙҐС•}С•бСХЙ•МЂф(ЂЂЂЂЂЂЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•СМ№‘…С„ ¤Ђ¬ЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№Рм(ЂЂЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№РЂфЃ]ЙҐС•QЙ…№НҐ•№СQ•бСХЙ•	Ґ№‘Ґ№ќМ (ЂЂЂЂЂЂЂЂЂЃ™…±Н”°ЃС•бСХЙ•}ЌЅХ№С}БҐб•°°ЃН…µБ±•Й}ЌЅХ№С}БҐб•°°Ѓ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃС•бСХЙ•}Ґ№™ЅМ°(ЂЂЂЂЂЂЂЂЂЃН…µБ±•Й}Ґ№™ЅМ°ЃЭЙҐС•}С•бСХЙ•М¤м(ЂЂЂЂЂЃҐЂ …С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Р¤Ѓм(ЂЂЂЂЂЂЂЃЙ•СХЙёЃ™…±Н”м(ЂЂЂЂЂЃф(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•РЂфЃЭЙҐС•}С•бСХЙ•НlБt№‘НСM•Рм(ЂЂЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№РЂ¬фЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Рм(ЂЂЂЂЂЃНСЅЙ•}…‘©…Ќ•№С}БҐб•±}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Й•ХН”м(ЂЂЂЂЂЃ…‘©…Ќ•№С}БҐб•±}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃ‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЃф(ЂЂЂЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}‰ҐСМЃрфЃU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НAҐб•°м(ЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}mMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НAҐб•±tЂф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•Рм(ЂЃф(ЂЂјјЃ]ЙҐС”ё(ЂЃҐЂЎЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№Р¤Ѓм(ЂЂЂЃ‘™ё№Щ­UБ‘…С••НЌЙҐБСЅЙM•СМЎ‘•ЩҐЌ”°ЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}ЌЅХ№Р°ЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•СМ№‘…С„ ¤°ЂА°(ЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЂЃ№Х±±БСИ¤м(ЂЃф(ЂЂјјЃAХ‰±ҐН ЃЅ№±дЃ‘•НЌЙҐБСЅИЃН•СМЃЭЎЅН”ЃЭЙҐС•МЃЌЅµБ±•С•ђЃНХЌЌ•НН™Х±±дёЃQЎҐМЃҐМ(ЂЂјјЃҐ№С•№СҐЅ№…±±дЃ…™С•ИЃСЎ”ЃЌЅµ‰Ґ№•ђЃХБ‘…С”ЃНјЃ„Ѓ±…С•ИЃНС…ќ”Ѓ…±±ЅЌ…СҐЅё(ЂЂјјЃ™…Ґ±ХЙ”ЃЌ…ёќРЃ±•…Щ”Ѓ…ёЃХ№ЭЙҐСС•ёЃ•…Й±Ґ•ИµНС…ќ”ЃН•РЃЙ•ХН…‰±”ё(ЂЃҐЂЎНСЅЙ•}…‘©…Ќ•№С}Щ•ЙС•б}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р¤Ѓм(ЂЂЂЃMСЅЙ•‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•Р (ЂЂЂЂЂЂЂЃСЙХ”°ЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•}±…еЅХС|ґщ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}С•бСХЙ•Н}Щ•ЙС•б}Й• ¤°(ЂЂЂЂЂЂЂЃ…‘©…Ќ•№С}Щ•ЙС•б}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р°ЃС•бСХЙ•}ЌЅХ№С}Щ•ЙС•а°ЃН…µБ±•Й}ЌЅХ№С}Щ•ЙС•а°(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃЩ•ЙС•б}С•бСХЙ•}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Р°(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃЩ•ЙС•б}Н…µБ±•Й}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Р¤м(ЂЃф(ЂЃҐЂЎНСЅЙ•}…‘©…Ќ•№С}БҐб•±}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р¤Ѓм(ЂЂЂЃMСЅЙ•‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•Р (ЂЂЂЂЂЂЂЃ™…±Н”°ЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•}±…еЅХС|ґщ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}С•бСХЙ•Н}БҐб•±}Й• ¤°(ЂЂЂЂЂЂЂЃ…‘©…Ќ•№С}БҐб•±}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р°ЃС•бСХЙ•}ЌЅХ№С}БҐб•°°ЃН…µБ±•Й}ЌЅХ№С}БҐб•°°(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃБҐб•±}С•бСХЙ•}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Р°(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}ЭЙҐС•}Ґµ…ќ•}Ґ№™Ѕ|№‘…С„ ¤Ђ¬ЃБҐб•±}Н…µБ±•Й}Ґµ…ќ•}Ґ№™Ѕ}Ѕ™™Н•Р¤м(ЂЃф(ЂЂјјЃ=№±дЃµ…­”ЃЩ…±ҐђЃҐЃ…±°Ѓ‘•НЌЙҐБСЅИЃН•СМЃЎ…Щ”Ѓ‰••ёЃ…±±ЅЌ…С•ђЃ…№ђЃЭЙҐСС•ё(ЂЂјјЃНХЌЌ•НН™Х±±дё(ЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•С}Щ…±Х•Н}ХБ}СЅ}‘…С•|ЃрфЃЭЙҐС•}‘•НЌЙҐБСЅЙ}Н•С}‰ҐСМм((ЂЂјјЃ	Ґ№ђЃСЎ”Ѓ№•ЬЃ‘•НЌЙҐБСЅИЃН•СМё(ЂЃХҐ№РМЙ}РЃ‘•НЌЙҐБСЅЙ}Н•СН}№••‘•ђЂфЂЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СЅХ№Р¤ЂґЂДм(ЂЃҐЂ …С•бСХЙ•}ЌЅХ№С}Щ•ЙС•аЂЂ…Н…µБ±•Й}ЌЅХ№С}Щ•ЙС•а¤Ѓм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•СН}№••‘•ђЂфЃшЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НY•ЙС•а¤м(ЂЃф(ЂЃҐЂ …С•бСХЙ•}ЌЅХ№С}БҐб•°ЂЂ…Н…µБ±•Й}ЌЅХ№С}БҐб•°¤Ѓм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•СН}№••‘•ђЂфЃшЎU%9PМЙ} Д¤ЂррЃMБҐЙЩMЎ…‘•ЙQЙ…№Н±…СЅИий­•НЌЙҐБСЅЙM•СQ•бСХЙ•НAҐб•°¤м(ЂЃф(ЂЃХҐ№РМЙ}РЃ‘•НЌЙҐБСЅЙ}Н•СН}Й•µ…Ґ№Ґ№њЂф(ЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•СН}№••‘•ђЂЃщЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}‰ЅХ№‘}ХБ}СЅ}‘…С•|м(ЂЃХҐ№РМЙ}РЃ‘•НЌЙҐБСЅЙ}Н•С}Ґ№‘•ам(ЂЃЭЎҐ±”ЂЎЙ•аий‰ҐС}НЌ…№}™ЅЙЭ…ЙђЎ‘•НЌЙҐБСЅЙ}Н•СН}Й•µ…Ґ№Ґ№њ°Ђ™‘•НЌЙҐБСЅЙ}Н•С}Ґ№‘•а¤¤Ѓм(ЂЂЂЃХҐ№РМЙ}РЃ‘•НЌЙҐБСЅЙ}Н•С}µ…Н­}СйЌ№РЂф(ЂЂЂЂЂЂЂЃЙ•аийСйЌ№РЎшЎ‘•НЌЙҐБСЅЙ}Н•СН}Й•µ…Ґ№Ґ№њЃрЂ ЎU%9PМЙ} Д¤ЂррЃ‘•НЌЙҐБСЅЙ}Н•С}Ґ№‘•а¤ЂґЂД¤¤¤м(ЂЂЂЃ‘•™•ЙЙ•‘}ЌЅµµ…№‘}‰Х™™•Й|№µ‘Y­	Ґ№‘•НЌЙҐБСЅЙM•СМ (ЂЂЂЂЂЂЂЃY-}A%A1%9}	%9}A=%9Q}IA!%L°(ЂЂЂЂЂЂЂЃЌХЙЙ•№С}ќХ•НС}ќЙ…БЎҐЌН}БҐБ•±Ґ№•}±…еЅХС|ґщ•СAҐБ•±Ґ№•1…еЅХР ¤°Ѓ‘•НЌЙҐБСЅЙ}Н•С}Ґ№‘•а°(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}µ…Н­}СйЌ№РЂґЃ‘•НЌЙҐБСЅЙ}Н•С}Ґ№‘•а°(ЂЂЂЂЂЂЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН|Ђ¬Ѓ‘•НЌЙҐБСЅЙ}Н•С}Ґ№‘•а°ЂА°Ѓ№Х±±БСИ¤м(ЂЂЂЃҐЂЎ‘•НЌЙҐБСЅЙ}Н•С}µ…Н­}СйЌ№РЂшфЂМИ¤Ѓм(ЂЂЂЂЂЃ‰Й•…¬м(ЂЂЂЃф(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•СН}Й•µ…Ґ№Ґ№њЂфЃш ЎU%9PМЙ} Д¤ЂррЃ‘•НЌЙҐБСЅЙ}Н•С}µ…Н­}СйЌ№Р¤ЂґЂД¤м(ЂЃф(ЂЃЌХЙЙ•№С}ќЙ…БЎҐЌН}‘•НЌЙҐБСЅЙ}Н•СН}‰ЅХ№‘}ХБ}СЅ}‘…С•|ЃрфЃ‘•НЌЙҐБСЅЙ}Н•СН}№••‘•ђм((ЂЃЙ•СХЙёЃСЙХ”м)ф()ХҐ№РМЙ}РЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИий]ЙҐС•QЙ…№НҐ•№СQ•бСХЙ•	Ґ№‘Ґ№ќМ (ЂЂЂЃ‰ЅЅ°ЃҐН}Щ•ЙС•а°ЃХҐ№РМЙ}РЃС•бСХЙ•}ЌЅХ№Р°ЃХҐ№РМЙ}РЃН…µБ±•Й}ЌЅХ№Р°(ЂЂЂЃY­•НЌЙҐБСЅЙM•С1…еЅХРЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃС•бСХЙ•}Ґµ…ќ•}Ґ№™ј°(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃН…µБ±•Й}Ґµ…ќ•}Ґ№™ј°(ЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЁЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•Н}ЅХР¤Ѓм(ЂЃ…НН•ЙС}СЙХ”Ў™Й…µ•}ЅБ•№|¤м(ЂЃҐЂ …С•бСХЙ•}ЌЅХ№РЂЂ…Н…µБ±•Й}ЌЅХ№Р¤Ѓм(ЂЂЂЃЙ•СХЙёЂАм(ЂЃф(ЂЃQ•бСХЙ••НЌЙҐБСЅЙM•С1…еЅХС-•дЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}­•дм(ЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}­•д№С•бСХЙ•}ЌЅХ№РЂфЃС•бСХЙ•}ЌЅХ№Рм(ЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}­•д№Н…µБ±•Й}ЌЅХ№РЂфЃН…µБ±•Й}ЌЅХ№Рм(ЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}­•д№ҐН}Щ•ЙС•аЂфЃХҐ№РМЙ}РЎҐН}Щ•ЙС•а¤м(ЂЃY­•НЌЙҐБСЅЙM•РЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЃ…ХСјЃС•бСХЙ•Н}™Й••}ҐРЂф(ЂЂЂЂЂЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}™Й••|№™Ґ№ђЎС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}­•д¤м(ЂЃҐЂЎС•бСХЙ•Н}™Й••}ҐРЂ„фЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}™Й••|№•№ђ ¤Ђ(ЂЂЂЂЂЂ…С•бСХЙ•Н}™Й••}ҐРґщН•ЌЅ№ђ№•µБСд ¤¤Ѓм(ЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃС•бСХЙ•Н}™Й••}ҐРґщН•ЌЅ№ђ№‰…Ќ¬ ¤м(ЂЂЂЃС•бСХЙ•Н}™Й••}ҐРґщН•ЌЅ№ђ№БЅБ}‰…Ќ¬ ¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃНСђий…ЙЙ…дсY­•НЌЙҐБСЅЙAЅЅ±MҐй”°ЂИшЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СМм(ЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СН}ЌЅХ№РЂфЂАм(ЂЂЂЃҐЂЎС•бСХЙ•}ЌЅХ№Р¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙAЅЅ±MҐй”ЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№РЂф(ЂЂЂЂЂЂЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СНmС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СН}ЌЅХ№Р¬­tм(ЂЂЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№Р№СеБ”ЂфЃY-}MI%AQ=I}QeA}M5A1}%5м(ЂЂЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№Р№‘•НЌЙҐБСЅЙЅХ№РЂфЃС•бСХЙ•}ЌЅХ№Рм(ЂЂЂЃф(ЂЂЂЃҐЂЎН…µБ±•Й}ЌЅХ№Р¤Ѓм(ЂЂЂЂЂЃY­•НЌЙҐБСЅЙAЅЅ±MҐй”ЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№РЂф(ЂЂЂЂЂЂЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СНmС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СН}ЌЅХ№Р¬­tм(ЂЂЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№Р№СеБ”ЂфЃY-}MI%AQ=I}QeA}M5A1Hм(ЂЂЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№Р№‘•НЌЙҐБСЅЙЅХ№РЂфЃН…µБ±•Й}ЌЅХ№Рм(ЂЂЂЃф(ЂЂЂЃ…НН•ЙС}№ЅС}й•ЙјЎС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СН}ЌЅХ№Р¤м(ЂЂЂЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂфЃСЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}…±±ЅЌ…СЅЙ}С•бСХЙ•Н|№±±ЅЌ…С” (ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СМ№‘…С„ ¤°ЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}ЌЅХ№СН}ЌЅХ№Р¤м(ЂЂЂЃҐЂЎС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂффЃY-}9U11}!91¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЂАм(ЂЂЂЃф(ЂЃф(ЂЃUН•‘Q•бСХЙ•QЙ…№НҐ•№С•НЌЙҐБСЅЙM•РЃХН•‘}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•РЂф(ЂЂЂЂЂЃС•бСХЙ•}СЙ…№НҐ•№С}‘•НЌЙҐБСЅЙ}Н•СН}ХН•‘|№•µБ±…Ќ•}‰…Ќ¬ ¤м(ЂЃХН•‘}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р№™Й…µ”ЂфЃ™Й…µ•}ЌХЙЙ•№С|м(ЂЃХН•‘}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р№±…еЅХРЂфЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}±…еЅХС}­•дм(ЂЃХН•‘}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Р№Н•РЂфЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЃХҐ№РМЙ}РЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№РЂфЂАм(ЂЃҐЂЎС•бСХЙ•}ЌЅХ№Р¤Ѓм(ЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”Ђф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•Н}ЅХСm‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Р¬­tм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№НQеБ”ЂфЃY-}MQIUQUI}QeA}]I%Q}MI%AQ=I}MPм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘НСM•РЂфЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘НС	Ґ№‘Ґ№њЂфЂАм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘НСЙЙ…е±•µ•№РЂфЂАм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘•НЌЙҐБСЅЙЅХ№РЂфЃС•бСХЙ•}ЌЅХ№Рм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘•НЌЙҐБСЅЙQеБ”ЂфЃY-}MI%AQ=I}QeA}M5A1}%5м(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№Б%µ…ќ•%№™јЂфЃС•бСХЙ•}Ґµ…ќ•}Ґ№™јм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№Б	Х™™•Й%№™јЂфЃ№Х±±БСИм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№БQ•б•±	Х™™•ЙYҐ•ЬЂфЃ№Х±±БСИм(ЂЃф(ЂЃҐЂЎН…µБ±•Й}ЌЅХ№Р¤Ѓм(ЂЂЂЃY­]ЙҐС••НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”Ђф(ЂЂЂЂЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•Н}ЅХСm‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Р¬­tм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№НQеБ”ЂфЃY-}MQIUQUI}QeA}]I%Q}MI%AQ=I}MPм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№Б9•бРЂфЃ№Х±±БСИм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘НСM•РЂфЃС•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•Рм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘НС	Ґ№‘Ґ№њЂфЃС•бСХЙ•}ЌЅХ№Рм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘НСЙЙ…е±•µ•№РЂфЂАм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘•НЌЙҐБСЅЙЅХ№РЂфЃН…µБ±•Й}ЌЅХ№Рм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№‘•НЌЙҐБСЅЙQеБ”ЂфЃY-}MI%AQ=I}QeA}M5A1Hм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№Б%µ…ќ•%№™јЂфЃН…µБ±•Й}Ґµ…ќ•}Ґ№™јм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№Б	Х™™•Й%№™јЂфЃ№Х±±БСИм(ЂЂЂЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС”№БQ•б•±	Х™™•ЙYҐ•ЬЂфЃ№Х±±БСИм(ЂЃф(ЂЃ…НН•ЙС}№ЅС}й•ЙјЎ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Р¤м(ЂЃЙ•СХЙёЃ‘•НЌЙҐБСЅЙ}Н•С}ЭЙҐС•}ЌЅХ№Рм)ф()Y­•НЌЙҐБСЅЙM•РЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийҐ№‘‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•Р (ЂЂЂЃ‰ЅЅ°ЃҐН}Щ•ЙС•а°ЃY­•НЌЙҐБСЅЙM•С1…еЅХРЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃХҐ№РМЙ}РЃС•бСХЙ•}ЌЅХ№Р°(ЂЂЂЃХҐ№РМЙ}РЃН…µБ±•Й}ЌЅХ№Р°ЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃС•бСХЙ•}Ґµ…ќ•}Ґ№™ј°(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃН…µБ±•Й}Ґµ…ќ•}Ґ№™ј¤ЃЌЅ№НРЃм(ЂЃЌЅ№НРЃ‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•С…ЌЎ•№СЙдЃ•№СЙдЂф(ЂЂЂЂЂЃ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Ќ…ЌЎ•}mҐН}Щ•ЙС•аЂьЂАЂиЂЕtм(ЂЃҐЂ …•№СЙд№Щ…±ҐђЃсрЃ•№СЙд№‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРЂ„фЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРЃср(ЂЂЂЂЂЃ•№СЙд№С•бСХЙ•}Ґ№™ЅМ№НҐй” ¤Ђ„фЃС•бСХЙ•}ЌЅХ№РЃсрЃ•№СЙд№Н…µБ±•Й}Ґ№™ЅМ№НҐй” ¤Ђ„фЃН…µБ±•Й}ЌЅХ№Р¤Ѓм(ЂЂЂЃЙ•СХЙёЃY-}9U11}!91м(ЂЃф(ЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЃС•бСХЙ•}ЌЅХ№РмЂ¬­¤¤Ѓм(ЂЂЂЃҐЂЎ•№СЙд№С•бСХЙ•}Ґ№™ЅНmҐt№Ґµ…ќ•YҐ•ЬЂ„фЃС•бСХЙ•}Ґµ…ќ•}Ґ№™ЅmҐt№Ґµ…ќ•YҐ•ЬЃср(ЂЂЂЂЂЂЂЃ•№СЙд№С•бСХЙ•}Ґ№™ЅНmҐt№Ґµ…ќ•1…еЅХРЂ„фЃС•бСХЙ•}Ґµ…ќ•}Ґ№™ЅmҐt№Ґµ…ќ•1…еЅХР¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃY-}9U11}!91м(ЂЂЂЃф(ЂЃф(ЂЃ™ЅИЂЎХҐ№РМЙ}РЃ¤ЂфЂАмЃ¤ЂрЃН…µБ±•Й}ЌЅХ№РмЂ¬­¤¤Ѓм(ЂЂЂЃҐЂЎ•№СЙд№Н…µБ±•Й}Ґ№™ЅНmҐt№Н…µБ±•ИЂ„фЃН…µБ±•Й}Ґµ…ќ•}Ґ№™ЅmҐt№Н…µБ±•И¤Ѓм(ЂЂЂЂЂЃЙ•СХЙёЃY-}9U11}!91м(ЂЂЂЃф(ЂЃф(ЂЃЙ•СХЙёЃ•№СЙд№‘•НЌЙҐБСЅЙ}Н•Рм)ф()ЩЅҐђЃYХ±­…№Ѕµµ…№‘AЙЅЌ•ННЅИийMСЅЙ•‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•Р (ЂЂЂЃ‰ЅЅ°ЃҐН}Щ•ЙС•а°ЃY­•НЌЙҐБСЅЙM•С1…еЅХРЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХР°ЃY­•НЌЙҐБСЅЙM•РЃ‘•НЌЙҐБСЅЙ}Н•Р°(ЂЂЂЃХҐ№РМЙ}РЃС•бСХЙ•}ЌЅХ№Р°ЃХҐ№РМЙ}РЃН…µБ±•Й}ЌЅХ№Р°ЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃС•бСХЙ•}Ґµ…ќ•}Ґ№™ј°(ЂЂЂЃЌЅ№НРЃY­•НЌЙҐБСЅЙ%µ…ќ•%№™јЁЃН…µБ±•Й}Ґµ…ќ•}Ґ№™ј¤Ѓм(ЂЃ‘©…Ќ•№СQ•бСХЙ••НЌЙҐБСЅЙM•С…ЌЎ•№СЙдЃ•№СЙдЂф(ЂЂЂЂЂЃ…‘©…Ќ•№С}С•бСХЙ•}‘•НЌЙҐБСЅЙ}Н•С}Ќ…ЌЎ•}mҐН}Щ•ЙС•аЂьЂАЂиЂЕtм(ЂЃ•№СЙд№‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРЂфЃ‘•НЌЙҐБСЅЙ}Н•С}±…еЅХРм(ЂЃ•№СЙд№‘•НЌЙҐБСЅЙ}Н•РЂфЃ‘•НЌЙҐБСЅЙ}Н•Рм(ЂЃҐЂЎС•бСХЙ•}ЌЅХ№Р¤Ѓм(ЂЂЂЃ•№СЙд№С•бСХЙ•}Ґ№™ЅМ№…ННҐќёЎС•бСХЙ•}Ґµ…ќ•}Ґ№™ј°ЃС•бСХЙ•}Ґµ…ќ•}Ґ№™јЂ¬ЃС•бСХЙ•}ЌЅХ№Р¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃ•№СЙд№С•бСХЙ•}Ґ№™ЅМ№Ќ±•…И ¤м(ЂЃф(ЂЃҐЂЎН…µБ±•Й}ЌЅХ№Р¤Ѓм(ЂЂЂЃ•№СЙд№Н…µБ±•Й}Ґ№™ЅМ№…ННҐќёЎН…µБ±•Й}Ґµ…ќ•}Ґ№™ј°ЃН…µБ±•Й}Ґµ…ќ•}Ґ№™јЂ¬ЃН…µБ±•Й}ЌЅХ№Р¤м(ЂЃфЃ•±Н”Ѓм(ЂЂЂЃ•№СЙд№Н…µБ±•Й}Ґ№™ЅМ№Ќ±•…И ¤м(ЂЃф(ЂЃ•№СЙд№Щ…±ҐђЂфЃСЙХ”м)ф()фЂЂјјЃ№…µ•НБ…Ќ”ЃЙ•аийќЙ…БЎҐЌМийЩХ±­…ё

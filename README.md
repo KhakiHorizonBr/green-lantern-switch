@@ -5,7 +5,7 @@ Recompilação da versão Xbox 360 usando ReXGlue, libnx e Mesa/NVK.
 O desempenho desse caminho ainda é muito baixo. O renderer adaptado dos Simpsons
 é mais rápido, mas mantém defeitos visuais. Não é um port concluído.
 
-## Estado em 16/10/2026 — execução 059
+## Estado em 17/10/2026 — perfil 069
 
 - Comparação no PC: D3D12 correto, Vulkan host com materiais pretos e Vulkan FSI correto.
 - Variante separada Xenos/Vulkan FSI chega ao gameplay sem defeitos visuais observados
@@ -16,14 +16,19 @@ O desempenho desse caminho ainda é muito baixo. O renderer adaptado dos Simpson
 - Mesmo com zero compilações novas, o último intervalo ficou em 1,4 FPS e gastou
   8,97 segundos esperando submissões em um intervalo de 10,05 segundos.
 - Heap mantida em 2000 MiB. Mais capacidade de RAM não elimina esse custo de execução.
-- Próximo candidato compilado: pedido de vídeo 960×540, com confirmação do tamanho
-  efetivamente apresentado e métricas do malloc. **Teste no Switch pendente.**
+- O perfil 069 aponta o passe 1280×720 e o resolve de profundidade entre os maiores
+  custos GPU em cenas pesadas; MSAA está em 1x e não há pressão de heap demonstrada.
+- O usuário relatou que os defeitos gráficos voltaram em um candidato posterior; a
+  mudança que causou a regressão ainda não foi isolada. Nenhum NRO novo foi validado.
+- O shader mais repetido nos dumps FSI é apenas candidato, sem correlação direta com
+  o passe caro medido no Switch.
 
 ## Por onde começar
 
 - [Estado atual, evidências e próximos passos](docs/PORT_STATUS.md)
 - [Como comparar PC e Switch](docs/GRAPHICS_COMPARISON.md)
 - [Resultados 054–059](docs/RESULTADOS_054_059.md)
+- [Perfil e diagnóstico 069](docs/RESULTADOS_069_FPS.md)
 - [Teste de resolução e interpretação](docs/FSI_540P.md)
 - [O que aproveitamos dos outros projetos](docs/REFERENCIAS_EXTERNAS.md)
 - [Mudanças desde a revisão 035](docs/CHANGELOG.md)

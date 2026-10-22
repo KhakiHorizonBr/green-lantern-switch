@@ -1,3 +1,13 @@
+## Atualização de 17/10/2026 — fontes e diagnóstico 069
+
+- Fontes nativos e integração Switch sincronizados com a árvore de trabalho após
+  as alterações de stencil, cache de cor EDRAM, captura e perfil.
+- Perfil 069 documentado: passe 1280×720 e resolve de profundidade concentram
+  custo em algumas cenas; MSAA está em 1x e não há evidência de pressão de heap.
+- Registrada a regressão visual relatada e o limite dos dumps FSI: o shader mais
+  repetido é candidato, ainda sem correlação com o passe caro no Switch.
+- Nenhum NRO, ELF, dump de shader, readback de imagem ou captura é publicado.
+
 ## Atualização de 16/10/2026 — 054 a 059 e candidato 540p
 
 - Atlas de resolves, views R16 assinadas e capturas de estados/readbacks para comparar PC.

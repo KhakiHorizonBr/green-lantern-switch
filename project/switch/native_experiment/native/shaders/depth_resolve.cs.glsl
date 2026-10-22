@@ -22,9 +22,25 @@ layout(push_constant) uniform Params {
   uint row_words;
   uint stencil_offset;
   uint packed_offset;
-  // Bit 0: depth is 24-bit unorm (else float). Bit 1: stencil present.
+  // Bit 0: host depth is unorm24. Bit 1: stencil present.
+  // Bit 2: guest depth is float20e4, not unorm24.
   uint flags;
 };
+// Same positive float20e4 encoding and round-to-nearest-even as ReXGlue
+// xenos::Float32To20e4 (BSD-3-Clause, Xenia contributors).
+uint encode20e4(float value) {
+  if (!(value > 0.0)) return 0u;
+  uint bits = floatBitsToUint(value);
+  if (bits >= 0x3FFFFFF8u) return 0xFFFFFFu;
+  if (bits < 0x38800000u) {
+    uint shift = min(113u - (bits >> 23u), 24u);
+    bits = (0x800000u | (bits & 0x7FFFFFu)) >> shift;
+  } else {
+    bits += 0xC8000000u;
+  }
+  bits += 3u + ((bits >> 3u) & 1u);
+  return (bits >> 3u) & 0xFFFFFFu;
+}
 void main() {
   uint i = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * row_words;
   if (i >= count) {
@@ -44,6 +60,7 @@ void main() {
   if ((flags & 2u) != 0u) {
     stencil = (words[stencil_offset + (i >> 2u)] >> ((i & 3u) * 8u)) & 0xFFu;
   }
-  words[packed_offset + i] = (depth24 << 8u) | stencil;
+  uint guest_depth = (flags & 4u) != 0u ? encode20e4(depth) : depth24;
+  words[packed_offset + i] = (guest_depth << 8u) | stencil;
   words[i] = floatBitsToUint(depth);
 }
