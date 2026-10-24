@@ -1,42 +1,36 @@
 # Green Lantern: Rise of the Manhunters — port experimental para Switch
 
 Recompilação da versão Xbox 360 usando ReXGlue, libnx e Mesa/NVK.
-**O Switch já chegou ao gameplay com imagem correta nos testes do caminho Vulkan FSI.**
-O desempenho desse caminho ainda é muito baixo. O renderer adaptado dos Simpsons
-é mais rápido, mas mantém defeitos visuais. Não é um port concluído.
+**O renderer nativo chega ao gameplay e teve os defeitos gráficos principais
+corrigidos, confirmados pelo usuário no teste 068. O desempenho ainda não é suficiente.**
+Não é um port concluído; estabilidade e gráficos de todas as fases não foram validados.
 
-## Estado em 17/10/2026 — perfil 069
+## Estado em 24/10/2026 — hardware 074
 
-- Comparação no PC: D3D12 correto, Vulkan host com materiais pretos e Vulkan FSI correto.
-- Variante separada Xenos/Vulkan FSI chega ao gameplay sem defeitos visuais observados
-  no teste 058; estabilidade de todas as fases ainda não demonstrada.
-- Leituras diretas apenas do backing CPU não físico eliminaram as leituras emuladas
-  registradas no perfil, preservando a vigilância dos aliases físicos da GPU.
-- Execução 059: 137 pipelines distintos, média de 1,28 segundo de compilação no driver.
-- Mesmo com zero compilações novas, o último intervalo ficou em 1,4 FPS e gastou
-  8,97 segundos esperando submissões em um intervalo de 10,05 segundos.
-- Heap mantida em 2000 MiB. Mais capacidade de RAM não elimina esse custo de execução.
-- O perfil 069 aponta o passe 1280×720 e o resolve de profundidade entre os maiores
-  custos GPU em cenas pesadas; MSAA está em 1x e não há pressão de heap demonstrada.
-- O usuário relatou que os defeitos gráficos voltaram em um candidato posterior; a
-  mudança que causou a regressão ainda não foi isolada. Nenhum NRO novo foi validado.
-- O shader mais repetido nos dumps FSI é apenas candidato, sem correlação direta com
-  o passe caro medido no Switch.
+- Menu chega a aproximadamente 24–25 FPS; fase pesada ficou em 7,3–8,8 FPS no074.
+- Conversão direta de depth/stencil, exportação EDRAM sob demanda e uploads
+  esparsos de vértices estão implementados, com comparações pontuais de bytes no PC.
+- O074 eliminou fallback de upload esparso por orçamento de sombra, mas a economia
+  de cópias ainda não demonstrou ganho global sustentado na fase pesada.
+- CPU, GPU e esperas por espaço no stream continuam caros. Mais RAM sozinha não
+  foi demonstrada como solução; heap de 2000 MiB e arena de 384 MiB preservadas.
+- Controles por posição Xbox preparados e compilados; teste de hardware adiado
+  pelo usuário até haver mais otimização.
+- Próxima meta solicitada: 35–40 FPS. Ainda não atingida; o pacing atual limita
+  o caminho nativo a 30 FPS mesmo em cenários leves.
 
 ## Por onde começar
 
-- [Estado atual, evidências e próximos passos](docs/PORT_STATUS.md)
-- [Como comparar PC e Switch](docs/GRAPHICS_COMPARISON.md)
-- [Resultados 054–059](docs/RESULTADOS_054_059.md)
-- [Perfil e diagnóstico 069](docs/RESULTADOS_069_FPS.md)
-- [Teste de resolução e interpretação](docs/FSI_540P.md)
-- [O que aproveitamos dos outros projetos](docs/REFERENCIAS_EXTERNAS.md)
-- [Mudanças desde a revisão 035](docs/CHANGELOG.md)
-- [Compilação, dependências e origem](docs/BUILD_AND_PROVENANCE.md)
-- [Execução 052 e métricas](logs/run-052/)
-- [Renderizador nativo](project/switch/native_experiment/native/native_renderer.cpp)
-- [Alocador de backing](sdk-overlay/src/core/guest_memory_switch.cpp)
-- [Tratamento das exceções](sdk-overlay/src/core/exception_handler_switch.cpp)
+- [Resultados 071–074, validação e limitações](docs/RESULTADOS_071_074.md)
+- [Estado e histórico atual](docs/PORT_STATUS.md)
+- [Conversão direta de profundidade](docs/FPS_DEPTH_CACHE.md)
+- [EDRAM sob demanda](docs/FPS_LAZY_EDRAM.md)
+- [Upload de vértices: tentativas e custos](docs/FPS_VERTEX_DELTA.md)
+- [Cache seletivo, upload sem sombra e controles](docs/FPS_VERTEX_CACHE.md)
+- [Comparação gráfica entre PC e Switch](docs/GRAPHICS_COMPARISON.md)
+- [Compilação e procedência](docs/BUILD_AND_PROVENANCE.md)
+- [Logs do hardware 074](logs/run-074/)
+- [Renderer nativo atual](project/switch/native_experiment/native/native_renderer.cpp)
 
 ## Conteúdo
 

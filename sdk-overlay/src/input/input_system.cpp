@@ -11,6 +11,11 @@
 
 #include <algorithm>
 #include <cmath>
+#if defined(_WIN32)
+#include <chrono>
+#include <fstream>
+#include <sstream>
+#endif
 
 #include <rex/dbg.h>
 #include <rex/input/device_assignment.h>
@@ -37,6 +42,11 @@ REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput
 #endif
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
+#if defined(_WIN32)
+REXCVAR_DEFINE_STRING(input_replay_file, "", "Development",
+    "Explicit desktop replay: lines of seconds, hexadecimal button mask, duration seconds; empty disables")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#endif
 namespace rex::input {
 
 namespace {
@@ -45,6 +55,42 @@ namespace {
 // a real pad off guest user 0. SlotAssignment routes them by their synthetic
 // flag and never reads this value.
 constexpr uint32_t kSyntheticOrdinal = UINT32_MAX;
+
+#if defined(_WIN32)
+// Development-only guest input, independent of desktop focus and physical pads.
+// Only enabled by an explicit file; never changes normal input or Switch builds.
+struct ReplayInput {
+  struct Event { double start, duration; uint16_t buttons; };
+  std::vector<Event> events;
+  std::chrono::steady_clock::time_point epoch = std::chrono::steady_clock::now();
+  ReplayInput() {
+    std::ifstream file(REXCVAR_GET(input_replay_file));
+    std::string line;
+    while (std::getline(file, line)) {
+      if (line.empty() || line[0] == '#') continue;
+      std::istringstream fields(line);
+      double start, duration;
+      uint32_t mask;
+      if (fields >> start >> std::hex >> mask >> std::dec >> duration &&
+          std::isfinite(start) && std::isfinite(duration) && start >= 0 &&
+          duration > 0 && mask <= 0xFFFF)
+        events.push_back({start, duration, uint16_t(mask)});
+      else REXLOG_WARN("[input-replay] invalid event ignored");
+    }
+    REXLOG_INFO("[input-replay] {} events; epoch starts at first guest state poll", events.size());
+  }
+  void State(X_INPUT_STATE& out) const {
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - epoch).count();
+    out = {};
+    out.packet_number = uint32_t(elapsed * 1000);
+    uint16_t buttons = 0;
+    for (const auto& event : events)
+      if (elapsed >= event.start && elapsed < event.start + event.duration) buttons |= event.buttons;
+    out.gamepad.buttons = buttons;
+  }
+};
+const ReplayInput& DesktopReplay() { static const ReplayInput replay; return replay; }
+#endif
 
 }  // namespace
 
@@ -196,6 +242,16 @@ const DeviceInfo* InputSystem::DeviceInfoFor(DeviceId id) const {
 X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
                                       X_INPUT_CAPABILITIES* out_caps) {
   SCOPE_profile_cpu_f("hid");
+#if defined(_WIN32)
+  if (!REXCVAR_GET(input_replay_file).empty()) {
+    if (user_index || !out_caps) return X_ERROR_DEVICE_NOT_CONNECTED;
+    *out_caps = {};
+    out_caps->type = XINPUT_DEVTYPE_GAMEPAD;
+    out_caps->sub_type = 1;
+    out_caps->gamepad.buttons = 0xFFFF;
+    return X_ERROR_SUCCESS;
+  }
+#endif
   if (!out_caps || !assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -223,6 +279,13 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
 
 X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   SCOPE_profile_cpu_f("hid");
+#if defined(_WIN32)
+  if (!REXCVAR_GET(input_replay_file).empty()) {
+    if (user_index || !out_state) return X_ERROR_DEVICE_NOT_CONNECTED;
+    DesktopReplay().State(*out_state);
+    return X_ERROR_SUCCESS;
+  }
+#endif
   if (!assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -304,6 +367,27 @@ X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration
 X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
                                    X_INPUT_KEYSTROKE* out_keystroke) {
   SCOPE_profile_cpu_f("hid");
+#if defined(_WIN32)
+  if (!REXCVAR_GET(input_replay_file).empty()) {
+    if ((user_index != 0 && user_index != 255) || !out_keystroke)
+      return X_ERROR_DEVICE_NOT_CONNECTED;
+    X_INPUT_STATE state = {};
+    DesktopReplay().State(state);
+    static std::mutex replay_key_mutex;
+    static uint16_t previous = 0;
+    std::lock_guard<std::mutex> lock(replay_key_mutex);
+    const uint16_t current = state.gamepad.buttons;
+    const uint16_t changed = current ^ previous;
+    previous = current;
+    uint16_t button = changed & X_INPUT_GAMEPAD_START ? X_INPUT_GAMEPAD_START :
+                      changed & X_INPUT_GAMEPAD_A ? X_INPUT_GAMEPAD_A : 0;
+    if (!button) return X_ERROR_EMPTY;
+    *out_keystroke = {};
+    out_keystroke->virtual_key = button == X_INPUT_GAMEPAD_START ? 0x5814 : 0x5800;
+    out_keystroke->flags = current & button ? X_INPUT_KEYSTROKE_KEYDOWN : X_INPUT_KEYSTROKE_KEYUP;
+    return X_ERROR_SUCCESS;
+  }
+#endif
   if (!assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }

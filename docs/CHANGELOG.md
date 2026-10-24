@@ -63,3 +63,10 @@
 
 O NRO de captura foi compilado depois do 052; seu comportamento no console ainda não foi confirmado.
 
+
+
+## 24/10/2026 — atualização até o074 e controles
+
+Fontes, shaders próprios e overlay sincronizados. Incluídos resultados071–074,
+logs preservados, provas de bytes PC e distinção entre build e validação hardware.
+Consulte RESULTADOS_071_074.md para números, tentativas descartadas e próximos gargalos.

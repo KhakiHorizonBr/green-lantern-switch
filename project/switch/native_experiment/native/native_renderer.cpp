@@ -20,6 +20,8 @@
 #include <regex>
 #include <sstream>
 #include <filesystem>
+#include <fstream>
+#include <new>
 #include <array>
 #include <condition_variable>
 #include <deque>
@@ -119,7 +121,23 @@ REXCVAR_DEFINE_BOOL(nx_stencil_color_layout, true, "Graphics",
                     "Restore stencil using Xenos color/depth 40-sample half-tile permutation");
 REXCVAR_DEFINE_UINT32(nx_vertex_fetch_safety, 8, "Graphics",
                     "Vertex copy checks: bit1 revisit, bit2 whole buffers, bit4 fresh hashes, bit8 whole indirect buffers");
+REXCVAR_DEFINE_BOOL(nx_depth_resolve_cache, false, "Graphics",
+                    "Reuse identical depth resolves within a frame until a possible depth/stencil write");
+REXCVAR_DEFINE_BOOL(nx_index_fast_copy, true, "Graphics",
+                    "Use bulk index conversion when the guest restart marker already equals Vulkan's marker");
+REXCVAR_DEFINE_BOOL(nx_depth_packed_direct, true, "Graphics",
+                    "Generate float24 depth and packed stencil directly from sampled attachments");
+REXCVAR_DEFINE_BOOL(nx_edram_lazy_export, true, "Graphics",
+                    "Export color EDRAM tiles only when another render target imports them");
+REXCVAR_DEFINE_BOOL(nx_vertex_delta_upload, false, "Graphics",
+                    "Reuse unchanged whole vertex buffers and fill their zero spans directly on the GPU");
 #if defined(_WIN32)
+REXCVAR_DEFINE_BOOL(nx_verify_depth_direct, false, "Development",
+                    "Capture direct depth outputs then run the old path on the same inputs for byte comparison");
+REXCVAR_DEFINE_BOOL(nx_verify_edram_lazy, false, "Development",
+                    "Keep eager reference exports and compare same-input imports against lazy exports in PC captures");
+REXCVAR_DEFINE_BOOL(nx_verify_vertex_delta, false, "Development",
+                    "Capture reconstructed vertex buffers and their exact CPU shadow on PC");
 REXCVAR_DEFINE_BOOL(nx_debug_material_no_depth, false, "Development",
                     "PC diagnostic: bypass depth/stencil on the two identified body material shaders");
 REXCVAR_DEFINE_BOOL(nx_debug_full_vertex_fetch, false, "Development",
@@ -149,6 +167,7 @@ namespace shaders {
 #include "shaders/vulkan_spirv/apply_gamma_table_cs.h"
 #include "shaders/depth_resolve_cs.h"
 #include "shaders/depth_to_float_cs.h"
+#include "shaders/depth_packed_direct_cs.h"
 #include "shaders/copy_color_cs.h"
 #include "shaders/restore_stencil_cs.h"
 }  // namespace shaders
@@ -295,6 +314,7 @@ struct RenderTarget {
   VkImageView view = VK_NULL_HANDLE;
   // Depth only, for the compute pass that resolves depth.
   VkImageView sample_view = VK_NULL_HANDLE;
+  VkImageView stencil_view = VK_NULL_HANDLE;
   VkFormat format = VK_FORMAT_UNDEFINED;
   VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
   uint32_t width = 0;
@@ -462,6 +482,9 @@ struct Renderer::Impl {
   VkDescriptorSetLayout depth_copy_set_layout = VK_NULL_HANDLE;
   VkPipelineLayout depth_copy_layout = VK_NULL_HANDLE;
   VkPipeline depth_copy_pipeline = VK_NULL_HANDLE;
+  VkDescriptorSetLayout depth_packed_set_layout = VK_NULL_HANDLE;
+  VkPipelineLayout depth_packed_layout = VK_NULL_HANDLE;
+  VkPipeline depth_packed_pipeline = VK_NULL_HANDLE;
   // Color resolves by compute (copy_color.cs.glsl), same set layout.
   VkPipelineLayout copy_color_layout = VK_NULL_HANDLE;
   VkPipeline copy_color_pipeline = VK_NULL_HANDLE;
@@ -540,11 +563,13 @@ struct Renderer::Impl {
     uint32_t version = 0, producer_base = 0, producer_pitch = 0, producer_format = 0;
     bool unknown_write = false;
     bool known_zero = false;
+    bool needs_export = false;
   };
   std::array<EdramColorTile, kEdramTiles> edram_color_tiles = {};
   uint32_t edram_color_version = 0;
   std::unordered_set<uint64_t> edram_logged_imports;
   uint64_t edram_tiles_imported = 0, edram_tiles_published = 0;
+  uint64_t edram_tiles_deferred = 0;
   struct EdramPendingWrite {
     RenderTarget* target = nullptr;
     VkRect2D rect = {};
@@ -672,6 +697,22 @@ struct Renderer::Impl {
   }
   uint64_t vertex_hash_bytes = 0;
   FlatMap64<VertexHash> vertex_hashes;
+  struct VertexShadow {
+    std::unique_ptr<uint8_t[]> data;
+    uint64_t content_hash = 0;
+    std::unique_ptr<std::array<uint8_t, 1024>> zero_chunks;
+    uint64_t position = UINT64_MAX;
+    bool disabled = false;
+    uint8_t disabled_reason = 2;
+    uint64_t last_use = 0;
+  };
+  std::unordered_map<uint64_t, VertexShadow> vertex_shadows;
+  uint64_t vertex_shadow_bytes = 0;
+  uint64_t vertex_delta_cpu = 0, vertex_delta_gpu = 0, vertex_delta_reused = 0;
+  bool UploadWholeVertexDelta(uint32_t address, const uint8_t* source, uint32_t bytes, uint64_t hash,
+                             VkDeviceSize& offset, uint64_t& position_out);
+  void VerifyVertexDelta(VkDeviceSize offset, const uint8_t* expected, uint32_t bytes,
+                         bool uncached = false);
 
   // Swap.
   VkDescriptorSetLayout swap_layout_ramp = VK_NULL_HANDLE;
@@ -733,6 +774,7 @@ struct Renderer::Impl {
     VkImage image;
     VkImageView view;
     VkImageView sample_view;
+    VkImageView stencil_view;
     VkDeviceMemory memory;
   };
   std::vector<RetiredRenderTarget> retired_render_targets;
@@ -740,6 +782,20 @@ struct Renderer::Impl {
   static constexpr VkDeviceSize kDepthScratchSize = 16u << 20;
   VkBuffer depth_scratch = VK_NULL_HANDLE;
   VkDeviceMemory depth_scratch_memory = VK_NULL_HANDLE;
+  // One same-frame entry, not an address-only cache. All possible depth or
+  // stencil writes invalidate it, including explicit stencil restoration.
+  struct DepthResolveMemo {
+    bool valid = false;
+    uint64_t frame = 0, mutation = 0;
+    VkImage source = VK_NULL_HANDLE, dest = VK_NULL_HANDLE, words = VK_NULL_HANDLE;
+    uint32_t address = 0, control = 0, info = 0, pitch = 0;
+    int32_t x = 0, y = 0;
+    uint32_t width = 0, height = 0;
+  } depth_resolve_memo;
+  uint64_t depth_mutation = 0;
+  uint64_t depth_resolve_reused = 0, depth_resolve_executed = 0;
+  uint64_t depth_direct_executed = 0;
+  uint64_t index_fast_bytes = 0, index_scalar_bytes = 0;
   // Bumped whenever a render target is created, as setups hold pointers.
   uint64_t rt_generation = 1;
   bool BuildDrawSetup(uint32_t initiator_value);
@@ -1903,6 +1959,9 @@ struct Renderer::Impl {
 
   void Draw(const uint32_t* immediate_indices, uint32_t immediate_index_words);
   bool RestoreStencilFromColor(RenderTarget& color, RenderTarget& depth, VkRect2D rect);
+  bool ResolvePackedDepthDirect(RenderTarget& source, ResolveDestination& dest,
+      uint32_t address, uint32_t dest_width, uint32_t dest_height,
+      int32_t x, int32_t y, uint32_t width, uint32_t height);
   void UpdateSystemConstants(bool primitive_polygonal, const draw_util::ViewportInfo& viewport,
                              uint32_t used_texture_mask, uint32_t vertex_index_endian_flags,
                              const VulkanShader* vs, const VulkanShader* ps);
@@ -1990,7 +2049,8 @@ bool Renderer::Impl::Initialize() {
   if (!rex::ui::vulkan::util::CreateDedicatedAllocationBuffer(
           device, stream_capacity + kStreamSlack,
           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-              VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+              VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
           rex::ui::vulkan::util::MemoryPurpose::kUpload, stream_buffer, stream_memory,
           &stream_memory_type, &stream_allocation)) {
     REXLOG_ERROR("[native] Could not create the {} MB stream buffer", stream_capacity >> 20);
@@ -2295,6 +2355,25 @@ bool Renderer::Impl::CreateDepthConversion() {
     REXLOG_WARN("[native] No direct depth resolve; resolving depth through a buffer");
   }
 
+  {
+    VkDescriptorSetLayoutBinding bindings[4] = {};
+    for (uint32_t i = 0; i < 4; ++i) {
+      bindings[i].binding = i;
+      bindings[i].descriptorCount = 1;
+      bindings[i].descriptorType = i < 2 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+      bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+    VkDescriptorSetLayoutCreateInfo info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    info.bindingCount = 4; info.pBindings = bindings;
+    VkPipelineLayoutCreateInfo pl = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pl.setLayoutCount = 1; pl.pSetLayouts = &depth_packed_set_layout;
+    pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &copy_push;
+    if (dfn().vkCreateDescriptorSetLayout(vk, &info, nullptr, &depth_packed_set_layout) == VK_SUCCESS &&
+        dfn().vkCreatePipelineLayout(vk, &pl, nullptr, &depth_packed_layout) == VK_SUCCESS)
+      depth_packed_pipeline = rex::ui::vulkan::util::CreateComputePipeline(
+          device, depth_packed_layout, shaders::kDepthPackedDirectCs, sizeof(shaders::kDepthPackedDirectCs));
+  }
+
   VkPhysicalDeviceFeatures features = {};
   device->vulkan_instance()->functions().vkGetPhysicalDeviceFeatures(device->physical_device(),
                                                                      &features);
@@ -2365,6 +2444,66 @@ bool Renderer::Impl::ComputeColorCopy(VkCommandBuffer c, VkImageView source, VkI
           VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
       0, 1, &after, 0, nullptr, 0, nullptr);
+  return true;
+}
+
+bool Renderer::Impl::ResolvePackedDepthDirect(RenderTarget& source, ResolveDestination& dest,
+    uint32_t address, uint32_t dest_width, uint32_t dest_height,
+    int32_t x, int32_t y, uint32_t width, uint32_t height) {
+  if (!REXCVAR_GET(nx_depth_packed_direct) || !depth_packed_pipeline ||
+      source.format != VK_FORMAT_D32_SFLOAT_S8_UINT || !source.sample_view ||
+      !source.stencil_view || !REXCVAR_GET(nx_restore_depth_stencil)) return false;
+  auto c = cmd();
+  auto* words = textures.GetResolveDestination(address | TextureCache::kDepthWordsTag,
+      dest_width, dest_height, VK_FORMAT_R8G8B8A8_UNORM,
+      uint32_t(xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA), c);
+  if (!words) return false;
+  VkDescriptorSet set = AllocateSet(depth_packed_set_layout);
+  if (!set) return false;
+  VkDescriptorImageInfo images[4] = {
+      {VK_NULL_HANDLE, source.sample_view, VK_IMAGE_LAYOUT_GENERAL},
+      {VK_NULL_HANDLE, source.stencil_view, VK_IMAGE_LAYOUT_GENERAL},
+      {VK_NULL_HANDLE, dest.view, VK_IMAGE_LAYOUT_GENERAL},
+      {VK_NULL_HANDLE, words->view, VK_IMAGE_LAYOUT_GENERAL}};
+  VkWriteDescriptorSet writes[4] = {};
+  for (uint32_t i = 0; i < 4; ++i) {
+    writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[i].dstSet = set; writes[i].dstBinding = i; writes[i].descriptorCount = 1;
+    writes[i].descriptorType = i < 2 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writes[i].pImageInfo = &images[i];
+  }
+  dfn().vkUpdateDescriptorSets(vk, 4, writes, 0, nullptr);
+  VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT |
+          VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
+  int32_t params[4] = {x, y, int32_t(width), int32_t(height)};
+  dfn().vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_packed_pipeline);
+  dfn().vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_packed_layout, 0,
+      1, &set, 0, nullptr);
+  dfn().vkCmdPushConstants(c, depth_packed_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+      sizeof(params), params);
+  dfn().vkCmdDispatch(c, (width + 7) / 8, (height + 7) / 8, 1);
+  VkMemoryBarrier after = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &after, 0, nullptr, 0, nullptr);
+  textures.CopyToSized(*words, c);
+#if defined(_WIN32)
+  if (REXCVAR_GET(nx_verify_depth_direct) && Tracing()) {
+    TraceDumpImage(c, dest.image, dest_width, dest_height, dest.format,
+        address | 0x20000000u, false, x, y, width, height, "direct_depth");
+    TraceDumpImage(c, words->image, dest_width, dest_height, words->format,
+        address | 0x60000000u, false, x, y, width, height, "direct_packed_words");
+    // The existing path overwrites these outputs using the exact same source.
+    // Its packed_depth_words and destination captures are the reference.
+    return false;
+  }
+#endif
   return true;
 }
 
@@ -2648,6 +2787,7 @@ void Renderer::Impl::Shutdown() {
   textures.Shutdown();
   for (auto& [key, rt] : render_targets) {
     if (rt->sample_view) dfn().vkDestroyImageView(vk, rt->sample_view, nullptr);
+    if (rt->stencil_view) dfn().vkDestroyImageView(vk, rt->stencil_view, nullptr);
     if (rt->view) dfn().vkDestroyImageView(vk, rt->view, nullptr);
     if (rt->image) dfn().vkDestroyImage(vk, rt->image, nullptr);
     if (rt->memory) dfn().vkFreeMemory(vk, rt->memory, nullptr);
@@ -2659,6 +2799,7 @@ void Renderer::Impl::Shutdown() {
   edram_color_memory = VK_NULL_HANDLE;
   for (auto& retired : retired_render_targets) {
     if (retired.sample_view) dfn().vkDestroyImageView(vk, retired.sample_view, nullptr);
+    if (retired.stencil_view) dfn().vkDestroyImageView(vk, retired.stencil_view, nullptr);
     dfn().vkDestroyImageView(vk, retired.view, nullptr);
     dfn().vkDestroyImage(vk, retired.image, nullptr);
     dfn().vkFreeMemory(vk, retired.memory, nullptr);
@@ -2668,6 +2809,9 @@ void Renderer::Impl::Shutdown() {
   if (restore_stencil_pipeline) dfn().vkDestroyPipeline(vk, restore_stencil_pipeline, nullptr);
   if (depth_convert_layout) dfn().vkDestroyPipelineLayout(vk, depth_convert_layout, nullptr);
   if (depth_copy_pipeline) dfn().vkDestroyPipeline(vk, depth_copy_pipeline, nullptr);
+  if (depth_packed_pipeline) dfn().vkDestroyPipeline(vk, depth_packed_pipeline, nullptr);
+  if (depth_packed_layout) dfn().vkDestroyPipelineLayout(vk, depth_packed_layout, nullptr);
+  if (depth_packed_set_layout) dfn().vkDestroyDescriptorSetLayout(vk, depth_packed_set_layout, nullptr);
   if (copy_color_pipeline) dfn().vkDestroyPipeline(vk, copy_color_pipeline, nullptr);
   if (copy_color_layout) dfn().vkDestroyPipelineLayout(vk, copy_color_layout, nullptr);
   if (depth_copy_layout) dfn().vkDestroyPipelineLayout(vk, depth_copy_layout, nullptr);
@@ -3185,6 +3329,10 @@ RenderTarget* Renderer::Impl::GetRenderTarget(const RenderTargetKey& key, uint32
   if (key.is_depth) {
     view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     dfn().vkCreateImageView(vk, &view, nullptr, &rt->sample_view);
+    if (HasStencil(rt->format)) {
+      view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+      dfn().vkCreateImageView(vk, &view, nullptr, &rt->stencil_view);
+    }
     view.subresourceRange.aspectMask = aspect;
   }
 
@@ -3232,7 +3380,7 @@ RenderTarget* Renderer::Impl::GetRenderTarget(const RenderTargetKey& key, uint32
                          VK_IMAGE_LAYOUT_GENERAL, 1, &copy);
     // Destroyed once this frame is done on the GPU (waiting for idle here
     // was a visible hitch).
-    retired_render_targets.push_back({frame, old->image, old->view, old->sample_view, old->memory});
+    retired_render_targets.push_back({frame, old->image, old->view, old->sample_view, old->stencil_view, old->memory});
   }
   VkMemoryBarrier after = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
                            VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -3874,6 +4022,213 @@ struct PhaseTimer {
   ~PhaseTimer() { Mark(-1); }
 };
 
+bool Renderer::Impl::UploadWholeVertexDelta(uint32_t address, const uint8_t* source,
+    uint32_t bytes, uint64_t hash, VkDeviceSize& offset, uint64_t& position_out) {
+  TextureTimer upload_time(stats().vertex_upload_ns);
+  auto fallback = [&](unsigned reason) {
+    stats().vertex_upload_fallback_bytes[reason] += bytes;
+    return false;
+  };
+  if (!REXCVAR_GET(nx_vertex_delta_upload)) return fallback(0);
+  if (bytes < (256u << 10) || bytes > (16u << 20)) return fallback(1);
+  constexpr uint64_t kBudget = 32u << 20;
+  constexpr uint32_t kChunk = 16u << 10;
+  alignas(64) static constexpr std::array<uint8_t, kChunk> zero = {};
+  auto& shadow = vertex_shadows[(uint64_t(address) << 32) | bytes];
+  shadow.last_use = frame;
+  if (shadow.disabled) return fallback(shadow.disabled_reason);
+  if (!shadow.data) {
+    // CPU shadows are useful here only for sparse zero fills. Dense buffers
+    // otherwise consume the budget while still doing the original full copy.
+    // Rejecting one never omits its data: the caller uses its normal memcpy.
+    uint32_t admission_zero_bytes = 0, admission_zero_runs = 0;
+    std::array<uint8_t, 1024> admission_zero_chunks = {};
+    bool was_zero = false;
+    for (uint32_t begin = 0; begin < bytes; begin += kChunk) {
+      const uint32_t count = std::min(kChunk, bytes - begin);
+      const bool is_zero = !std::memcmp(source + begin, zero.data(), count);
+      admission_zero_chunks[begin / kChunk] = is_zero;
+      if (is_zero) {
+        admission_zero_bytes += count;
+        if (!was_zero) ++admission_zero_runs;
+      }
+      was_zero = is_zero;
+    }
+    if (admission_zero_bytes < bytes / 2 || admission_zero_runs > 16) {
+      shadow.disabled = true;
+      shadow.disabled_reason = 6;
+      return fallback(6);
+    }
+    // Menu pools should not occupy the entire budget once the level starts.
+    // Evicting a CPU shadow does not free or overwrite its immutable GPU data.
+    for (auto it = vertex_shadows.begin(); vertex_shadow_bytes + bytes > kBudget &&
+         it != vertex_shadows.end();) {
+      if (&it->second != &shadow && it->second.last_use + 120 < frame) {
+        if (it->second.data) vertex_shadow_bytes -= uint32_t(it->first);
+        it = vertex_shadows.erase(it);
+      } else ++it;
+    }
+    if (vertex_shadow_bytes + bytes > kBudget) {
+      // Admission already inspected the original bytes. Even without room
+      // for a persistent CPU shadow, upload the data runs and fill zero runs
+      // into a new complete GPU range. No old copy or extra RAM is needed.
+      if (!edram_fill_buffer) edram_fill_buffer = reinterpret_cast<PFN_vkCmdFillBuffer>(
+          device->vulkan_instance()->functions().vkGetDeviceProcAddr(vk, "vkCmdFillBuffer"));
+      if (!edram_fill_buffer) return fallback(3);
+      uint8_t* out = Allocate(bytes, 16, offset);
+      if (!out) return fallback(4);
+      position_out = stream_head - bytes;
+      for (uint32_t begin = 0; begin < bytes;) {
+        const bool is_zero = admission_zero_chunks[begin / kChunk];
+        uint32_t end = std::min(begin + kChunk, bytes);
+        while (end < bytes && admission_zero_chunks[end / kChunk] == is_zero)
+          end = std::min(end + kChunk, bytes);
+        if (is_zero)
+          edram_fill_buffer(current().setup, stream_buffer, offset + begin, end - begin, 0);
+        else
+          std::memcpy(out + begin, source + begin, end - begin);
+        begin = end;
+      }
+      vertex_delta_cpu += bytes - admission_zero_bytes;
+      vertex_delta_gpu += admission_zero_bytes;
+      stats().vertex_sparse_cpu_bytes += bytes - admission_zero_bytes;
+      stats().vertex_sparse_gpu_bytes += admission_zero_bytes;
+      stats().vertex_sparse_uncached_bytes += bytes;
+      VerifyVertexDelta(offset, source, bytes, true);
+      return true;
+    }
+    shadow.data.reset(new (std::nothrow) uint8_t[bytes]);
+    if (!shadow.data) return fallback(4);
+    shadow.zero_chunks.reset(new (std::nothrow) std::array<uint8_t, 1024>{});
+    if (!shadow.zero_chunks) { shadow.data.reset(); return fallback(4); }
+    vertex_shadow_bytes += bytes;
+  }
+  const bool initialized = shadow.position != UINT64_MAX;
+  std::vector<std::pair<uint32_t, uint32_t>> changed;
+  uint32_t dirty_bytes = 0;
+  // Only a full hash proves the same cache identity here. RangeHash's
+  // sampled detector must still be checked against the exact shadow bytes,
+  // especially when an older GPU copy has already aged out of the stream.
+  const bool same_content = initialized && (REXCVAR_GET(nx_vertex_fetch_safety) & 4u) &&
+      shadow.content_hash == hash;
+  if (same_content) ++stats().vertex_shadow_hash_hits;
+  if (initialized && !same_content) {
+    for (uint32_t begin = 0; begin < bytes; begin += kChunk) {
+      const uint32_t count = std::min(kChunk, bytes - begin);
+      if (std::memcmp(source + begin, shadow.data.get() + begin, count)) {
+        changed.push_back({begin, count});
+        dirty_bytes += count;
+      }
+    }
+    if (dirty_bytes > bytes / 2) {
+      // Frequently rewritten buffers should keep the original single memcpy.
+      shadow.disabled = true; shadow.data.reset(); shadow.zero_chunks.reset();
+      vertex_shadow_bytes -= bytes;
+      return fallback(5);
+    }
+  }
+  if (initialized) {
+    if (!dirty_bytes && stream_head - shadow.position < stream_capacity / 2) {
+      offset = VkDeviceSize(shadow.position % stream_capacity);
+      current().stream_oldest = std::min(current().stream_oldest, shadow.position);
+      vertex_delta_reused += bytes;
+      stats().vertex_sparse_reused_bytes += bytes;
+      position_out = shadow.position;
+      VerifyVertexDelta(offset, source, bytes);
+      return true;
+    }
+  }
+  uint8_t* out = Allocate(bytes, 16, offset);
+  if (!out) return fallback(4);
+  const uint64_t position = stream_head - bytes;
+  if (initialized) {
+    for (const auto& range : changed) {
+      std::memcpy(shadow.data.get() + range.first, source + range.first, range.second);
+      // Reclassify only chunks that actually changed; all other zero flags
+      // describe the exact bytes retained in the CPU shadow.
+      (*shadow.zero_chunks)[range.first / kChunk] =
+          !std::memcmp(shadow.data.get() + range.first, zero.data(), range.second);
+    }
+  } else {
+    std::memcpy(shadow.data.get(), source, bytes);
+  }
+  // Long zero spans are common in the palette/pool captures. Generate those
+  // bytes directly instead of transferring them through uncached CPU writes.
+  // Every byte remains present in the full buffer; signed zero is not zero here.
+  std::vector<std::pair<uint32_t, uint32_t>> zero_runs, data_runs;
+  uint32_t zero_bytes = 0;
+  auto append = [](auto& runs, uint32_t begin, uint32_t count) {
+    if (!runs.empty() && runs.back().first + runs.back().second == begin)
+      runs.back().second += count;
+    else runs.push_back(std::pair<uint32_t, uint32_t>{begin, count});
+  };
+  for (uint32_t begin = 0; begin < bytes; begin += kChunk) {
+    const uint32_t count = std::min(kChunk, bytes - begin);
+    if (!initialized) {
+      (*shadow.zero_chunks)[begin / kChunk] =
+          !std::memcmp(shadow.data.get() + begin, zero.data(), count);
+    }
+    if ((*shadow.zero_chunks)[begin / kChunk]) {
+      append(zero_runs, begin, count); zero_bytes += count;
+    } else append(data_runs, begin, count);
+  }
+  if (!edram_fill_buffer) edram_fill_buffer = reinterpret_cast<PFN_vkCmdFillBuffer>(
+      device->vulkan_instance()->functions().vkGetDeviceProcAddr(vk, "vkCmdFillBuffer"));
+  if (zero_bytes >= bytes / 2 && zero_runs.size() <= 16 && edram_fill_buffer) {
+    for (const auto& run : data_runs)
+      std::memcpy(out + run.first, shadow.data.get() + run.first, run.second);
+    // This is a newly allocated, immutable range. Uploads are submitted before
+    // main draws, and main starts with the transfer-write visibility barrier.
+    // No dependence on an older vertex copy, recorder drain, or per-buffer
+    // graphics/transfer barrier is needed.
+    auto c = current().setup;
+    for (const auto& run : zero_runs)
+      edram_fill_buffer(c, stream_buffer, offset + run.first, run.second, 0);
+    vertex_delta_cpu += bytes - zero_bytes;
+    vertex_delta_gpu += zero_bytes;
+    stats().vertex_sparse_cpu_bytes += bytes - zero_bytes;
+    stats().vertex_sparse_gpu_bytes += zero_bytes;
+  } else {
+    std::memcpy(out, shadow.data.get(), bytes);
+    vertex_delta_cpu += bytes;
+    stats().vertex_sparse_cpu_bytes += bytes;
+  }
+  shadow.position = position;
+  shadow.content_hash = hash;
+  position_out = position;
+  VerifyVertexDelta(offset, source, bytes);
+  return true;
+}
+
+void Renderer::Impl::VerifyVertexDelta(VkDeviceSize offset, const uint8_t* expected, uint32_t bytes,
+                                      bool uncached) {
+#if defined(_WIN32)
+  if (!REXCVAR_GET(nx_verify_vertex_delta) || !Tracing() || trace_dumps.size() >= 96 ||
+      trace_bytes + bytes > (128u << 20)) return;
+  TraceDump dump;
+  dump.width = bytes / 4; dump.height = 1; dump.format = VK_FORMAT_R32_SFLOAT; dump.bytes = bytes;
+  dump.name = fmt::format("capture/native/vertex_f{}_n{}", frame, trace_dumps.size());
+  dump.metadata = fmt::format(",\"role\":\"vertex_delta\",\"frame\":{},\"offset\":{},\"uncached\":{}",
+      frame, offset, uncached);
+  if (!rex::ui::vulkan::util::CreateDedicatedAllocationBuffer(device, bytes,
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT, rex::ui::vulkan::util::MemoryPurpose::kReadback,
+      dump.buffer, dump.memory)) return;
+  std::error_code ec;
+  std::filesystem::create_directories("capture/native", ec);
+  std::ofstream expected_file(dump.name + ".expected.bin", std::ios::binary);
+  expected_file.write(reinterpret_cast<const char*>(expected), bytes);
+  auto c = cmd();
+  VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+      VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT};
+  dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
+  VkBufferCopy copy = {offset, 0, bytes};
+  dfn().vkCmdCopyBuffer(c, stream_buffer, dump.buffer, 1, &copy);
+  trace_bytes += bytes;
+  trace_dumps.push_back(std::move(dump));
+#endif
+}
+
 void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_index_words) {
   SectionTimer section{stats().section_ns, 0};
   const RegisterFile& r = *regs;
@@ -3969,7 +4324,9 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
 
   // Indices.
   section.Mark(1);
+  PhaseTimer index_phases{stats().index_phase_ns, 0};
   BeginRecording();
+  index_phases.Mark(1);
   auto dma_size = r.Get<reg::VGT_DMA_SIZE>();
   bool indexed = initiator.source_select != xenos::SourceSelect::kAutoIndex;
   bool index32 = initiator.index_size == xenos::IndexFormat::kInt32;
@@ -4028,6 +4385,7 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
     // copy while the guest data is the same (checked once per frame).
     bool reused = false;
     VertexRangeKey index_key = {};
+    index_phases.Mark(2);
     if (dma_base && !convert_fan && !convert_loop) {
       uint32_t bytes = guest_count * (index32 ? 4 : 2);
       VertexHash& known = vertex_hashes[(uint64_t(dma_base) << 32) | bytes];
@@ -4044,6 +4402,7 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
       }
     }
     if (!reused) {
+      index_phases.Mark(3);
       uint8_t* out = Allocate(VkDeviceSize(draw_count) * index_size, 4, index_offset);
       if (!out) {
         return skip(9);
@@ -4051,7 +4410,10 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
       if (index_key.address) {
         AddRange(index_key, stream_head - VkDeviceSize(draw_count) * index_size);
       }
+      index_phases.Mark(4);
       uint32_t host_reset = index_size == 4 ? 0xFFFFFFFFu : 0xFFFFu;
+      const bool reset_identity = !reset_enabled ||
+          (REXCVAR_GET(nx_index_fast_copy) && reset_index == host_reset);
       auto put = [&](uint32_t i, uint32_t v) {
         if (reset_enabled && v == reset_index) {
           v = host_reset;
@@ -4073,19 +4435,24 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
       } else if (convert_loop) {
         for (uint32_t i = 0; i < guest_count; ++i) put(i, read_index(i));
         put(guest_count, read_index(0));
-      } else if (!reset_enabled && index_endian == xenos::Endian::kNone) {
+      } else if (reset_identity && index_endian == xenos::Endian::kNone) {
         std::memcpy(out, guest_indices, size_t(draw_count) * index_size);
-      } else if (!reset_enabled && index_size == 2 && index_endian == xenos::Endian::k8in16) {
+        index_fast_bytes += size_t(draw_count) * index_size;
+      } else if (reset_identity && index_size == 2 && index_endian == xenos::Endian::k8in16) {
         rex::memory::copy_and_swap_16_unaligned(out, guest_indices, draw_count);
-      } else if (!reset_enabled && index_size == 4 && index_endian == xenos::Endian::k8in32) {
+        index_fast_bytes += size_t(draw_count) * index_size;
+      } else if (reset_identity && index_size == 4 && index_endian == xenos::Endian::k8in32) {
         rex::memory::copy_and_swap_32_unaligned(out, guest_indices, draw_count);
+        index_fast_bytes += size_t(draw_count) * index_size;
       } else {
+        index_scalar_bytes += size_t(draw_count) * index_size;
         for (uint32_t i = 0; i < draw_count; ++i) put(i, read_index(i));
       }
     }
   }
 
   section.Mark(2);
+  index_phases.Mark(-1);
   // Fetch constants: the vertex buffers the shader reads are pointed at their
   // copies in the stream. Only slots written since they were last resolved,
   // or not yet resolved this frame, are looked at again.
@@ -4209,13 +4576,16 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
         continue;
       }
       const uint8_t* source = memory->TranslatePhysical<const uint8_t*>(address);
-      VertexHash& known = vertex_hashes[(uint64_t(address) << 32) | bytes];
       // The whole buffer's content hash, computed on first need: a draw that
       // copies part of a small buffer hashes only that part instead (dozens of
       // particle pools hashed whole every frame were several ms of the frame).
       bool known_hashed = false;
       auto whole_hash = [&]() -> uint64_t {
+        // DrawVertexRange may insert into vertex_hashes and relocate its
+        // storage. Acquire this reference only when the hash is actually used.
+        VertexHash& known = vertex_hashes[(uint64_t(address) << 32) | bytes];
         if (!known_hashed) {
+          TextureTimer hash_time(stats().vertex_hash_ns);
           if (vertex_safety & 4u) {
             known.hash = XXH3_64bits(source, bytes);
             vertex_hash_bytes += bytes;
@@ -4335,15 +4705,20 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
         range_offset = VkDeviceSize(found % stream_capacity);
         current().stream_oldest = std::min(current().stream_oldest, found);
       } else {
-        uint8_t* out = Allocate(bytes, 16, range_offset);
-        if (!out) continue;
-        std::memcpy(out, source, bytes);
+        uint64_t uploaded_position = 0;
+        if (!UploadWholeVertexDelta(address, source, bytes, range_key.hash, range_offset, uploaded_position)) {
+          TextureTimer fallback_time(stats().vertex_fallback_copy_ns);
+          uint8_t* out = Allocate(bytes, 16, range_offset);
+          if (!out) continue;
+          std::memcpy(out, source, bytes);
+          uploaded_position = stream_head - bytes;
+        }
         stats().vertex_bytes_copied += bytes;
         if (found != UINT64_MAX) stats().vertex_bytes_aged += bytes;
         // Why whole: 1 small, 2 the shader's fetch index is not the vertex
         // index, 3 the draw's vertex range is unknown, 4 no room for a part.
         stats().vertex_bytes_whole[whole_reason_final & 7] += bytes;
-        AddRange(range_key, stream_head - bytes);
+        AddRange(range_key, uploaded_position);
       }
       dword0 = (guest_dword0 & 0x3) | uint32_t(range_offset);
     }
@@ -4764,6 +5139,10 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
     }
   }
   SubmitDraw(d);
+  // Independent of the optional color alias cache; stencil KEEP is also
+  // conservatively treated as a possible write.
+  if (targets.depth && ((st.depth_control.z_enable && st.depth_control.z_write_enable) ||
+                        st.depth_control.stencil_enable)) ++depth_mutation;
   if (edram_color_buffer) {
     VkRect2D touched = sr;
     if (st.viewport.xy_extent[0] && st.viewport.xy_extent[1]) {
@@ -4967,6 +5346,7 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
                                      st.viewport.xy_offset[1] + st.viewport.xy_extent[1]);
       if (right > left && bottom > top) {
         const VkRect2D restore_rect = {{int32_t(left), int32_t(top)}, {right - left, bottom - top}};
+        ++depth_mutation;
         if (!RestoreStencilFromColor(*targets.color[0], *targets.depth, restore_rect) &&
             stencil_restore_reports++ < 8)
           REXLOG_WARN("[gl-stencil] restore pass matched but transfer unavailable");
@@ -5161,6 +5541,9 @@ void Renderer::Impl::Resolve() {
         dest_base & 0x1FFFFFFF, dest_width, dest_height, dest_format, host_swizzle, c);
     phases.Mark(4);
     if (dest) {
+      const auto previous_depth = depth_resolve_memo;
+      if ((dest_base & 0x1FFFFFFF) == depth_resolve_memo.address)
+        depth_resolve_memo.valid = false;
       if (Tracing() && !is_depth && !msaa) {
         // The high bit distinguishes the source before conversion from its destination.
         TraceDumpImage(c, source->image, source->width, source->height, source->format,
@@ -5185,7 +5568,41 @@ void Renderer::Impl::Resolve() {
                                  xenos::DepthRenderTargetFormat::kD24S8;
         const bool need_words = textures.WantsDepthWords(dest_base & 0x1FFFFFFF) ||
             (REXCVAR_GET(nx_restore_depth_stencil) && !unorm_guest);
-        if (msaa == 0 && depth_copy_pipeline && source->sample_view && !need_words) {
+        const uint32_t copy_pitch = r[rex::graphics::XE_GPU_REG_RB_COPY_DEST_PITCH];
+        auto* existing_words = textures.FindResolveDestination(
+            (dest_base & 0x1FFFFFFF) | TextureCache::kDepthWordsTag);
+        const bool memo_eligible = REXCVAR_GET(nx_depth_resolve_cache) && msaa == 0 &&
+            !copy_control.color_clear_enable && !copy_control.depth_clear_enable &&
+            need_words && !unorm_guest && REXCVAR_GET(nx_restore_depth_stencil);
+        const bool reuse_depth = memo_eligible && previous_depth.valid && existing_words &&
+            existing_words->image == previous_depth.words &&
+            previous_depth.frame == frame && previous_depth.mutation == depth_mutation &&
+            previous_depth.source == source->image && previous_depth.dest == dest->image &&
+            previous_depth.address == (dest_base & 0x1FFFFFFF) &&
+            previous_depth.control == r[rex::graphics::XE_GPU_REG_RB_COPY_CONTROL] &&
+            previous_depth.info == r[rex::graphics::XE_GPU_REG_RB_COPY_DEST_INFO] &&
+            previous_depth.pitch == copy_pitch && previous_depth.x == x0 && previous_depth.y == y0 &&
+            previous_depth.width == width && previous_depth.height == height;
+        VkImage packed_result = VK_NULL_HANDLE;
+        if (reuse_depth) {
+          auto* words = textures.GetResolveDestination(
+              (dest_base & 0x1FFFFFFF) | TextureCache::kDepthWordsTag, dest_width, dest_height,
+              VK_FORMAT_R8G8B8A8_UNORM, uint32_t(xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA), c);
+          if (words) {
+            textures.CopyToSized(*words, c);
+            packed_result = words->image;
+          }
+          ++depth_resolve_reused;
+          if (Tracing()) REXLOG_INFO("[gl-depth-cache] reused frame={} mutation={} base={:08X}",
+              frame, depth_mutation, dest_base & 0x1FFFFFFF);
+        } else if (msaa == 0 && !unorm_guest && need_words &&
+            ResolvePackedDepthDirect(*source, *dest, dest_base & 0x1FFFFFFF,
+                dest_width, dest_height, x0, y0, width, height)) {
+          auto* words = textures.FindResolveDestination(
+              (dest_base & 0x1FFFFFFF) | TextureCache::kDepthWordsTag);
+          if (words) packed_result = words->image;
+          ++depth_direct_executed;
+        } else if (msaa == 0 && depth_copy_pipeline && source->sample_view && !need_words) {
           // The usual case: the game samples the resolve only as depth.
           VkMemoryBarrier to_compute = {
               VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
@@ -5286,6 +5703,7 @@ void Renderer::Impl::Resolve() {
               dfn().vkCmdCopyBufferToImage(c, depth_scratch, words->image,
                                            VK_IMAGE_LAYOUT_GENERAL, 1, &out);
               textures.CopyToSized(*words, c);
+              packed_result = words->image;
 #if defined(_WIN32)
               // Inspect the exact byte texture consumed by the stencil-restore
               // shader. Do not spend the Switch's capture budget on this probe.
@@ -5310,6 +5728,14 @@ void Renderer::Impl::Resolve() {
                         1u << msaa);
           }
         }
+        if (memo_eligible && packed_result) {
+          depth_resolve_memo = {true, frame, depth_mutation, source->image, dest->image,
+              packed_result, dest_base & 0x1FFFFFFF,
+              r[rex::graphics::XE_GPU_REG_RB_COPY_CONTROL],
+              r[rex::graphics::XE_GPU_REG_RB_COPY_DEST_INFO], copy_pitch,
+              x0, y0, width, height};
+        }
+        if (!reuse_depth) ++depth_resolve_executed;
       } else if (msaa) {
         VkImageResolve resolve = {};
         resolve.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -5351,6 +5777,7 @@ void Renderer::Impl::Resolve() {
   bool clear_depth = copy_control.depth_clear_enable != 0;
   bool clear_color = !is_depth && copy_control.color_clear_enable != 0;
   if (clear_depth || clear_color) {
+    if (clear_depth) ++depth_mutation;
     // After a copy the clear must wait for it (it reads what the clear
     // overwrites). Without one, the clear only follows earlier rendering,
     // which the pending resolve barrier or pass order already covers.
@@ -5550,6 +5977,7 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
     presenter->RefreshGuestOutput(
         width, height, display_width, display_height,
         [&](rex::ui::Presenter::GuestOutputRefreshContext& context) -> bool {
+          TextureTimer callback_time(stats().present_callback_ns);
           auto& vulkan_context = static_cast<
               rex::ui::vulkan::VulkanPresenter::VulkanGuestOutputRefreshContext&>(context);
           BeginRecording();
@@ -5619,6 +6047,20 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
   Submit();
   phases.Mark(3);
   // Frame boundary.
+  if (frame % 300 == 0)
+    REXLOG_INFO("[gl-vertex-delta] shadow_mib={} cpu_bytes={} gpu_bytes={} reused_bytes={} enabled={}",
+        vertex_shadow_bytes >> 20, vertex_delta_cpu, vertex_delta_gpu, vertex_delta_reused,
+        REXCVAR_GET(nx_vertex_delta_upload));
+  if (frame % 300 == 0)
+    REXLOG_INFO("[gl-edram-lazy] deferred_tiles={} exported_tiles={} enabled={}",
+        edram_tiles_deferred, edram_tiles_published, REXCVAR_GET(nx_edram_lazy_export));
+  if (frame % 300 == 0)
+    REXLOG_INFO("[gl-depth-cache] cumulative executed={} reused={} mutation={} enabled={} direct={}",
+        depth_resolve_executed, depth_resolve_reused, depth_mutation,
+        REXCVAR_GET(nx_depth_resolve_cache), depth_direct_executed);
+  if (frame % 300 == 0)
+    REXLOG_INFO("[gl-index-copy] cumulative bulk_bytes={} scalar_bytes={} enabled={}",
+        index_fast_bytes, index_scalar_bytes, REXCVAR_GET(nx_index_fast_copy));
   trace_draw = 0;
   trace_resolve = 0;
   TraceWriteDumps();
@@ -5691,6 +6133,7 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
   for (auto it = retired_render_targets.begin(); it != retired_render_targets.end();) {
     if (it->frame <= completed_frame) {
       if (it->sample_view) dfn().vkDestroyImageView(vk, it->sample_view, nullptr);
+      if (it->stencil_view) dfn().vkDestroyImageView(vk, it->stencil_view, nullptr);
       dfn().vkDestroyImageView(vk, it->view, nullptr);
       dfn().vkDestroyImage(vk, it->image, nullptr);
       dfn().vkFreeMemory(vk, it->memory, nullptr);

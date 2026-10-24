@@ -707,6 +707,12 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
             "[native] ring thread ms per frame: state {:.2f}, indices {:.2f}, vertices {:.2f}, "
             "constants+textures {:.2f}, recording {:.2f}, resolves {:.2f}, swap {:.2f}",
             ms(0), ms(1), ms(2), ms(3), ms(4), ms(5), ms(6));
+        auto index_ms = [&](int i) {
+          return double(s.index_phase_ns[i] - reported_render_.index_phase_ns[i]) / 1e6 / double(frames);
+        };
+        REXLOG_INFO("[native] indices CPU ms per frame: begin-recording {:.3f}, decode {:.3f}, "
+            "hash+lookup {:.3f}, allocation {:.3f}, conversion {:.3f}",
+            index_ms(0), index_ms(1), index_ms(2), index_ms(3), index_ms(4));
         const uint64_t resolve_count =
             std::max<uint64_t>(1, s.resolves - reported_render_.resolves);
         auto resolve_ms = [&](int i) {
@@ -726,6 +732,29 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
             double(s.swap_phase_ns[1] - reported_render_.swap_phase_ns[1]) / 1e6 / double(frames),
             double(s.swap_phase_ns[2] - reported_render_.swap_phase_ns[2]) / 1e6 / double(frames),
             double(s.swap_phase_ns[3] - reported_render_.swap_phase_ns[3]) / 1e6 / double(frames));
+        const uint64_t callback_ns = s.present_callback_ns - reported_render_.present_callback_ns;
+        const uint64_t refresh_ns = s.swap_phase_ns[1] - reported_render_.swap_phase_ns[1];
+        REXLOG_INFO("[native] presentation CPU ms per frame: native callback {:.3f}, outside callback {:.3f}",
+            double(callback_ns) / 1e6 / double(frames),
+            double(refresh_ns > callback_ns ? refresh_ns - callback_ns : 0) / 1e6 / double(frames));
+        REXLOG_INFO("[gl-vertex-window] CPU ms per frame: hash {:.3f}, auxiliary upload {:.3f}, fallback copy {:.3f}; "
+            "bytes: cpu={} gpu_zero={} reused={}; shadow hash hits={} uncached_sparse_bytes={}",
+            double(s.vertex_hash_ns - reported_render_.vertex_hash_ns) / 1e6 / double(frames),
+            double(s.vertex_upload_ns - reported_render_.vertex_upload_ns) / 1e6 / double(frames),
+            double(s.vertex_fallback_copy_ns - reported_render_.vertex_fallback_copy_ns) / 1e6 / double(frames),
+            s.vertex_sparse_cpu_bytes - reported_render_.vertex_sparse_cpu_bytes,
+            s.vertex_sparse_gpu_bytes - reported_render_.vertex_sparse_gpu_bytes,
+            s.vertex_sparse_reused_bytes - reported_render_.vertex_sparse_reused_bytes,
+            s.vertex_shadow_hash_hits - reported_render_.vertex_shadow_hash_hits,
+            s.vertex_sparse_uncached_bytes - reported_render_.vertex_sparse_uncached_bytes);
+        REXLOG_INFO("[gl-vertex-window] fallback bytes: off={} size={} dynamic={} budget={} allocation={} changed={} dense={}",
+            s.vertex_upload_fallback_bytes[0] - reported_render_.vertex_upload_fallback_bytes[0],
+            s.vertex_upload_fallback_bytes[1] - reported_render_.vertex_upload_fallback_bytes[1],
+            s.vertex_upload_fallback_bytes[2] - reported_render_.vertex_upload_fallback_bytes[2],
+            s.vertex_upload_fallback_bytes[3] - reported_render_.vertex_upload_fallback_bytes[3],
+            s.vertex_upload_fallback_bytes[4] - reported_render_.vertex_upload_fallback_bytes[4],
+            s.vertex_upload_fallback_bytes[5] - reported_render_.vertex_upload_fallback_bytes[5],
+            s.vertex_upload_fallback_bytes[6] - reported_render_.vertex_upload_fallback_bytes[6]);
       }
       REXLOG_INFO(
           "[native] textures: {} made now, {} streamed in, {} replaced after use, {} lookups "

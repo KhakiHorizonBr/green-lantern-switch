@@ -120,6 +120,14 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       bool signed_resolve_views = true;
       bool depth_stencil_restore = true;
       bool edram_color_cache = true;
+      bool depth_resolve_cache = false;
+      bool depth_packed_direct = true;
+      bool edram_lazy_export = true;
+      bool vertex_delta_upload = true;
+      // Explicit project preference, applied after SDK configuration loading.
+      // User preference: Xbox positions (Switch B/A/Y/X -> guest A/B/X/Y).
+      bool input_xbox_layout = true;
+      bool index_fast_copy = true;
       if (FILE* tuning = std::fopen("sdmc:/switch/green_lantern/tuning.ini", "r")) {
         char line[128];
         while (std::fgets(line, sizeof(line), tuning)) {
@@ -144,6 +152,18 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
           if (std::sscanf(line, " edram_color_cache = %u %c", &value, &trailing) == 1 && value <= 1) {
             edram_color_cache = value != 0;
           }
+          if (std::sscanf(line, " depth_resolve_cache = %u %c", &value, &trailing) == 1 && value <= 1)
+            depth_resolve_cache = value != 0;
+          if (std::sscanf(line, " index_fast_copy = %u %c", &value, &trailing) == 1 && value <= 1)
+            index_fast_copy = value != 0;
+          if (std::sscanf(line, " depth_packed_direct = %u %c", &value, &trailing) == 1 && value <= 1)
+            depth_packed_direct = value != 0;
+          if (std::sscanf(line, " edram_lazy_export = %u %c", &value, &trailing) == 1 && value <= 1)
+            edram_lazy_export = value != 0;
+          if (std::sscanf(line, " vertex_delta_upload = %u %c", &value, &trailing) == 1 && value <= 1)
+            vertex_delta_upload = value != 0;
+          if (std::sscanf(line, " input_xbox_layout = %u %c", &value, &trailing) == 1 && value <= 1)
+            input_xbox_layout = value != 0;
           if (std::sscanf(line, " native_stream_mib = %u %c", &value, &trailing) == 1 &&
               (value == 0 || (value >= 64 && value <= 192 && value % 16 == 0))) {
             native_stream_mib = value;
@@ -159,6 +179,15 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
         std::fclose(tuning);
       }
       if (readonly_mapped) hot_read_tracking = false;
+      rex::cvar::SetFlagByName("nx_depth_resolve_cache", depth_resolve_cache ? "true" : "false");
+      rex::cvar::SetFlagByName("nx_index_fast_copy", index_fast_copy ? "true" : "false");
+      rex::cvar::SetFlagByName("nx_depth_packed_direct", depth_packed_direct ? "true" : "false");
+      rex::cvar::SetFlagByName("nx_edram_lazy_export", edram_lazy_export ? "true" : "false");
+      rex::cvar::SetFlagByName("nx_vertex_delta_upload", vertex_delta_upload ? "true" : "false");
+      const bool input_applied = rex::cvar::SetFlagByName("input_xbox_layout",
+          input_xbox_layout ? "true" : "false");
+      REXLOG_INFO("[gl-input] input_xbox_layout={} applied={}; Switch A/B/X/Y -> guest {}",
+          input_xbox_layout, input_applied, input_xbox_layout ? "B/A/Y/X (position)" : "A/B/X/Y (letter)");
       rex::cvar::SetFlagByName("nx_resolve_atlas", resolve_atlas ? "true" : "false");
       rex::cvar::SetFlagByName("nx_signed_resolve_views", signed_resolve_views ? "true" : "false");
       const bool stencil_applied = rex::cvar::SetFlagByName("nx_restore_depth_stencil",

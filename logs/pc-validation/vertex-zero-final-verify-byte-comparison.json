@@ -1,0 +1,43 @@
+{
+  "buffers": 4,
+  "bytes": 4160896,
+  "all_equal": true,
+  "results": [
+    {
+      "expected": "vertex_f2000_n2.expected.bin",
+      "gpu": "vertex_f2000_n2.bin",
+      "bytes": 1048576,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 50353,
+      "sha256": "cf9a9f63dea24f5993a7b306189e99843b59f903036100209100148222615312"
+    },
+    {
+      "expected": "vertex_f2000_n3.expected.bin",
+      "gpu": "vertex_f2000_n3.bin",
+      "bytes": 1043008,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 44829,
+      "sha256": "561c8fd834c7d2ade4bfd6cb972120164f7135793b909c7bdb1e2ea0e38ccd9e"
+    },
+    {
+      "expected": "vertex_f2000_n4.expected.bin",
+      "gpu": "vertex_f2000_n4.bin",
+      "bytes": 1037440,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 39305,
+      "sha256": "42c4954707ce5ae7c6211ae7fc1f5102dc8174a92e9bc8c24f5a54b36de39999"
+    },
+    {
+      "expected": "vertex_f2000_n5.expected.bin",
+      "gpu": "vertex_f2000_n5.bin",
+      "bytes": 1031872,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 33781,
+      "sha256": "f4435e43e2d138aa7eef59e6a79ffd52a3366382528ca9cd306a9e18233e3ba5"
+    }
+  ]
+}

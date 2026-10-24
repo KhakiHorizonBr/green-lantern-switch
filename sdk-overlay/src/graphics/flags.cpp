@@ -38,6 +38,8 @@ REXCVAR_DEFINE_STRING(gpu_compare_ps_hash, "", "GPU",
                      "Opt-in bounded CPU draw-state snapshots for a hexadecimal guest pixel shader hash");
 REXCVAR_DEFINE_STRING(gpu_compare_resolve_address, "", "GPU",
                      "Opt-in four synchronized GPU resolve snapshots at a hexadecimal guest address");
+REXCVAR_DEFINE_UINT32(gpu_capture_frame, 0, "Development",
+    "Automatically capture one complete GPU frame (desktop comparison; 0 disables)");
 REXCVAR_DEFINE_BOOL(use_fuzzy_alpha_epsilon, false, "GPU",
                     "Use approximate compare for alpha test values to prevent "
                     "flickering on NVIDIA graphics cards");

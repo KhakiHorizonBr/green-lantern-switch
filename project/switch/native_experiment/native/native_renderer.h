@@ -72,6 +72,16 @@ struct RendererStats {
   // lookup/metadata, presenter refresh, final submit, end-of-frame bookkeeping.
   uint64_t resolve_phase_ns[6] = {};
   uint64_t swap_phase_ns[4] = {};
+  // Indices: BeginRecording, decode, content hash+lookup, allocation, conversion.
+  uint64_t index_phase_ns[5] = {};
+  uint64_t present_callback_ns = 0;
+  uint64_t vertex_hash_ns = 0, vertex_upload_ns = 0, vertex_fallback_copy_ns = 0;
+  uint64_t vertex_sparse_cpu_bytes = 0, vertex_sparse_gpu_bytes = 0;
+  uint64_t vertex_sparse_reused_bytes = 0, vertex_shadow_hash_hits = 0;
+  uint64_t vertex_sparse_uncached_bytes = 0;
+  // Auxiliary upload fallback bytes: disabled feature, size, dynamic buffer,
+  // shadow budget, allocation failure, majority changed, dense/fragmented.
+  uint64_t vertex_upload_fallback_bytes[7] = {};
   // Whole-buffer copies by reason (see the fetch constants in Draw).
   uint64_t vertex_bytes_whole[8] = {};
   uint64_t stream_bytes = 0;

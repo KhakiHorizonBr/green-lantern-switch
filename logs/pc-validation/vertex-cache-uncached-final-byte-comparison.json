@@ -1,0 +1,61 @@
+{
+  "buffers": 6,
+  "bytes": 7889024,
+  "all_equal": true,
+  "results": [
+    {
+      "expected": "vertex_f3500_n2.expected.bin",
+      "gpu": "vertex_f3500_n2.bin",
+      "bytes": 1048576,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 50425,
+      "sha256": "6976c76fe409f76fa0660a531328269302d53c93430f6c7ad14e42a940923cb7"
+    },
+    {
+      "expected": "vertex_f3500_n3.expected.bin",
+      "gpu": "vertex_f3500_n3.bin",
+      "bytes": 1043008,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 44885,
+      "sha256": "653d3a1f50f921b60a16490d42585149c0b966df1aaeeaf49fa06a485fc3233f"
+    },
+    {
+      "expected": "vertex_f3500_n39.expected.bin",
+      "gpu": "vertex_f3500_n39.bin",
+      "bytes": 1966080,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 378632,
+      "sha256": "7f6ed04d8d37318d739d1b267e740f160541e254a6a04511765797866b7572b9"
+    },
+    {
+      "expected": "vertex_f3500_n4.expected.bin",
+      "gpu": "vertex_f3500_n4.bin",
+      "bytes": 1037440,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 39345,
+      "sha256": "2925d074aa9ac668f0e02797d6a05501007600c5afea467000f42cfc797cafe5"
+    },
+    {
+      "expected": "vertex_f3500_n40.expected.bin",
+      "gpu": "vertex_f3500_n40.bin",
+      "bytes": 1762048,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 239695,
+      "sha256": "e993b5832b849b50fe519873acc86f1565e9e4a9d47fbaf82786e7d3fc6afd59"
+    },
+    {
+      "expected": "vertex_f3500_n5.expected.bin",
+      "gpu": "vertex_f3500_n5.bin",
+      "bytes": 1031872,
+      "equal": true,
+      "differing_bytes": 0,
+      "nonzero_bytes": 33805,
+      "sha256": "78ffe944e79eaaa745d63fdffe7147199d6baf1b7eca68c4dc19c066862fa06e"
+    }
+  ]
+}
