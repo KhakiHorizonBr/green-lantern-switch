@@ -1,0 +1,52 @@
+{
+  "Backend": "native",
+  "ZeroAlias": "true",
+  "GuestDepth": "true",
+  "StencilLayout": "true",
+  "ExecutableSHA256": "200C7D02A0986F3B77A64FF3472AA874CC4D148BCE10816D5243CB0880ACC825",
+  "StartedUTC": "2026-10-29T20:40:29.6106323Z",
+  "Arguments": [
+    "--input_replay_file=\"<WORKSPACE>\\outputs\\native-pc-user\\gameplay-vertex-cache.replay\"",
+    "--log_file=\"<WORKSPACE>\\outputs\\native-pc-user\\resident-baseline/game.log\"",
+    "--user_data_root=\"<WORKSPACE>\\outputs\\native-pc-user\\resident-baseline/user\"",
+    "--pc_capture_directory=\"<WORKSPACE>\\outputs\\native-pc-user\\resident-baseline/frames\"",
+    "--nx_renderer=native",
+    "--nx_async_pipelines=false",
+    "--nx_stream_mib=160",
+    "--nx_guest_depth_range=true",
+    "--nx_zero_clear_alias=true",
+    "--nx_stencil_color_layout=true",
+    "--nx_capture_frame=3000",
+    "--nx_trace_frame=0",
+    "--nx_trace_frames=1",
+    "--nx_trace_draws=false",
+    "--nx_debug_material_no_depth=false",
+    "--nx_debug_full_vertex_fetch=false",
+    "--nx_vertex_fetch_safety=8",
+    "--nx_depth_resolve_cache=false",
+    "--nx_depth_packed_direct=true",
+    "--nx_verify_depth_direct=false",
+    "--nx_edram_lazy_export=true",
+    "--nx_verify_edram_lazy=false",
+    "--nx_vertex_delta_upload=true",
+    "--nx_verify_vertex_delta=true",
+    "--nx_index_fast_copy=true",
+    "--gpu_debug_material_sample=0",
+    "--nx_geometry_resident_mib=0",
+    "--nx_partial_submit_draws=0",
+    "--nx_frame_timeline=true"
+  ],
+  "BinaryDirectory": "<WORKSPACE>\\outputs\\geometry-resident\\bin",
+  "DLLSHA256": [
+    {
+      "SHA256": "1A616B52F1360F6FB7C1AF8DF568F74DAE712925595CF78AC4498CA5BB1A41F7",
+      "Name": "rexgpu-xenos.dll"
+    },
+    {
+      "SHA256": "B363B95090CF1C42503DE07AFFE0542DC25CB090EA514063E2CD846230549182",
+      "Name": "rexruntime.dll"
+    }
+  ],
+  "ExitCode": 0,
+  "FinishedUTC": "2026-10-29T20:43:00.5397085Z"
+}

@@ -78,6 +78,8 @@ void Renderer::Impl::ImportEdramColor(RenderTarget& rt) {
   }
   const uint32_t pitch_tiles = rt.key.pitch / 80;
   std::vector<VkBufferImageCopy> copies;
+  struct ExportBatch { RenderTarget* source; std::vector<VkBufferImageCopy> copies; };
+  std::vector<ExportBatch> exports;
   uint32_t first_tile = UINT32_MAX;
   for (uint32_t row = 0; row < rt.height / 16; ++row) {
     for (uint32_t col = 0; col < pitch_tiles; ++col) {
@@ -85,6 +87,31 @@ void Renderer::Impl::ImportEdramColor(RenderTarget& rt) {
       if (tile >= kEdramTiles) continue; // Wrapping surfaces are not modeled.
       const auto& state = edram_color_tiles[tile];
       if (!state.version || state.unknown_write || rt.edram_seen[tile] == state.version) continue;
+      if (state.needs_export) {
+        RenderTargetKey key = {};
+        key.base_tiles = state.producer_base;
+        key.pitch = state.producer_pitch;
+        key.format = state.producer_format;
+        auto producer = render_targets.find(key);
+        const uint32_t source_pitch = state.producer_pitch / 80;
+        if (producer == render_targets.end() || !source_pitch || tile < state.producer_base) {
+          REXLOG_ERROR("[gl-edram-lazy] missing producer for tile {}", tile);
+          continue;
+        }
+        auto* source = producer->second.get();
+        const uint32_t source_tile = tile - state.producer_base;
+        if ((source_tile / source_pitch + 1) * 16 > source->height) continue;
+        VkBufferImageCopy out = {};
+        out.bufferOffset = VkDeviceSize(tile) * kEdramTileBytes;
+        out.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        out.imageOffset = {int32_t(source_tile % source_pitch * 80),
+                           int32_t(source_tile / source_pitch * 16), 0};
+        out.imageExtent = {80, 16, 1};
+        auto batch = std::find_if(exports.begin(), exports.end(),
+            [&](const ExportBatch& b) { return b.source == source; });
+        if (batch == exports.end()) { exports.push_back({source, {}}); batch = exports.end() - 1; }
+        batch->copies.push_back(out);
+      }
       VkBufferImageCopy copy = {};
       copy.bufferOffset = VkDeviceSize(tile) * kEdramTileBytes;
       copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -102,8 +129,35 @@ void Renderer::Impl::ImportEdramColor(RenderTarget& rt) {
       VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT};
   dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
       0, 1, &before, 0, nullptr, 0, nullptr);
+#if defined(_WIN32)
+  const bool verify_lazy = !exports.empty() && REXCVAR_GET(nx_verify_edram_lazy) && Tracing();
+  if (verify_lazy) {
+    dfn().vkCmdCopyBufferToImage(c, edram_color_buffer, rt.image, VK_IMAGE_LAYOUT_GENERAL,
+        uint32_t(copies.size()), copies.data());
+    TraceDumpImage(c, rt.image, rt.width, rt.height, rt.format, rt.key.base_tiles,
+        false, 0, 0, rt.width, rt.height, "edram_eager_reference");
+  }
+#endif
+  for (const auto& batch : exports) {
+    dfn().vkCmdCopyImageToBuffer(c, batch.source->image, VK_IMAGE_LAYOUT_GENERAL,
+        edram_color_buffer, uint32_t(batch.copies.size()), batch.copies.data());
+    for (const auto& out : batch.copies)
+      edram_color_tiles[size_t(out.bufferOffset / kEdramTileBytes)].needs_export = false;
+    edram_tiles_published += batch.copies.size();
+  }
+  if (!exports.empty()) {
+    VkMemoryBarrier ready = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
+        VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
+        VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT};
+    dfn().vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 1, &ready, 0, nullptr, 0, nullptr);
+  }
   dfn().vkCmdCopyBufferToImage(c, edram_color_buffer, rt.image, VK_IMAGE_LAYOUT_GENERAL,
       uint32_t(copies.size()), copies.data());
+#if defined(_WIN32)
+  if (verify_lazy) TraceDumpImage(c, rt.image, rt.width, rt.height, rt.format,
+      rt.key.base_tiles, false, 0, 0, rt.width, rt.height, "edram_lazy_candidate");
+#endif
   VkMemoryBarrier after = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
       VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
       VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT};
@@ -235,6 +289,11 @@ void Renderer::Impl::InvalidateEdramWrite(const EdramPendingWrite& write) {
 
 void Renderer::Impl::FlushEdramWrites() {
   if (!edram_color_buffer) return;
+  const bool lazy = REXCVAR_GET(nx_edram_lazy_export);
+  bool verify_lazy = false;
+#if defined(_WIN32)
+  verify_lazy = lazy && REXCVAR_GET(nx_verify_edram_lazy);
+#endif
   // Each pass is published once, rather than interrupting the recording worker
   // for each draw. Unsupported and depth writes invalidate AFTER color exports.
   for (const auto& write : edram_pending) {
@@ -270,10 +329,13 @@ void Renderer::Impl::FlushEdramWrites() {
         copy.imageExtent = {80, 16, 1};
         copies.push_back(copy);
         state = {edram_color_version, rt.key.base_tiles, rt.key.pitch, rt.key.format, false};
+        state.needs_export = lazy;
         rt.edram_seen[tile] = state.version;
       }
     }
     if (copies.empty()) continue;
+    if (lazy) edram_tiles_deferred += copies.size();
+    if (lazy && !verify_lazy) continue;
     VkCommandBuffer c = cmd();
     VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,

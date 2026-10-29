@@ -1,0 +1,57 @@
+{
+  "count": 8,
+  "bytes": 10930000,
+  "checks": [
+    {
+      "file": "vertex_f1622_n0.expected.bin",
+      "offset": 134217728,
+      "bytes": 989420,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1622_n1.expected.bin",
+      "offset": 135266304,
+      "bytes": 1901460,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1779_n0.expected.bin",
+      "offset": 134217728,
+      "bytes": 989420,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1779_n1.expected.bin",
+      "offset": 135266304,
+      "bytes": 1901460,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1810_n0.expected.bin",
+      "offset": 137232384,
+      "bytes": 991840,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1861_n0.expected.bin",
+      "offset": 135266304,
+      "bytes": 1901460,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1876_n0.expected.bin",
+      "offset": 138280960,
+      "bytes": 1265520,
+      "identical": true
+    },
+    {
+      "file": "vertex_f1906_n0.expected.bin",
+      "offset": 134217728,
+      "bytes": 989420,
+      "identical": true
+    }
+  ],
+  "executable": "52761490D701CCA8F43D24BBE84FA15543AF2BF63A24BF2710D24ED95021FF4C",
+  "exit_code": 0,
+  "diagnostic_only": true
+}

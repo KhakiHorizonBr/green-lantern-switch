@@ -1,0 +1,348 @@
+{
+  "resident-baseline": {
+    "exe": "200C7D02A0986F3B77A64FF3472AA874CC4D148BCE10816D5243CB0880ACC825",
+    "dlls": [
+      {
+        "SHA256": "1A616B52F1360F6FB7C1AF8DF568F74DAE712925595CF78AC4498CA5BB1A41F7",
+        "Name": "rexgpu-xenos.dll"
+      },
+      {
+        "SHA256": "B363B95090CF1C42503DE07AFFE0542DC25CB090EA514063E2CD846230549182",
+        "Name": "rexruntime.dll"
+      }
+    ],
+    "exit_code": 0,
+    "selected_frames": 774,
+    "interval": {
+      "n": 774,
+      "p50_ms": 33.3105,
+      "p95_ms": 34.6177,
+      "p99_ms": 35.0696,
+      "max_ms": 35.2135,
+      "over_33_33_ms": 381,
+      "over_25_ms": 774,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        0,
+        0,
+        0,
+        393,
+        381,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "renderer": {
+      "n": 774,
+      "p50_ms": 6.883,
+      "p95_ms": 10.1753,
+      "p99_ms": 11.9904,
+      "max_ms": 16.9702,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        773,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gpu": {
+      "n": 774,
+      "p50_ms": 9.362848,
+      "p95_ms": 10.103104,
+      "p99_ms": 17.674912,
+      "max_ms": 18.095264,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        761,
+        13,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "dropped": 0,
+    "incomplete": 0,
+    "checks": [
+      {
+        "file": "vertex_f3000_n2.expected.bin",
+        "bytes": 1048576,
+        "offset": 129546368,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n3.expected.bin",
+        "bytes": 1043008,
+        "offset": 130596416,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n39.expected.bin",
+        "bytes": 1757184,
+        "offset": 155907152,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n4.expected.bin",
+        "bytes": 1037440,
+        "offset": 131640272,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n40.expected.bin",
+        "bytes": 1749376,
+        "offset": 157672144,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n41.expected.bin",
+        "bytes": 1696384,
+        "offset": 159479696,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n5.expected.bin",
+        "bytes": 1031872,
+        "offset": 132678608,
+        "resident": false,
+        "identical": true
+      }
+    ],
+    "last_counters": {
+      "frame": 3900,
+      "hits": 0,
+      "uploaded": 0,
+      "hashed": 0,
+      "changed": 0,
+      "fallback": 0,
+      "evictions": 0,
+      "occupied": 0,
+      "capacity": 0
+    },
+    "device_errors": []
+  },
+  "resident-32": {
+    "exe": "200C7D02A0986F3B77A64FF3472AA874CC4D148BCE10816D5243CB0880ACC825",
+    "dlls": [
+      {
+        "SHA256": "1A616B52F1360F6FB7C1AF8DF568F74DAE712925595CF78AC4498CA5BB1A41F7",
+        "Name": "rexgpu-xenos.dll"
+      },
+      {
+        "SHA256": "B363B95090CF1C42503DE07AFFE0542DC25CB090EA514063E2CD846230549182",
+        "Name": "rexruntime.dll"
+      }
+    ],
+    "exit_code": 0,
+    "selected_frames": 851,
+    "interval": {
+      "n": 851,
+      "p50_ms": 33.3016,
+      "p95_ms": 34.685,
+      "p99_ms": 46.9676,
+      "max_ms": 83.1494,
+      "over_33_33_ms": 417,
+      "over_25_ms": 831,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        0,
+        20,
+        0,
+        414,
+        415,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    "renderer": {
+      "n": 851,
+      "p50_ms": 6.8692,
+      "p95_ms": 10.1307,
+      "p99_ms": 11.9433,
+      "max_ms": 67.424,
+      "over_33_33_ms": 1,
+      "over_25_ms": 1,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        849,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "gpu": {
+      "n": 851,
+      "p50_ms": 8.266912,
+      "p95_ms": 8.959264,
+      "p99_ms": 18.032096,
+      "max_ms": 19.942912,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        839,
+        12,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "dropped": 0,
+    "incomplete": 0,
+    "checks": [
+      {
+        "file": "vertex_f3000_n2.expected.bin",
+        "bytes": 1048576,
+        "offset": 34021312,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n3.expected.bin",
+        "bytes": 1043008,
+        "offset": 35071360,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n39.expected.bin",
+        "bytes": 1699968,
+        "offset": 39010768,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n4.expected.bin",
+        "bytes": 1037440,
+        "offset": 36115216,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n40.expected.bin",
+        "bytes": 1691648,
+        "offset": 40718928,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n41.expected.bin",
+        "bytes": 1639552,
+        "offset": 42468368,
+        "resident": false,
+        "identical": true
+      },
+      {
+        "file": "vertex_f3000_n5.expected.bin",
+        "bytes": 1031872,
+        "offset": 37153552,
+        "resident": false,
+        "identical": true
+      }
+    ],
+    "last_counters": {
+      "frame": 3900,
+      "hits": 112,
+      "uploaded": 16277664,
+      "hashed": 4743336828,
+      "changed": 2099,
+      "fallback": 6382,
+      "evictions": 0,
+      "occupied": 16842752,
+      "capacity": 33554432
+    },
+    "device_errors": []
+  }
+}

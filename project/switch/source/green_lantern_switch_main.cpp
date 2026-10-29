@@ -127,6 +127,10 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       // Explicit project preference, applied after SDK configuration loading.
       // User preference: Xbox positions (Switch B/A/Y/X -> guest A/B/X/Y).
       bool input_xbox_layout = true;
+      bool frame_timeline = false;
+      // The PC comparison did not prove a pacing improvement; keep baseline.
+      bool pace_before_present = false;
+      unsigned partial_submit_draws = 0;
       bool index_fast_copy = true;
       if (FILE* tuning = std::fopen("sdmc:/switch/green_lantern/tuning.ini", "r")) {
         char line[128];
@@ -164,6 +168,12 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
             vertex_delta_upload = value != 0;
           if (std::sscanf(line, " input_xbox_layout = %u %c", &value, &trailing) == 1 && value <= 1)
             input_xbox_layout = value != 0;
+          if (std::sscanf(line, " frame_timeline = %u %c", &value, &trailing) == 1 && value <= 1)
+            frame_timeline = value != 0;
+          if (std::sscanf(line, " pace_before_present = %u %c", &value, &trailing) == 1 && value <= 1)
+            pace_before_present = value != 0;
+          if (std::sscanf(line, " partial_submit_draws = %u %c", &value, &trailing) == 1 && value <= 4096)
+            partial_submit_draws = value;
           if (std::sscanf(line, " native_stream_mib = %u %c", &value, &trailing) == 1 &&
               (value == 0 || (value >= 64 && value <= 192 && value % 16 == 0))) {
             native_stream_mib = value;
@@ -188,6 +198,13 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
           input_xbox_layout ? "true" : "false");
       REXLOG_INFO("[gl-input] input_xbox_layout={} applied={}; Switch A/B/X/Y -> guest {}",
           input_xbox_layout, input_applied, input_xbox_layout ? "B/A/Y/X (position)" : "A/B/X/Y (letter)");
+      rex::cvar::SetFlagByName("nx_frame_timeline", frame_timeline ? "true" : "false");
+      const bool pacing_applied = rex::cvar::SetFlagByName("nx_pace_before_present",
+          pace_before_present ? "true" : "false");
+      REXLOG_INFO("[gl-pacing] before_present={} applied={}; vblank cap unchanged", pace_before_present, pacing_applied);
+      const std::string partial_submit_text = std::to_string(partial_submit_draws);
+      const bool partial_applied = rex::cvar::SetFlagByName("nx_partial_submit_draws", partial_submit_text.c_str());
+      REXLOG_INFO("[gl-partial-submit] limit={} applied={}; 0=baseline", partial_submit_draws, partial_applied);
       rex::cvar::SetFlagByName("nx_resolve_atlas", resolve_atlas ? "true" : "false");
       rex::cvar::SetFlagByName("nx_signed_resolve_views", signed_resolve_views ? "true" : "false");
       const bool stencil_applied = rex::cvar::SetFlagByName("nx_restore_depth_stencil",

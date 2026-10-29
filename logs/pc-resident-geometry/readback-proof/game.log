@@ -1,0 +1,888 @@
+[2026-10-29 17:48:28.737] [info] [core] [t6712] [gl-native-pc] Same native renderer sources as Switch; desktop Vulkan driver
+[2026-10-29 17:48:28.929] [info] [core] [t6712] Vulkan instance API version 1.4.341. Enabled layers and extensions:
+[2026-10-29 17:48:28.929] [info] [core] [t6712] * VK_KHR_surface
+[2026-10-29 17:48:28.929] [info] [core] [t6712] * VK_KHR_win32_surface
+[2026-10-29 17:48:28.929] [info] [core] [t6712] * VK_EXT_debug_utils
+[2026-10-29 17:48:28.929] [info] [core] [t6712] * VK_KHR_portability_enumeration
+[2026-10-29 17:48:28.933] [warning] [core] [t6712] Available Vulkan physical devices (use the 'vulkan_device' configuration variable to force a specific device):
+[2026-10-29 17:48:28.933] [warning] [core] [t6712] * 0: NVIDIA GeForce RTX 3060
+[2026-10-29 17:48:28.951] [info] [core] [t6712] Vulkan device 'NVIDIA GeForce RTX 3060': API 1.4.341, vendor 0x10DE, device 0x2504, driver version 0x98960000
+[2026-10-29 17:48:28.951] [info] [core] [t6712] Enabled Vulkan device extensions:
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * VK_KHR_swapchain
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * VK_EXT_custom_border_color
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * VK_EXT_fragment_shader_interlock
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * VK_EXT_memory_budget
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * VK_EXT_non_seamless_cube_map
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * VK_EXT_robustness2
+[2026-10-29 17:48:28.951] [info] [core] [t6712] Vulkan device properties and enabled features:
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * driverID: NvidiaProprietary
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * driverName: NVIDIA
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * driverInfo: 610.88
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * conformanceVersion: 1.4.3.3
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * timestampPeriod: 1
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxImageDimension2D: 32768
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxImageDimension3D: 16384
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxImageDimensionCube: 32768
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxImageArrayLayers: 2048
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxStorageBufferRange: 4294967295
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxSamplerAllocationCount: 4000
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxPerStageDescriptorSamplers: 1048576
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxPerStageDescriptorStorageBuffers: 1048576
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxPerStageDescriptorSampledImages: 1048576
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxPerStageResources: 4294967295
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxVertexOutputComponents: 128
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxTessellationEvaluationOutputComponents: 128
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxGeometryInputComponents: 128
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxGeometryOutputComponents: 128
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxFragmentInputComponents: 128
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxFragmentCombinedOutputResources: 4294967295
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxSamplerAnisotropy: 16
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxViewportDimensions[0]: 32768
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxViewportDimensions[1]: 32768
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * minUniformBufferOffsetAlignment: 64
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * minStorageBufferOffsetAlignment: 16
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxFramebufferWidth: 32768
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * maxFramebufferHeight: 32768
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * framebufferColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * framebufferDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * framebufferStencilSampleCounts: { 1 | 2 | 4 | 8 | 16 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * framebufferNoAttachmentsSampleCounts: { 1 | 2 | 4 | 8 | 16 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * sampledImageColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * sampledImageIntegerSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * sampledImageDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-29 17:48:28.951] [info] [core] [t6712] * sampledImageStencilSampleCounts: { 1 | 2 | 4 | 8 | 16 }
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * standardSampleLocations: 1
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * optimalBufferCopyOffsetAlignment: 1
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * optimalBufferCopyRowPitchAlignment: 1
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * nonCoherentAtomSize: 64
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * robustBufferAccess
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * fullDrawIndexUint32
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * independentBlend
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * geometryShader
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * tessellationShader
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * sampleRateShading
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * depthClamp
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * fillModeNonSolid
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * samplerAnisotropy
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * occlusionQueryPrecise
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * vertexPipelineStoresAndAtomics
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * fragmentStoresAndAtomics
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderClipDistance
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderCullDistance
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * sparseBinding
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * sparseResidencyBuffer
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * samplerMirrorClampToEdge
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * uniformBufferStandardLayout
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * scalarBlockLayout
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderDemoteToHelperInvocation
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * dynamicRendering
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * constantAlphaColorBlendFactors
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * imageViewFormatReinterpretation
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * imageViewFormatSwizzle
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * pointPolygons
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * separateStencilMaskRef
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderSampleRateInterpolationFunctions
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderSignedZeroInfNanPreserveFloat32: 1
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderDenormFlushToZeroFloat32: 0
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * shaderRoundingModeRTEFloat32: 1
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * fragmentShaderSampleInterlock
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * fragmentShaderPixelInterlock
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * nonSeamlessCubeMap
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * customBorderColors
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * customBorderColorWithoutFormat
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * maxCustomBorderColorSamplers: 4000
+[2026-10-29 17:48:28.952] [info] [core] [t6712] * nullDescriptor
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message): Inserted device layer "VK_LAYER_OBS_HOOK" (C:\ProgramData\obs-studio-hook\graphics-hook64.dll) (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message): Inserted device layer "VK_LAYER_NV_present" (C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll) (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message): Inserted device layer "VK_LAYER_NV_optimus" (C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll) (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message): vkCreateDevice layer callstack setup to: (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):    <Application> (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):    <Loader> (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):    VK_LAYER_NV_optimus (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Type: Implicit (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Enabled By: Implicit Layer (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):                Disable Env Var:  DISABLE_LAYER_NV_OPTIMUS_1 (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Manifest: C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nv-vk64.json (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Library:  C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):    VK_LAYER_NV_present (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Type: Implicit (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Enabled By: Implicit Layer (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.952] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):                Disable Env Var:  DISABLE_LAYER_NV_PRESENT_1 (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Manifest: C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nv-vk64.json (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Library:  C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):    VK_LAYER_OBS_HOOK (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Type: Implicit (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Enabled By: Implicit Layer (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):                Disable Env Var:  DISABLE_VULKAN_OBS_CAPTURE (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Manifest: C:\ProgramData\obs-studio-hook\obs-vulkan64.json (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):            Library:  C:\ProgramData\obs-studio-hook\graphics-hook64.dll (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):    <Device> (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:28.953] [info] [gpu] [t6712] Vulkan Info ({ General }, ID 0: Loader Message):        Using "NVIDIA GeForce RTX 3060" with driver: "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll" (object 0: Instance 0x279de35b510)
+[2026-10-29 17:48:29.037] [info] [core] [t6712] [native] Native graphics system (stage A): SDK presenter, no Xenos emulation
+[2026-10-29 17:48:29.411] [info] [core] [t6712] VulkanPresenter: Created 1920x1080 swapchain with format 44, color space 0, presentation mode 0
+[2026-10-29 17:48:29.412] [info] [sys] [t6712] Guest memory arena mapped: virtual base 0x0000000100000000, physical base 0x0000000200000000
+[2026-10-29 17:48:29.462] [info] [core] [t6712] [gl-resident] ring=128MiB resident=32MiB total_with_slack=176MiB (allocation unchanged)
+[2026-10-29 17:48:29.579] [info] [core] [t6712] [gl-edram] v2 color-word cache ready: 10 MiB, 2048 tiles; bounded clear vertices, sample coordinates normalized once
+[2026-10-29 17:48:29.579] [info] [core] [t6712] [native] Renderer ready: 128 MB stream, 1 shared memory binding(s)
+[2026-10-29 17:48:29.580] [info] [core] [t6712] [native] Both GPU worker threads created successfully
+[2026-10-29 17:48:29.585] [info] [core] [t6712] Function table initialized for module: code=82140000-827758EC, image=82000000-82E00000
+[2026-10-29 17:48:29.615] [warning] [core] [t6712] SDL GameControllerDB: file 'gamecontrollerdb.txt' does not exist.
+[2026-10-29 17:48:29.615] [info] [core] [t6712] SDL input driver initialized successfully
+[2026-10-29 17:48:29.669] [info] [core] [t6712] Initializing shader storage for title 575207E9...
+[2026-10-29 17:48:29.674] [info] [core] [t6712] [native] Driver pipeline cache: 0 KB loaded from <WORKSPACE>\outputs\native-pc-user\resident-readback-proof/user\cache\shaders\driver\native-575207E9-000010DE-00002504-98960000.cache
+[2026-10-29 17:48:29.677] [warning] [fs] [t7280] VFS: '\Device' -> [no device]
+[2026-10-29 17:48:29.677] [error] [fs] [t7280] ResolvePath(\Device) failed - device not found
+[2026-10-29 17:48:29.677] [warning] [krnl] [t7280] [NtCreateFile] FAILED: path='\Device\Image' -> 0xc000000f
+[2026-10-29 17:48:29.678] [warning] [krnl] [t7280] Stub XFileFsDeviceInformation!
+[2026-10-29 17:48:29.678] [warning] [krnl] [t7280] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-29 17:48:29.678] [warning] [krnl] [t7280] Stub XFileFsDeviceInformation!
+[2026-10-29 17:48:29.678] [warning] [krnl] [t7280] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-29 17:48:29.688] [info] [core] [t7280] [input-replay] 10 events; epoch starts at first guest state poll
+[2026-10-29 17:48:29.690] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.699] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.732] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.736] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.740] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.745] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.749] [warning] [krnl] [t7280] [NtCreateFile] FAILED: path='game:\gl\X360\eGraphicsSettings.cfg' -> 0xc000000f
+[2026-10-29 17:48:29.749] [info] [core] [t7280] [native] Interrupt callback 825A08E0 (404C6D80)
+[2026-10-29 17:48:29.749] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x20000404 args_r7=0xFFFFFFFF args_r8=0x00000001
+[2026-10-29 17:48:29.750] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x20000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xA0000000-0xBFFFFFFF
+[2026-10-29 17:48:29.750] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.750] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xBFA90000 size=2 MiB
+[2026-10-29 17:48:29.750] [info] [core] [t7280] [native] Ring at 1FC9B000, 8192 words
+[2026-10-29 17:48:29.751] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFF6F7000 size=3 MiB
+[2026-10-29 17:48:29.751] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00730000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=7 MiB adjusted=7 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEFC7000 size=7 MiB
+[2026-10-29 17:48:29.751] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEC2F000 size=3 MiB
+[2026-10-29 17:48:29.751] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8215E1CC caller_callsite=0x8215E1C8 args_r3=0x00400000 args_r4=0xFFFFFFFF args_r5=0x00000020 args_r6=0x00000404 args_r7=0xFFFFFFFF args_r8=0x00000020
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=4 MiB adjusted=4 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00000020 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.751] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFE81F000 size=4 MiB
+[2026-10-29 17:48:29.751] [info] [core] [t7280] [native] Ring at 1EC20000, 16384 words
+[2026-10-29 17:48:29.752] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.752] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.946] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.947] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.948] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.949] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.950] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.951] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.951] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.952] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:29.956] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x41635848 args_r8=0x00000001
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDDAE000 size=1 MiB
+[2026-10-29 17:48:29.956] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416358A8 args_r8=0x00000001
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDBB0000 size=1 MiB
+[2026-10-29 17:48:29.956] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416359E8 args_r8=0x00000001
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:29.956] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD9B2000 size=1 MiB
+[2026-10-29 17:48:30.015] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:30.015] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.015] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.015] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD741000 size=2 MiB
+[2026-10-29 17:48:30.015] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x01590000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:30.015] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=21 MiB adjusted=21 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.015] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.015] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBF2F000 size=21 MiB
+[2026-10-29 17:48:30.016] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD878 args_r8=0x00000001
+[2026-10-29 17:48:30.016] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.016] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.016] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBE2F000 size=1 MiB
+[2026-10-29 17:48:30.016] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD8A8 args_r8=0x00000001
+[2026-10-29 17:48:30.016] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.016] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.016] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBD2F000 size=1 MiB
+[2026-10-29 17:48:30.017] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00C00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:30.017] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=12 MiB adjusted=12 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.017] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.017] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFB12F000 size=12 MiB
+[2026-10-29 17:48:30.029] [info] [core] [t7280] Green Lantern pool-size query: function=0x8247B930 object=0x40002B40 vtable=0x82005720 slot=196 target=0x8228ED40
+[2026-10-29 17:48:30.029] [info] [core] [t7280] Green Lantern pool-size result: function=0x8247B930 target=0x8228ED40 size=0x0AF00000 (175 MiB)
+[2026-10-29 17:48:30.029] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8247B978 caller_callsite=0x8247B974 args_r3=0x0AF00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x00000001 args_r8=0x82020000
+[2026-10-29 17:48:30.029] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=175 MiB adjusted=175 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.029] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.030] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF0076000 size=175 MiB
+[2026-10-29 17:48:30.033] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00D00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x8228EDB0 args_r8=0x00000001
+[2026-10-29 17:48:30.033] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=13 MiB adjusted=13 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.033] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.033] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEF376000 size=13 MiB
+[2026-10-29 17:48:30.033] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x02300000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x82030000 args_r8=0x00000001
+[2026-10-29 17:48:30.033] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=35 MiB adjusted=35 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.033] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.034] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xED076000 size=35 MiB
+[2026-10-29 17:48:30.046] [info] [core] [t7280] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0200F000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:48:30.046] [info] [krnl] [t7280] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=32 MiB adjusted=32 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:30.046] [info] [krnl] [t7280] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:30.046] [info] [krnl] [t7280] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEB067000 size=32 MiB
+[2026-10-29 17:48:30.067] [info] [core] [t33976] [native] Render target 1280x2048 depth format 0 at tile 0, 1x MSAA
+[2026-10-29 17:48:30.100] [info] [core] [t33976] [native] Render target 1280x720 color format 3 at tile 0, 1x MSAA
+[2026-10-29 17:48:30.100] [info] [core] [t33976] [gl-resolve] src_vk=97 dst_vk=64 guest_fmt=7 exponent=0 scale=1
+[2026-10-29 17:48:30.101] [info] [core] [t33976] [native] Frontbuffer 1EC30000 1280x720, swizzle A0A
+[2026-10-29 17:48:30.154] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:30.165] [info] [core] [t33976] [native] Render target 1040x1024 color format 4 at tile 1216, 1x MSAA
+[2026-10-29 17:48:30.199] [info] [core] [t33976] [native] Render target 1040x1024 depth format 0 at tile 1216, 1x MSAA
+[2026-10-29 17:48:30.199] [info] [core] [t33976] [gl-resolve] src_vk=78 dst_vk=70 guest_fmt=24 exponent=15 scale=32768
+[2026-10-29 17:48:30.200] [info] [core] [t33976] [native] Render target 1280x2048 depth format 1 at tile 0, 1x MSAA
+[2026-10-29 17:48:30.200] [info] [core] [t33976] [native] Render target 1280x976 depth format 0 at tile 1072, 1x MSAA
+[2026-10-29 17:48:30.200] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 1072, 1x MSAA
+[2026-10-29 17:48:30.200] [info] [core] [t33976] [gl-edram] import 256 tiles: src base=1072 pitch=1280 format=2147483648 -> dst base=1072 pitch=1280 format=0 frame=5
+[2026-10-29 17:48:30.200] [info] [core] [t33976] [gl-resolve] src_vk=37 dst_vk=37 guest_fmt=6 exponent=0 scale=1
+[2026-10-29 17:48:30.202] [info] [core] [t33976] [native] Render target 1280x208 color format 0 at tile 720, 1x MSAA
+[2026-10-29 17:48:30.202] [info] [core] [t33976] [native] Render target 1280x208 depth format 1 at tile 720, 1x MSAA
+[2026-10-29 17:48:30.260] [warning] [core] [t33976] [gl-fetch] empty texture: type=0 frame=5 words=00000000 00000000 00000000 01000000 00000000 00000018
+[2026-10-29 17:48:30.262] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=5
+[2026-10-29 17:48:30.277] [info] [core] [t33976] [native] Render target 1280x720 depth format 0 at tile 1328, 1x MSAA
+[2026-10-29 17:48:30.280] [info] [core] [t33976] [native] Render target 1280x720 color format 3 at tile 1328, 1x MSAA
+[2026-10-29 17:48:30.281] [info] [core] [t33976] [native] slow frame 116 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:30.281] [info] [core] [t33976] [native] slow frame 116 ms: waited for the game 3.2 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.2 ms; textures 2.9 ms; 8 draws, 1 texture uploads (0 made now), 4 shaders, 5 pipelines
+[2026-10-29 17:48:30.282] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=6
+[2026-10-29 17:48:30.300] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=7
+[2026-10-29 17:48:30.334] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=8
+[2026-10-29 17:48:30.365] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=9
+[2026-10-29 17:48:30.415] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=10
+[2026-10-29 17:48:30.448] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=11
+[2026-10-29 17:48:30.482] [info] [core] [t33976] [gl-stencil] restored R8 -> stencil tile=720 pitch=1280 rect=0,0,1280x208 frame=12
+[2026-10-29 17:48:31.014] [info] [core] [t33976] [native] slow frame 66 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:31.014] [info] [core] [t33976] [native] slow frame 66 ms: waited for the game 9.7 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 0.3 ms; 7 draws, 1 texture uploads (1 made now), 2 shaders, 1 pipelines
+[2026-10-29 17:48:31.015] [warning] [core] [t33976] [gl-fetch] empty texture: type=0 frame=27 words=810048FC 0FFC6052 0003E01F 06A80D10 00000D43 0FFC8A18
+[2026-10-29 17:48:31.164] [info] [core] [t33976] [native] slow frame 65 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:31.164] [info] [core] [t33976] [native] slow frame 65 ms: waited for the game 9.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 1.0 ms; 21 draws, 3 texture uploads (2 made now), 2 shaders, 2 pipelines
+[2026-10-29 17:48:31.228] [info] [apu] [t7280] audio endpoint 'Alto-falantes (High Definition Audio Device)': 2 ch, 48000 Hz, format 0x8120; submitting 2 ch
+[2026-10-29 17:48:31.228] [info] [core] [t33976] [native] slow frame 64 ms: ring idle 0.0 ms, pacing hold 17.3 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:31.228] [info] [core] [t33976] [native] slow frame 64 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:31.234] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:31.238] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:31.243] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:31.294] [warning] [krnl] [t29468] [NtCreateFile] FAILED: path='game:\gl\common\bin\pickupparticlesandsounds_1.bin_be' -> 0xc000000f
+[2026-10-29 17:48:31.296] [warning] [krnl] [t29468] [NtCreateFile] FAILED: path='game:\gl\common\bin\materialeffects_2.bin_be' -> 0xc000000f
+[2026-10-29 17:48:31.298] [warning] [krnl] [t29468] [NtCreateFile] FAILED: path='game:\gl\common\bin\preconfigactortemplate_2.bin_be' -> 0xc000000f
+[2026-10-29 17:48:31.301] [warning] [krnl] [t29468] [NtCreateFile] FAILED: path='game:\gl\common\bin\vehicleproperties_14.bin_be' -> 0xc000000f
+[2026-10-29 17:48:31.303] [warning] [krnl] [t29468] [NtCreateFile] FAILED: path='game:\gl\common\bin\wheelproperties_2.bin_be' -> 0xc000000f
+[2026-10-29 17:48:31.324] [warning] [core] [t33976] [gl-fetch] empty texture: type=0 frame=34 words=840000FC 0AFDC054 003FE1FF 07280D10 00000C03 00000218
+[2026-10-29 17:48:31.998] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 34.2 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:31.998] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 0.3 ms; 21 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:33.367] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:33.377] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:33.498] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 48.6 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:33.498] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 1.6 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 0.0 ms; 15 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:33.683] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:33.683] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:33.683] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:33.683] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEACBD000 size=1 MiB
+[2026-10-29 17:48:33.965] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:33.965] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 0.0 ms; 15 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:34.031] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA71B000 size=1 MiB
+[2026-10-29 17:48:34.031] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA5AB000 size=1 MiB
+[2026-10-29 17:48:34.031] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:34.031] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA44B000 size=1 MiB
+[2026-10-29 17:48:34.149] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:34.149] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=224 invalid_vertex=0 vertex=0 unsupported_format=0 pending=2
+[2026-10-29 17:48:34.181] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:34.181] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:34.181] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA294000 size=1 MiB
+[2026-10-29 17:48:34.182] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA134000 size=1 MiB
+[2026-10-29 17:48:34.182] [info] [core] [t23508] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:48:34.182] [info] [krnl] [t23508] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xE9FD4000 size=1 MiB
+[2026-10-29 17:48:34.397] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:34.397] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 0.0 ms; 15 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:34.418] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.430] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.438] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.446] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.463] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.464] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.898] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.933] [error] [krnl] [t37992] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:34.949] [info] [apu] [t7280] audio endpoint 'Alto-falantes (High Definition Audio Device)': 2 ch, 48000 Hz, format 0x8120; submitting 2 ch
+[2026-10-29 17:48:35.031] [info] [core] [t33976] [native] slow frame 66 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:35.031] [info] [core] [t33976] [native] slow frame 66 ms: waited for the game 0.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.5 ms; 2 draws, 3 texture uploads (0 made now), 2 shaders, 1 pipelines
+[2026-10-29 17:48:35.365] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 33.9 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:35.365] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 16.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:35.531] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 36.3 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:35.531] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 14.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:35.731] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.2 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:35.731] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.2 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:38.197] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:38.197] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=270 invalid_vertex=0 vertex=0 unsupported_format=0 pending=5
+[2026-10-29 17:48:39.580] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=280 p50=33.298 p95=50.157 p99=66.008 max=115.947 ms; over33.33ms=138 over25ms=209 dropped=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=280 p50=0.446 p95=0.783 p99=56.454 max=112.626 ms; over33.33ms=5 over25ms=6 dropped=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=280 p50=0.001 p95=0.002 p99=0.003 max=0.004 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=280 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=280 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=280 p50=0.695 p95=2.726 p99=2.751 max=2.753 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] last 10 s: 183292 packets, 15961 draws, 686 copies, 281 swaps, 0 waits cut short
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] renderer: 2449 drawn, 13512 skipped, 686 resolves, 1648 passes, 281 submissions, 15 shaders, 12 pipelines, 310 textures (138 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 136 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] ring thread ms per frame: state 1.36, indices 0.02, vertices 0.01, constants+textures 0.12, recording 0.10, resolves 0.13, swap 0.10
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.021, decode 0.001, hash+lookup 0.001, allocation 0.000, conversion 0.000
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] resolve CPU ms each (686 resolves): decode/setup 0.007, source/import 0.016, pre-destination 0.003, destination lookup 0.003, copy/convert 0.017, clear/tail 0.007
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.096, final submit 0.000, frame bookkeeping 0.007
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.001 fence=0.000 wall-excluding-fence=0.001; calls=6266 forced_submits=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-draw-cost] ring calls=15961 us/call wall=28.533 wall-excluding-tracked-waits=27.784; recorder us/draw=3.297 (wall, not CPU scheduler time)
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-descriptors] update calls=984 writes=1963 ms/frame=0.003 updates/draw-call=0.062
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.072, outside callback 0.024
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.001, auxiliary upload 0.000, fallback copy 0.001; bytes: cpu=0 gpu_zero=0 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=57372 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] textures: 3 made now, 5 streamed in, 0 replaced after use, 5 lookups answered empty (streaming or not handled)
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] most uploaded textures: 09EBD000 fmt 2 1280x720: 103 (92700 KB, last 3899) | 09E79000 fmt 2 640x360: 101 (22725 KB, last 5BE4) | 09E35000 fmt 2 640x360: 101 (22725 KB, last 5DE1) | 1F6F8000 fmt 6 1280x720: 1 (3600 KB, last E8DD) | 0FFC6000 fmt 18 32x32: 1 (0 KB, last 8415) | 0B040000 fmt 20 32x32: 1 (1 KB, last CF8E)
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] per frame: renderer CPU 1.9 ms, GPU 1.0 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] per frame: 9 draws, 0 state rebuilds, 4 texture binding rebuilds
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] per frame: 0.5 waits for the game, 6.6 ms waiting
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] slow frames: 5 over 50 ms, 1 over 100 ms; in them 9 pipelines, 10 shaders, 8 texture uploads, 9 render targets
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] state changes by register (10 s): 2200:3514 2203:3242 2082:3116 2205:2689 2206:2685 2204:2685 2180:2619 2208:2103 2104:2004 210D:1583 2181:1506 2001:1448
+[2026-10-29 17:48:39.581] [info] [core] [t33976] [native] skipped by reason: 0:48 7:13464
+[2026-10-29 17:48:39.631] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.4 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:39.631] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 14.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:39.965] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 34.8 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:39.965] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:40.197] [info] [core] [t33976] [gl-edram] frame=300 imported_tiles_total=132480 published_tiles_total=211680 unknown_tiles=1648
+[2026-10-29 17:48:40.215] [info] [core] [t33976] [gl-resident] frame=300 hits=0 upload_bytes=0 hash_bytes=0 changed=0 fallback=0 evictions=0 occupied=0 capacity=33554432
+[2026-10-29 17:48:40.215] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:48:40.215] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=0 cpu_bytes=0 gpu_bytes=0 reused_bytes=0 enabled=true
+[2026-10-29 17:48:40.215] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=97472 exported_tiles=211680 enabled=true
+[2026-10-29 17:48:40.215] [info] [core] [t33976] [gl-depth-cache] cumulative executed=0 reused=0 mutation=1215 enabled=false direct=0
+[2026-10-29 17:48:40.215] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=36 scalar_bytes=0 enabled=true
+[2026-10-29 17:48:40.397] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:40.397] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.6 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.2 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:40.863] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 0.8 | resolve p1280 1280x720: 0.16 (0.9x, 0 draws) | pass c=- d=t0p1280f: 0.13 (0.7x, 1 draws) | pass c=t1328p1280f d=t0p1280f: 0.12 (0.8x, 3 draws) | pass c=t720p1280 d=t720p1280f: 0.11 (0.3x, 0 draws) | pass c=t1328p1280f d=-: 0.10 (0.7x, 1 draws) | resolve p1280 1280x256: 0.08 (0.7x, 0 draws) | pass c=- d=t1328p1280: 0.07 (0.3x, 0 draws) | pass c=- d=t1072p1280: 0.03 (0.3x, 0 draws) | resolve p1280 1280x208: 0.01 (0.3x, 0 draws) | pass c=t1072p1280 d=-: 0.01 (1.1x, 0 draws) | pass c=- d=t720p1280f: 0.01 (0.3x, 1 draws)
+[2026-10-29 17:48:41.364] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 34.8 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:41.364] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.2 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:41.598] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.2 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:41.598] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:41.664] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.7 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:41.664] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.2 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:41.764] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.3 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:41.764] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.6 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:42.164] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.4 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:42.164] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:42.182] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:42.182] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=270 invalid_vertex=0 vertex=0 unsupported_format=0 pending=5
+[2026-10-29 17:48:42.697] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.6 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:42.697] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.2 ms; 2 draws, 3 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:44.565] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 33.9 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:44.565] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.8 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.1 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:44.831] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 34.5 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:44.831] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:45.131] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 36.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:45.131] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 1 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:46.182] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:46.182] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=270 invalid_vertex=0 vertex=0 unsupported_format=0 pending=5
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=300 p50=33.305 p95=50.046 p99=50.587 max=51.127 ms; over33.33ms=149 over25ms=220 dropped=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=300 p50=0.353 p95=0.425 p99=0.493 max=0.533 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=300 p50=0.001 p95=0.001 p99=0.001 max=0.002 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=300 p50=0.919 p95=1.034 p99=2.905 max=4.592 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] last 10 s: 103023 packets, 15000 draws, 300 copies, 300 swaps, 0 waits cut short
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] renderer: 600 drawn, 14400 skipped, 300 resolves, 600 passes, 300 submissions, 15 shaders, 12 pipelines, 574 textures (251 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 252 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] ring thread ms per frame: state 0.00, indices 0.02, vertices 0.01, constants+textures 0.12, recording 0.05, resolves 0.04, swap 0.09
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.021, decode 0.000, hash+lookup 0.000, allocation 0.000, conversion 0.000
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] resolve CPU ms each (300 resolves): decode/setup 0.011, source/import 0.002, pre-destination 0.007, destination lookup 0.001, copy/convert 0.022, clear/tail 0.000
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.084, final submit 0.000, frame bookkeeping 0.007
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.001 fence=0.000 wall-excluding-fence=0.001; calls=3448 forced_submits=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-draw-cost] ring calls=15000 us/call wall=4.144 wall-excluding-tracked-waits=3.711; recorder us/draw=10.693 (wall, not CPU scheduler time)
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-descriptors] update calls=600 writes=1200 ms/frame=0.002 updates/draw-call=0.040
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.063, outside callback 0.020
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.001, auxiliary upload 0.000, fallback copy 0.000; bytes: cpu=0 gpu_zero=0 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=14600 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] textures: 0 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] most uploaded textures: 09E79000 fmt 2 640x360: 193 (43425 KB, last 5BE4) | 09E35000 fmt 2 640x360: 191 (42975 KB, last 5DE1) | 09EBD000 fmt 2 1280x720: 190 (171000 KB, last 3899)
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] per frame: renderer CPU 0.3 ms, GPU 0.9 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] per frame: 2 draws, 0 state rebuilds, 2 texture binding rebuilds
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] per frame: 0.4 waits for the game, 6.4 ms waiting
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] slow frames: 1 over 50 ms, 0 over 100 ms; in them 0 pipelines, 0 shaders, 3 texture uploads, 0 render targets
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] state changes by register (10 s): 2082:1800 2200:1500 2180:1500 2206:1200 2205:1200 2204:1200 2203:1200 2181:1200 2104:1200 0D00:1200 2301:600 2208:600
+[2026-10-29 17:48:49.581] [info] [core] [t33976] [native] skipped by reason: 7:14400
+[2026-10-29 17:48:49.631] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.3 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:49.631] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 14.8 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:50.098] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.8 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:50.098] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:50.197] [info] [core] [t33976] [gl-edram] frame=600 imported_tiles_total=132480 published_tiles_total=211680 unknown_tiles=1648
+[2026-10-29 17:48:50.197] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:50.197] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=270 invalid_vertex=0 vertex=0 unsupported_format=0 pending=5
+[2026-10-29 17:48:50.231] [info] [core] [t33976] [gl-resident] frame=600 hits=0 upload_bytes=0 hash_bytes=0 changed=0 fallback=0 evictions=0 occupied=0 capacity=33554432
+[2026-10-29 17:48:50.231] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:48:50.231] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=0 cpu_bytes=0 gpu_bytes=0 reused_bytes=0 enabled=true
+[2026-10-29 17:48:50.231] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=97472 exported_tiles=211680 enabled=true
+[2026-10-29 17:48:50.231] [info] [core] [t33976] [gl-depth-cache] cumulative executed=0 reused=0 mutation=1515 enabled=false direct=0
+[2026-10-29 17:48:50.231] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=36 scalar_bytes=0 enabled=true
+[2026-10-29 17:48:50.898] [info] [core] [t33976] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 35.5 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:50.898] [info] [core] [t33976] [native] slow frame 51 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:51.530] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 0.8 | resolve p1280 1280x720: 0.34 (1.0x, 0 draws) | pass c=t1328p1280f d=-: 0.27 (1.0x, 1 draws) | pass c=t1328p1280f d=t0p1280f: 0.15 (1.0x, 1 draws)
+[2026-10-29 17:48:51.898] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 34.9 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:51.898] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.2 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:53.398] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 35.8 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:53.398] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 14.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 2 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:53.432] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:48:53.518] [warning] [core] [t33976] [gl-fetch] empty texture: type=0 frame=699 words=0A000000 09EBD002 0059E4FF 01001400 00000000 00000218
+[2026-10-29 17:48:53.845] [info] [core] [t33976] [native] slow frame 348 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:53.846] [info] [core] [t33976] [native] slow frame 348 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 4.4 ms; 65 draws, 22 texture uploads (2 made now), 9 shaders, 8 pipelines
+[2026-10-29 17:48:53.846] [info] [core] [t33976] [native] Render target 1040x512 color format 0 at tile 1632, 1x MSAA
+[2026-10-29 17:48:53.853] [info] [core] [t33976] [native] Render target 1040x512 depth format 0 at tile 1632, 1x MSAA
+[2026-10-29 17:48:53.896] [info] [core] [t33976] [native] Render target 1280x256 depth format 0 at tile 1792, 1x MSAA
+[2026-10-29 17:48:53.896] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 0, 1x MSAA
+[2026-10-29 17:48:53.896] [info] [core] [t33976] [native] Depth resolve at 1F6F8000 sampled as texture format 6
+[2026-10-29 17:48:53.896] [info] [core] [t33976] [native] Depth resolve at 1F6F8000 sampled as texture format 23
+[2026-10-29 17:48:53.917] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 1536, 1x MSAA
+[2026-10-29 17:48:53.917] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 1280, 1x MSAA
+[2026-10-29 17:48:53.917] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 1792, 1x MSAA
+[2026-10-29 17:48:53.963] [info] [core] [t33976] [gl-edram] import 48 tiles: src base=1072 pitch=1280 format=0 -> dst base=1280 pitch=1280 format=0 frame=700
+[2026-10-29 17:48:53.963] [info] [core] [t33976] [gl-edram] import 256 tiles: src base=1792 pitch=1280 format=2147483648 -> dst base=1792 pitch=1280 format=0 frame=700
+[2026-10-29 17:48:53.963] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 1024, 1x MSAA
+[2026-10-29 17:48:53.996] [info] [core] [t33976] [gl-edram] import 208 tiles: src base=1072 pitch=1280 format=0 -> dst base=1024 pitch=1280 format=0 frame=700
+[2026-10-29 17:48:54.021] [info] [core] [t33976] [gl-resolve] src_vk=97 dst_vk=97 guest_fmt=32 exponent=0 scale=1
+[2026-10-29 17:48:54.022] [info] [core] [t33976] [native] Render target 640x368 color format 3 at tile 1144, 1x MSAA
+[2026-10-29 17:48:54.086] [info] [core] [t33976] [native] Render target 320x192 color format 3 at tile 1280, 1x MSAA
+[2026-10-29 17:48:54.204] [info] [core] [t33976] [native] Resolve at 1C840000 (320x184) sampled as 320x180: exact-size copy (event 1)
+[2026-10-29 17:48:54.205] [info] [core] [t33976] [native] Resolve at 1C8B8000 (320x184) sampled as 320x180: exact-size copy (event 2)
+[2026-10-29 17:48:54.205] [info] [core] [t33976] [native] Render target 160x96 color format 3 at tile 1316, 1x MSAA
+[2026-10-29 17:48:54.231] [info] [core] [t33976] [native] Resolve at 1C930000 (160x96) sampled as 160x90: exact-size copy (event 3)
+[2026-10-29 17:48:54.231] [info] [core] [t33976] [native] Resolve at 1C94E000 (160x96) sampled as 160x90: exact-size copy (event 4)
+[2026-10-29 17:48:54.232] [info] [core] [t33976] [native] Render target 80x48 color format 3 at tile 1325, 1x MSAA
+[2026-10-29 17:48:54.232] [info] [core] [t33976] [native] Resolve at 1C96C000 (80x48) sampled as 80x45: exact-size copy (event 5)
+[2026-10-29 17:48:54.232] [info] [core] [t33976] [native] Resolve at 1C978000 (80x48) sampled as 80x45: exact-size copy (event 6)
+[2026-10-29 17:48:54.232] [info] [core] [t33976] [native] Render target 80x32 color format 3 at tile 1326, 1x MSAA
+[2026-10-29 17:48:54.232] [info] [core] [t33976] [native] Resolve at 1C984000 (40x24) sampled as 40x22: exact-size copy (event 7)
+[2026-10-29 17:48:54.233] [info] [core] [t33976] [native] Resolve at 1C988000 (40x24) sampled as 40x22: exact-size copy (event 8)
+[2026-10-29 17:48:54.233] [info] [core] [t33976] [native] Render target 80x16 color format 3 at tile 1327, 1x MSAA
+[2026-10-29 17:48:54.347] [info] [core] [t33976] [native] slow frame 502 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:54.347] [info] [core] [t33976] [native] slow frame 502 ms: waited for the game 9.9 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.7 ms; textures 2.7 ms; 125 draws, 1 texture uploads (1 made now), 12 shaders, 16 pipelines
+[2026-10-29 17:48:54.548] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 32.2 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:54.548] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.6 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.4 ms; textures 0.6 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:54.981] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:54.982] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=272 invalid_vertex=0 vertex=0 unsupported_format=0 pending=25
+[2026-10-29 17:48:56.965] [info] [core] [t33976] [auto-memory] retired=2 pressure=false completed_frame=778 staging_deferred=0
+[2026-10-29 17:48:58.981] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:48:58.981] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=272 invalid_vertex=0 vertex=0 unsupported_format=0 pending=25
+[2026-10-29 17:48:58.981] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 33.5 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:58.981] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.2 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.4 ms; textures 0.1 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:59.182] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 33.4 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:59.182] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 0.1 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:59.316] [info] [core] [t33976] [native] slow frame 50 ms: ring idle 0.0 ms, pacing hold 32.9 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:48:59.316] [info] [core] [t33976] [native] slow frame 50 ms: waited for the game 15.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 0.1 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=276 p50=33.572 p95=49.718 p99=50.732 max=501.940 ms; over33.33ms=151 over25ms=219 dropped=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=276 p50=1.482 p95=2.098 p99=3.158 max=491.580 ms; over33.33ms=2 over25ms=2 dropped=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=276 p50=0.007 p95=0.011 p99=0.015 max=0.027 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=276 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=276 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=276 p50=4.361 p95=8.099 p99=17.985 max=22.903 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] last 10 s: 768842 packets, 32826 draws, 7073 copies, 276 swaps, 0 waits cut short
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] renderer: 19578 drawn, 13248 skipped, 7073 resolves, 9884 passes, 276 submissions, 36 shaders, 36 pipelines, 23 textures (8 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 18 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] ring thread ms per frame: state 3.00, indices 0.04, vertices 0.06, constants+textures 0.15, recording 0.26, resolves 0.47, swap 0.10
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.022, decode 0.003, hash+lookup 0.011, allocation 0.000, conversion 0.000
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] resolve CPU ms each (7073 resolves): decode/setup 0.009, source/import 0.000, pre-destination 0.001, destination lookup 0.001, copy/convert 0.005, clear/tail 0.002
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.094, final submit 0.000, frame bookkeeping 0.009
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.005 fence=0.000 wall-excluding-fence=0.005; calls=47323 forced_submits=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-draw-cost] ring calls=32826 us/call wall=29.584 wall-excluding-tracked-waits=28.987; recorder us/draw=1.152 (wall, not CPU scheduler time)
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-descriptors] update calls=11658 writes=23632 ms/frame=0.013 updates/draw-call=0.355
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.073, outside callback 0.021
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.011, auxiliary upload 0.000, fallback copy 0.000; bytes: cpu=0 gpu_zero=0 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=113768 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] textures: 3 made now, 20 streamed in, 0 replaced after use, 20 lookups answered empty (streaming or not handled)
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] most uploaded textures: 0AAE4000 fmt 18 1024x1024: 1 (682 KB, last 3841) | 0A9DC000 fmt 20 1024x32: 1 (43 KB, last 8767) | 1DFAB000 fmt 18 8x8: 1 (0 KB, last F4E4) | 0AB94000 fmt 18 512x512: 1 (170 KB, last EF30) | 1DF97000 fmt 18 8x8: 1 (0 KB, last 2F8A) | 0A93C000 fmt 20 256x64: 1 (21 KB, last 7554)
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] per frame: renderer CPU 4.1 ms, GPU 3.8 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] per frame: 71 draws, 0 state rebuilds, 42 texture binding rebuilds
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] per frame: 0.4 waits for the game, 5.6 ms waiting
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] slow frames: 2 over 50 ms, 2 over 100 ms; in them 24 pipelines, 21 shaders, 23 texture uploads, 14 render targets
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] state changes by register (10 s): 2200:21628 2203:20085 2180:20047 2208:17471 2082:16995 2205:15972 2206:15654 2204:15654 2181:14540 2001:8302 210D:6093 2104:5697
+[2026-10-29 17:48:59.581] [info] [core] [t33976] [native] skipped by reason: 7:13248
+[2026-10-29 17:49:00.426] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=864 event=1
+[2026-10-29 17:49:00.427] [info] [core] [t33976] [gl-resolve-view] base=1B130000 storage_vk=70 sampled_vk=71 signed=true result=0
+[2026-10-29 17:49:00.931] [info] [core] [t33976] [native] slow frame 1150 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:00.931] [info] [core] [t33976] [native] slow frame 1150 ms: waited for the game 15.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 4.4 ms; 129 draws, 7 texture uploads (1 made now), 8 shaders, 6 pipelines
+[2026-10-29 17:49:00.934] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=865 event=2
+[2026-10-29 17:49:00.966] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=866 event=3
+[2026-10-29 17:49:01.000] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=867 event=4
+[2026-10-29 17:49:01.001] [info] [core] [t33976] [native] Render target 1280x720 color format 0 at tile 1328, 1x MSAA
+[2026-10-29 17:49:01.432] [info] [core] [t33976] [native] slow frame 434 ms: ring idle 0.0 ms, pacing hold 14.5 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:01.432] [info] [core] [t33976] [native] slow frame 434 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.6 ms; textures 1.8 ms; 103 draws, 4 texture uploads (2 made now), 6 shaders, 5 pipelines
+[2026-10-29 17:49:01.433] [info] [core] [t33976] [native] Render target 1280x256 color format 0 at tile 768, 1x MSAA
+[2026-10-29 17:49:01.474] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=868 event=5
+[2026-10-29 17:49:01.483] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=869 event=6
+[2026-10-29 17:49:01.517] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=870 event=7
+[2026-10-29 17:49:01.537] [info] [core] [t33976] [native] Render target 1040x2048 depth format 1 at tile 0, 1x MSAA
+[2026-10-29 17:49:01.759] [info] [core] [t33976] [gl-edram] import 236 tiles: src base=1216 pitch=1040 format=4 -> dst base=1536 pitch=1280 format=0 frame=871
+[2026-10-29 17:49:01.759] [info] [core] [t33976] [gl-edram] import 236 tiles: src base=1216 pitch=1040 format=4 -> dst base=1280 pitch=1280 format=0 frame=871
+[2026-10-29 17:49:01.759] [info] [core] [t33976] [gl-edram] import 60 tiles: src base=1216 pitch=1040 format=4 -> dst base=1024 pitch=1280 format=0 frame=871
+[2026-10-29 17:49:01.760] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=871 event=8
+[2026-10-29 17:49:01.763] [info] [core] [t33976] [native] slow frame 229 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:01.763] [info] [core] [t33976] [native] slow frame 229 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.7 ms; textures 0.9 ms; 127 draws, 1 texture uploads (0 made now), 4 shaders, 5 pipelines
+[2026-10-29 17:49:01.766] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=872 event=9
+[2026-10-29 17:49:01.785] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=873 event=10
+[2026-10-29 17:49:01.834] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=874 event=11
+[2026-10-29 17:49:01.852] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=875 event=12
+[2026-10-29 17:49:01.900] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=876 event=13
+[2026-10-29 17:49:01.920] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=877 event=14
+[2026-10-29 17:49:01.967] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=878 event=15
+[2026-10-29 17:49:01.985] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=879 event=16
+[2026-10-29 17:49:02.698] [info] [core] [t33976] [gl-edram] frame=900 imported_tiles_total=344340 published_tiles_total=590580 unknown_tiles=992
+[2026-10-29 17:49:02.718] [info] [core] [t33976] [gl-resident] frame=900 hits=0 upload_bytes=0 hash_bytes=33287168 changed=24 fallback=0 evictions=0 occupied=0 capacity=33554432
+[2026-10-29 17:49:02.718] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:49:02.718] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=7 cpu_bytes=3637248 gpu_bytes=150315904 reused_bytes=0 enabled=true
+[2026-10-29 17:49:02.718] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=1564212 exported_tiles=593528 enabled=true
+[2026-10-29 17:49:02.718] [info] [core] [t33976] [gl-depth-cache] cumulative executed=235 reused=0 mutation=10403 enabled=false direct=235
+[2026-10-29 17:49:02.718] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=197412 scalar_bytes=0 enabled=true
+[2026-10-29 17:49:03.707] [error] [krnl] [t7280] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:04.683] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 5.6 | pass c=t1328p1280f d=t0p1280f: 1.70 (2.2x, 39 draws) | pass c=- d=t0p1280f: 0.62 (4.8x, 10 draws) | pass c=t0p1280 d=t0p1280f: 0.58 (2.4x, 2 draws) | resolve p1280 1280x720: 0.43 (2.3x, 0 draws) | pass c=t1328p1280f d=-: 0.29 (1.2x, 2 draws) | resolve p1280 1280x256: 0.18 (6.4x, 0 draws) | resolve depth p1280 1280x720: 0.16 (1.1x, 0 draws) | pass c=t1280p320f d=-: 0.15 (4.8x, 5 draws) | resolve p320 320x184: 0.12 (4.8x, 0 draws) | pass c=t1536p1280 d=t0p1280f: 0.11 (2.4x, 7 draws) | pass c=- d=t1328p1280: 0.11 (0.8x, 1 draws) | pass c=t1316p160f d=-: 0.10 (4.8x, 5 draws) | pass c=t1144p640f d=-: 0.09 (0.8x, 1 draws) | pass c=t1325p80f d=-: 0.09 (4.8x, 5 draws)
+[2026-10-29 17:49:04.683] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:04.683] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=272 invalid_vertex=0 vertex=0 unsupported_format=0 pending=46
+[2026-10-29 17:49:08.698] [info] [core] [t33976] [native] slow frame 100 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:08.698] [info] [core] [t33976] [native] slow frame 100 ms: waited for the game 5.1 ms, the GPU 90.1 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.7 ms; textures 0.5 ms; 131 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:49:08.764] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:08.765] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=272 invalid_vertex=0 vertex=0 unsupported_format=0 pending=46
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=247 p50=33.317 p95=48.454 p99=228.990 max=1150.258 ms; over33.33ms=121 over25ms=210 dropped=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=247 p50=3.706 p95=4.684 p99=228.711 max=1134.837 ms; over33.33ms=5 over25ms=5 dropped=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=247 p50=0.011 p95=0.014 p99=0.018 max=0.029 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=247 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=247 p50=0.000 p95=0.000 p99=0.000 max=90.112 ms; over33.33ms=1 over25ms=1 dropped=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=247 p50=5.649 p95=12.163 p99=14.042 max=187.167 ms; over33.33ms=1 over25ms=1 dropped=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] last 10 s: 1301635 packets, 43446 draws, 12476 copies, 247 swaps, 0 waits cut short
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] renderer: 31590 drawn, 11856 skipped, 12476 resolves, 18106 passes, 247 submissions, 55 shaders, 54 pipelines, 24 textures (5 MB), 959 MB vertices (1 MB of them aged out of the stream, 6 MB partial, whole: 1 small 952 index 0 range 0 room), 989 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] ring thread ms per frame: state 7.33, indices 0.42, vertices 0.75, constants+textures 0.48, recording 0.85, resolves 1.47, swap 0.16
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.391, decode 0.006, hash+lookup 0.024, allocation 0.000, conversion 0.001
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] resolve CPU ms each (12476 resolves): decode/setup 0.011, source/import 0.000, pre-destination 0.001, destination lookup 0.009, copy/convert 0.006, clear/tail 0.002
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.140, final submit 0.000, frame bookkeeping 0.017
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.012 fence=0.000 wall-excluding-fence=0.012; calls=82002 forced_submits=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-draw-cost] ring calls=43446 us/call wall=55.951 wall-excluding-tracked-waits=52.751; recorder us/draw=1.622 (wall, not CPU scheduler time)
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-descriptors] update calls=19631 writes=40228 ms/frame=0.029 updates/draw-call=0.452
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.119, outside callback 0.021
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.060, auxiliary upload 0.503, fallback copy 0.001; bytes: cpu=23592960 gpu_zero=975022080 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=1485516 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] textures: 7 made now, 15 streamed in, 0 replaced after use, 21 lookups answered empty (streaming or not handled)
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] most uploaded textures: 1D5C0000 fmt 38 7x1024: 2 (224 KB, last 5512) | 1D6C0000 fmt 38 7x1024: 2 (224 KB, last 9030) | 0A42C000 fmt 20 256x256: 1 (85 KB, last 0F23) | 0A295000 fmt 20 1024x1024: 1 (1365 KB, last DE0E) | 0A8BC000 fmt 20 224x160: 1 (35 KB, last AE31) | 0A135000 fmt 20 1024x1024: 1 (1365 KB, last A237)
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] per frame: renderer CPU 11.5 ms, GPU 7.2 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] per frame: 128 draws, 1 state rebuilds, 86 texture binding rebuilds
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] per frame: 0.7 waits for the game, 10.3 ms waiting
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] slow frames: 4 over 50 ms, 3 over 100 ms; in them 16 pipelines, 18 shaders, 12 texture uploads, 2 render targets
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] state changes by register (10 s): 2200:39864 2180:39280 2203:36434 2208:31602 2205:28890 2082:27999 2206:27928 2204:27928 2181:26202 2001:15445 210D:13188 2104:10775
+[2026-10-29 17:49:09.582] [info] [core] [t33976] [native] skipped by reason: 7:11856
+[2026-10-29 17:49:09.882] [info] [core] [t33976] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy (event 256)
+[2026-10-29 17:49:10.951] [warning] [core] [t33976] [gl-fetch] empty texture: type=0 frame=1146 words=8A004800 1EC30036 0059E4FF 01000C14 00000000 00000218
+[2026-10-29 17:49:10.952] [info] [core] [t33976] [gl-edram] import 120 tiles: src base=768 pitch=1280 format=0 -> dst base=720 pitch=1280 format=0 frame=1146
+[2026-10-29 17:49:11.045] [info] [core] [t33976] [native] slow frame 63 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:11.045] [info] [core] [t33976] [native] slow frame 63 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.2 ms; textures 3.1 ms; 59 draws, 6 texture uploads (2 made now), 0 shaders, 1 pipelines
+[2026-10-29 17:49:12.401] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:12.766] [info] [core] [t33976] [gl-edram] frame=1200 imported_tiles_total=765116 published_tiles_total=1227356 unknown_tiles=1832
+[2026-10-29 17:49:12.766] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:12.766] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=380 invalid_vertex=0 vertex=0 unsupported_format=0 pending=50
+[2026-10-29 17:49:12.797] [info] [core] [t33976] [gl-resident] frame=1200 hits=0 upload_bytes=0 hash_bytes=158114048 changed=144 fallback=0 evictions=0 occupied=0 capacity=33554432
+[2026-10-29 17:49:12.797] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:49:12.797] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=7 cpu_bytes=27525120 gpu_bytes=1137525760 reused_bytes=0 enabled=true
+[2026-10-29 17:49:12.797] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=4654068 exported_tiles=1229052 enabled=true
+[2026-10-29 17:49:12.797] [info] [core] [t33976] [gl-depth-cache] cumulative executed=721 reused=0 mutation=26936 enabled=false direct=721
+[2026-10-29 17:49:12.797] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=1197618 scalar_bytes=0 enabled=true
+[2026-10-29 17:49:15.430] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 3.9 | pass c=t1328p1280f d=t0p1280f: 1.14 (2.2x, 38 draws) | pass c=- d=t0p1280f: 0.38 (4.4x, 10 draws) | pass c=t0p1280 d=t0p1280f: 0.31 (1.8x, 2 draws) | resolve p1280 1280x720: 0.26 (3.2x, 0 draws) | resolve p1280 1280x256: 0.18 (5.6x, 0 draws) | pass c=t1328p1280f d=-: 0.17 (1.6x, 2 draws) | pass c=t1280p320f d=-: 0.15 (6.0x, 6 draws) | pass c=t1328p1280 d=t0p1280f: 0.15 (1.2x, 2 draws) | resolve p320 320x184: 0.10 (6.0x, 0 draws) | resolve depth p1280 1280x720: 0.09 (1.2x, 0 draws) | pass c=t1536p1280 d=t0p1280f: 0.08 (1.8x, 5 draws) | pass c=t1316p160f d=-: 0.08 (4.8x, 5 draws) | pass c=- d=t1328p1280: 0.07 (1.0x, 1 draws) | pass c=t720p1280 d=t720p1280f: 0.07 (0.4x, 0 draws)
+[2026-10-29 17:49:16.269] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:16.766] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:16.766] [info] [core] [t33976] [auto-memory] retired=4 pressure=false completed_frame=1318 staging_deferred=0
+[2026-10-29 17:49:16.766] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=620 invalid_vertex=0 vertex=0 unsupported_format=0 pending=50
+[2026-10-29 17:49:16.801] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:17.236] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=300 p50=33.475 p95=36.113 p99=48.716 max=62.653 ms; over33.33ms=159 over25ms=289 dropped=0
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=300 p50=0.888 p95=4.039 p99=4.532 max=62.531 ms; over33.33ms=1 over25ms=1 dropped=0
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=300 p50=0.004 p95=0.012 p99=0.013 max=0.016 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=300 p50=3.493 p95=6.332 p99=16.594 max=18.668 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [native] last 10 s: 719475 packets, 34326 draws, 5915 copies, 300 swaps, 0 waits cut short
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [native] renderer: 19926 drawn, 14400 skipped, 5915 resolves, 8396 passes, 300 submissions, 55 shaders, 57 pipelines, 6 textures (0 MB), 161 MB vertices (0 MB of them aged out of the stream, 2 MB partial, whole: 0 small 158 index 0 range 0 room), 179 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [native] ring thread ms per frame: state 0.26, indices 0.04, vertices 0.16, constants+textures 0.13, recording 0.29, resolves 0.55, swap 0.12
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.025, decode 0.003, hash+lookup 0.015, allocation 0.000, conversion 0.000
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [native] resolve CPU ms each (5915 resolves): decode/setup 0.010, source/import 0.005, pre-destination 0.001, destination lookup 0.003, copy/convert 0.007, clear/tail 0.003
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.106, final submit 0.000, frame bookkeeping 0.011
+[2026-10-29 17:49:19.598] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.005 fence=0.000 wall-excluding-fence=0.005; calls=48118 forced_submits=0
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [gl-draw-cost] ring calls=34326 us/call wall=7.849 wall-excluding-tracked-waits=7.055; recorder us/draw=1.366 (wall, not CPU scheduler time)
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [gl-descriptors] update calls=9925 writes=20010 ms/frame=0.014 updates/draw-call=0.289
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.083, outside callback 0.023
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.019, auxiliary upload 0.075, fallback copy 0.001; bytes: cpu=3932160 gpu_zero=162503680 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=280296 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] textures: 2 made now, 4 streamed in, 0 replaced after use, 4 lookups answered empty (streaming or not handled)
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] most uploaded textures: 0FFEE000 fmt 18 32x32: 1 (0 KB, last DC23) | 0F54F000 fmt 20 512x512: 1 (341 KB, last 743F) | 0F64B000 fmt 20 256x512: 1 (170 KB, last 6348) | 0F726000 fmt 20 256x256: 1 (85 KB, last 4A05) | 0F706000 fmt 20 256x256: 1 (85 KB, last 626F) | 0F892000 fmt 20 256x32: 1 (10 KB, last 331C)
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] per frame: renderer CPU 1.6 ms, GPU 3.5 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] per frame: 66 draws, 0 state rebuilds, 33 texture binding rebuilds
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] per frame: 0.1 waits for the game, 0.9 ms waiting
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] slow frames: 1 over 50 ms, 0 over 100 ms; in them 1 pipelines, 0 shaders, 6 texture uploads, 0 render targets
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] state changes by register (10 s): 2200:18170 2203:17092 2180:16018 2082:14901 2208:14722 2205:14542 2206:14382 2204:14382 2181:12030 2001:6141 2104:4869 210D:4750
+[2026-10-29 17:49:19.599] [info] [core] [t33976] [native] skipped by reason: 7:14400
+[2026-10-29 17:49:20.764] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:20.764] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=860 invalid_vertex=0 vertex=0 unsupported_format=0 pending=50
+[2026-10-29 17:49:21.101] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.134] [error] [krnl] [t29468] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.568] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.580] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.593] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.606] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.620] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.632] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.645] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.653] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.660] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.668] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.675] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.684] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.691] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.720] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:22.765] [info] [core] [t33976] [gl-edram] frame=1500 imported_tiles_total=1057916 published_tiles_total=1736156 unknown_tiles=1832
+[2026-10-29 17:49:22.765] [info] [core] [t33976] [auto-memory] retired=2 pressure=false completed_frame=1498 staging_deferred=0
+[2026-10-29 17:49:22.799] [info] [core] [t33976] [gl-resident] frame=1500 hits=0 upload_bytes=0 hash_bytes=158114048 changed=144 fallback=0 evictions=0 occupied=0 capacity=33554432
+[2026-10-29 17:49:22.799] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:49:22.799] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=7 cpu_bytes=27525120 gpu_bytes=1137525760 reused_bytes=0 enabled=true
+[2026-10-29 17:49:22.799] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=4870068 exported_tiles=1737852 enabled=true
+[2026-10-29 17:49:22.799] [info] [core] [t33976] [gl-depth-cache] cumulative executed=721 reused=0 mutation=29636 enabled=false direct=721
+[2026-10-29 17:49:22.799] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=1197618 scalar_bytes=0 enabled=true
+[2026-10-29 17:49:22.914] [warning] [core] [t33976] [gl-fetch] empty texture: type=0 frame=1503 words=880000FC 18143054 003FE3FF 06A80D10 00000E83 181C3A18
+[2026-10-29 17:49:23.358] [info] [core] [t33976] [native] slow frame 493 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:23.359] [info] [core] [t33976] [native] slow frame 493 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.3 ms; textures 2.9 ms; 49 draws, 17 texture uploads (2 made now), 7 shaders, 5 pipelines
+[2026-10-29 17:49:23.388] [error] [krnl] [t34372] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:49:28.325] [info] [core] [t33976] [native] slow frame 4967 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:28.326] [info] [core] [t33976] [native] slow frame 4967 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 26.4 ms; 396 draws, 125 texture uploads (2 made now), 43 shaders, 46 pipelines
+[2026-10-29 17:49:29.540] [info] [core] [t33976] [native] slow frame 1191 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:29.540] [info] [core] [t33976] [native] slow frame 1191 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 11.0 ms; 538 draws, 19 texture uploads (2 made now), 9 shaders, 11 pipelines
+[2026-10-29 17:49:29.770] [info] [core] [t33976] [native] slow frame 231 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:29.770] [info] [core] [t33976] [native] slow frame 231 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.0 ms; textures 19.9 ms; 686 draws, 7 texture uploads (2 made now), 3 shaders, 3 pipelines
+[2026-10-29 17:49:29.770] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=103 p50=33.466 p95=36.073 p99=1190.949 max=4966.990 ms; over33.33ms=52 over25ms=102 dropped=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=103 p50=0.802 p95=1.471 p99=1190.318 max=4965.879 ms; over33.33ms=4 over25ms=4 dropped=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=103 p50=0.004 p95=0.006 p99=0.050 max=0.071 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=103 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=103 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=103 p50=4.478 p95=5.723 p99=35.630 max=58.080 ms; over33.33ms=2 over25ms=2 dropped=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] last 10 s: 240686 packets, 12688 draws, 1618 copies, 103 swaps, 0 waits cut short
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] renderer: 7744 drawn, 4944 skipped, 1618 resolves, 2296 passes, 103 submissions, 117 shaders, 122 pipelines, 168 textures (68 MB), 41 MB vertices (0 MB of them aged out of the stream, 20 MB partial, whole: 0 small 20 index 0 range 0 room), 53 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] ring thread ms per frame: state 65.77, indices 0.07, vertices 0.41, constants+textures 0.72, recording 0.21, resolves 0.38, swap 0.12
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.023, decode 0.004, hash+lookup 0.041, allocation 0.001, conversion 0.003
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] resolve CPU ms each (1618 resolves): decode/setup 0.009, source/import 0.005, pre-destination 0.001, destination lookup 0.000, copy/convert 0.006, clear/tail 0.002
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.109, final submit 0.000, frame bookkeeping 0.010
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.006 fence=0.000 wall-excluding-fence=0.006; calls=18098 forced_submits=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-draw-cost] ring calls=12688 us/call wall=545.389 wall-excluding-tracked-waits=544.849; recorder us/draw=1.136 (wall, not CPU scheduler time)
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-descriptors] update calls=2943 writes=5902 ms/frame=0.012 updates/draw-call=0.232
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.086, outside callback 0.023
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.256, auxiliary upload 0.033, fallback copy 0.001; bytes: cpu=491520 gpu_zero=21089920 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=455128 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] textures: 8 made now, 155 streamed in, 0 replaced after use, 162 lookups answered empty (streaming or not handled)
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] most uploaded textures: 0FE48000 fmt 20 32x32: 1 (1 KB, last F377) | 18143000 fmt 20 1024x512: 1 (682 KB, last 299A) | 1AA15000 fmt 20 256x256: 1 (85 KB, last 388A) | 19018000 fmt 20 512x512: 1 (341 KB, last 84AC) | 1A84A000 fmt 18 512x512: 1 (170 KB, last 53AD) | 19318000 fmt 20 512x512: 1 (341 KB, last 0E67)
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] per frame: renderer CPU 67.7 ms, GPU 5.5 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] per frame: 75 draws, 3 state rebuilds, 31 texture binding rebuilds
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] per frame: 0.0 waits for the game, 0.0 ms waiting
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] slow frames: 4 over 50 ms, 4 over 100 ms; in them 65 pipelines, 62 shaders, 168 texture uploads, 0 render targets
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] state changes by register (10 s): 2200:4932 2203:4654 2180:4358 2082:4267 2205:4136 2204:4090 2206:4088 2208:4042 2181:3313 2001:1592 2000:1427 2104:1335
+[2026-10-29 17:49:29.771] [info] [core] [t33976] [native] skipped by reason: 7:4944
+[2026-10-29 17:49:30.314] [info] [core] [t33976] [native] slow frame 544 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:30.314] [info] [core] [t33976] [native] slow frame 544 ms: waited for the game 12.9 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.7 ms; textures 6.5 ms; 618 draws, 0 texture uploads (0 made now), 2 shaders, 3 pipelines
+[2026-10-29 17:49:30.425] [info] [core] [t33976] [native] slow frame 72 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:30.425] [info] [core] [t33976] [native] slow frame 72 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.6 ms; textures 6.3 ms; 720 draws, 1 texture uploads (1 made now), 1 shaders, 1 pipelines
+[2026-10-29 17:49:32.018] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=2 pressure=false
+[2026-10-29 17:49:32.018] [info] [core] [t33976] [auto-memory] retired=2 pressure=false completed_frame=1558 staging_deferred=0
+[2026-10-29 17:49:32.018] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=215
+[2026-10-29 17:49:33.351] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 5.8 | pass c=t1328p1280f d=t0p1280f: 1.83 (1.9x, 154 draws) | pass c=- d=t0p1280f: 0.95 (3.2x, 46 draws) | resolve p1280 1280x256: 0.39 (3.2x, 0 draws) | resolve p1280 1280x720: 0.35 (2.8x, 0 draws) | pass c=t1216p1040 d=t0p1040f: 0.27 (1.9x, 10 draws) | pass c=t1280p320f d=-: 0.22 (6.0x, 6 draws) | pass c=t720p1280 d=t720p1280f: 0.21 (0.7x, 1 draws) | pass c=t0p1280 d=t0p1280f: 0.20 (0.9x, 1 draws) | pass c=t1328p1280f d=-: 0.18 (1.5x, 4 draws) | pass c=- d=t1328p1280: 0.18 (1.0x, 1 draws) | resolve p320 320x184: 0.17 (6.0x, 0 draws) | pass c=t1316p160f d=-: 0.09 (3.8x, 4 draws) | resolve p1040 1024x1024: 0.08 (0.6x, 0 draws) | resolve p640 640x360: 0.07 (1.0x, 0 draws)
+[2026-10-29 17:49:34.142] [info] [core] [t33976] [trace] saved capture/native/vertex_f1622_n0 (247355x1 vk100)
+[2026-10-29 17:49:34.144] [info] [core] [t33976] [trace] saved capture/native/vertex_f1622_n1 (475365x1 vk100)
+[2026-10-29 17:49:35.267] [info] [core] [t33976] [native] Render target 640x368 color format 0 at tile 1864, 1x MSAA
+[2026-10-29 17:49:35.267] [info] [core] [t33976] [native] Render target 320x192 color format 0 at tile 2000, 1x MSAA
+[2026-10-29 17:49:35.347] [info] [core] [t33976] [native] slow frame 329 ms: ring idle 0.0 ms, pacing hold 24.1 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:35.347] [info] [core] [t33976] [native] slow frame 329 ms: waited for the game 9.3 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.6 ms; textures 1.6 ms; 755 draws, 1 texture uploads (0 made now), 2 shaders, 7 pipelines
+[2026-10-29 17:49:36.282] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:36.282] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:49:38.297] [info] [core] [t33976] [auto-memory] retired=5 pressure=false completed_frame=1738 staging_deferred=0
+[2026-10-29 17:49:39.643] [info] [core] [t33976] [trace] saved capture/native/vertex_f1779_n0 (247355x1 vk100)
+[2026-10-29 17:49:39.645] [info] [core] [t33976] [trace] saved capture/native/vertex_f1779_n1 (475365x1 vk100)
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=277 p50=33.286 p95=47.332 p99=72.019 max=543.520 ms; over33.33ms=134 over25ms=245 dropped=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=277 p50=7.197 p95=9.999 p99=71.439 max=529.423 ms; over33.33ms=3 over25ms=5 dropped=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=277 p50=0.043 p95=0.059 p99=0.072 max=0.085 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=277 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=277 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=277 p50=8.942 p95=10.650 p99=24.699 max=27.027 ms; over33.33ms=0 over25ms=1 dropped=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] last 10 s: 4286880 packets, 218143 draws, 13434 copies, 277 swaps, 0 waits cut short
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] renderer: 204847 drawn, 13296 skipped, 13434 resolves, 18720 passes, 277 submissions, 122 shaders, 133 pipelines, 57 textures (10 MB), 3626 MB vertices (24 MB of them aged out of the stream, 1058 MB partial, whole: 20 small 2538 index 0 range 9 room), 4041 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] ring thread ms per frame: state 3.15, indices 0.72, vertices 3.20, constants+textures 1.28, recording 0.97, resolves 1.03, swap 0.23
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.038, decode 0.021, hash+lookup 0.597, allocation 0.008, conversion 0.055
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] resolve CPU ms each (13434 resolves): decode/setup 0.012, source/import 0.000, pre-destination 0.001, destination lookup 0.000, copy/convert 0.006, clear/tail 0.001
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.113, final submit 0.000, frame bookkeeping 0.113
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.044 fence=0.000 wall-excluding-fence=0.044; calls=420820 forced_submits=0
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-draw-cost] ring calls=218143 us/call wall=11.890 wall-excluding-tracked-waits=11.660; recorder us/draw=0.518 (wall, not CPU scheduler time)
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-descriptors] update calls=21577 writes=44816 ms/frame=0.029 updates/draw-call=0.099
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.090, outside callback 0.022
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.861, auxiliary upload 0.927, fallback copy 0.007; bytes: cpu=179268604 gpu_zero=2482912832 reused=0; shadow hash hits=0 uncached_sparse_bytes=1551044668
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=21460892 dynamic=0 budget=0 allocation=0 changed=0 dense=8857160
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] textures: 1 made now, 10 streamed in, 0 replaced after use, 5 lookups answered empty (streaming or not handled)
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] most uploaded textures: 1D5C0000 fmt 38 7x1024: 20 (2240 KB, last F95E) | 1D640000 fmt 38 7x1024: 16 (1792 KB, last 6E0B) | 1D6C0000 fmt 38 7x1024: 14 (1568 KB, last 23FA) | 12FE5000 fmt 18 64x64: 1 (2 KB, last B973) | 1D540000 fmt 38 1x1024: 1 (16 KB, last 93E5) | 1835F000 fmt 20 512x1024: 1 (682 KB, last 0A29)
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] per frame: renderer CPU 10.7 ms, GPU 9.1 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] per frame: 740 draws, 1 state rebuilds, 219 texture binding rebuilds
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] per frame: 0.7 waits for the game, 9.9 ms waiting
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] slow frames: 3 over 50 ms, 2 over 100 ms; in them 11 pipelines, 5 shaders, 2 texture uploads, 2 render targets
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] state changes by register (10 s): 2180:62303 2200:43926 2203:38848 2181:36524 2208:36437 2205:33839 2206:30792 2204:30792 2082:30146 2001:17394 2182:15099 210D:14431
+[2026-10-29 17:49:39.798] [info] [core] [t33976] [native] skipped by reason: 7:13296
+[2026-10-29 17:49:40.298] [info] [core] [t33976] [gl-edram] frame=1800 imported_tiles_total=1490428 published_tiles_total=2384668 unknown_tiles=1112
+[2026-10-29 17:49:40.298] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:40.298] [info] [core] [t33976] [auto-memory] retired=27 pressure=false completed_frame=1798 staging_deferred=0
+[2026-10-29 17:49:40.298] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:49:40.331] [info] [core] [t33976] [gl-resident] frame=1800 hits=2 upload_bytes=2890880 hash_bytes=1904387700 changed=446 fallback=0 evictions=0 occupied=3014656 capacity=33554432
+[2026-10-29 17:49:40.331] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:49:40.331] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=31 cpu_bytes=216902652 gpu_bytes=3757631552 reused_bytes=0 enabled=true
+[2026-10-29 17:49:40.331] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=7482364 exported_tiles=2386836 enabled=true
+[2026-10-29 17:49:40.331] [info] [core] [t33976] [gl-depth-cache] cumulative executed=1608 reused=0 mutation=221844 enabled=false direct=1608
+[2026-10-29 17:49:40.331] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=294492556 scalar_bytes=0 enabled=true
+[2026-10-29 17:49:40.677] [info] [core] [t33976] [trace] saved capture/native/vertex_f1810_n0 (247960x1 vk100)
+[2026-10-29 17:49:41.035] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=1822 event=600
+[2026-10-29 17:49:42.374] [info] [core] [t33976] [trace] saved capture/native/vertex_f1861_n0 (475365x1 vk100)
+[2026-10-29 17:49:42.875] [info] [core] [t33976] [trace] saved capture/native/vertex_f1876_n0 (316380x1 vk100)
+[2026-10-29 17:49:43.875] [info] [core] [t33976] [trace] saved capture/native/vertex_f1906_n0 (247355x1 vk100)
+[2026-10-29 17:49:44.298] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 7.9 | pass c=t1328p1280f d=t0p1280f: 2.51 (4.0x, 457 draws) | pass c=- d=t0p1280f: 1.56 (6.0x, 156 draws) | pass c=t0p1280 d=t0p1280f: 0.61 (3.0x, 3 draws) | resolve p1040 1024x1024: 0.40 (2.0x, 0 draws) | pass c=t1328p1280f d=-: 0.34 (3.0x, 12 draws) | resolve p1280 1280x720: 0.29 (5.1x, 0 draws) | pass c=t1216p1040 d=t0p1040f: 0.27 (6.0x, 33 draws) | resolve depth p1280 1280x720: 0.17 (3.0x, 0 draws) | resolve p1280 1280x256: 0.16 (6.0x, 0 draws) | pass c=t1280p320f d=-: 0.15 (6.0x, 6 draws) | pass c=t1316p160f d=-: 0.12 (6.0x, 6 draws) | pass c=t1536p1280 d=t0p1280f: 0.11 (3.0x, 21 draws) | pass c=t1325p80f d=-: 0.11 (6.0x, 6 draws) | resolve p320 320x184: 0.11 (6.1x, 0 draws)
+[2026-10-29 17:49:44.298] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:44.298] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:49:48.298] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:48.298] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=300 p50=33.285 p95=34.615 p99=44.103 max=48.546 ms; over33.33ms=144 over25ms=295 dropped=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=300 p50=7.267 p95=9.400 p99=21.778 max=23.546 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=300 p50=0.044 p95=0.058 p99=0.067 max=0.132 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=300 p50=9.383 p95=10.615 p99=20.398 max=23.723 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] last 10 s: 4740055 packets, 240663 draws, 14592 copies, 300 swaps, 0 waits cut short
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] renderer: 226263 drawn, 14400 skipped, 14592 resolves, 20324 passes, 300 submissions, 122 shaders, 133 pipelines, 108 textures (11 MB), 4064 MB vertices (23 MB of them aged out of the stream, 1209 MB partial, whole: 23 small 2818 index 0 range 13 room), 4533 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] ring thread ms per frame: state 0.08, indices 0.77, vertices 3.19, constants+textures 1.18, recording 0.99, resolves 1.05, swap 0.29
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.040, decode 0.021, hash+lookup 0.638, allocation 0.009, conversion 0.059
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] resolve CPU ms each (14592 resolves): decode/setup 0.012, source/import 0.000, pre-destination 0.001, destination lookup 0.000, copy/convert 0.006, clear/tail 0.001
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.118, final submit 0.000, frame bookkeeping 0.170
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.046 fence=0.000 wall-excluding-fence=0.046; calls=468832 forced_submits=0
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-draw-cost] ring calls=240663 us/call wall=7.782 wall-excluding-tracked-waits=7.551; recorder us/draw=0.519 (wall, not CPU scheduler time)
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-descriptors] update calls=23420 writes=48640 ms/frame=0.030 updates/draw-call=0.097
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.096, outside callback 0.022
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.799, auxiliary upload 0.995, fallback copy 0.008; bytes: cpu=261849088 gpu_zero=2695743864 reused=0; shadow hash hits=0 uncached_sparse_bytes=1749886128
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=24418820 dynamic=0 budget=0 allocation=0 changed=0 dense=11899520
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] textures: 0 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] most uploaded textures: 1D6C0000 fmt 38 7x1024: 38 (4256 KB, last 026F) | 1D5C0000 fmt 38 7x1024: 36 (4032 KB, last C74D) | 1D640000 fmt 38 7x1024: 32 (3584 KB, last 5E43) | 1D540000 fmt 38 1x1024: 2 (32 KB, last E635)
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] per frame: renderer CPU 7.6 ms, GPU 9.5 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] per frame: 754 draws, 0 state rebuilds, 219 texture binding rebuilds
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] per frame: 1.0 waits for the game, 13.6 ms waiting
+[2026-10-29 17:49:49.798] [info] [core] [t33976] [native] slow frames: 0 over 50 ms, 0 over 100 ms; in them 0 pipelines, 0 shaders, 0 texture uploads, 0 render targets
+[2026-10-29 17:49:49.799] [info] [core] [t33976] [native] state changes by register (10 s): 2180:69149 2200:47708 2203:42180 2181:39892 2208:39448 2205:36748 2206:33448 2204:33448 2082:32720 2001:18760 2182:17031 210D:16326
+[2026-10-29 17:49:49.799] [info] [core] [t33976] [native] skipped by reason: 7:14400
+[2026-10-29 17:49:50.298] [info] [core] [t33976] [gl-edram] frame=2100 imported_tiles_total=1924828 published_tiles_total=3035068 unknown_tiles=1112
+[2026-10-29 17:49:50.331] [info] [core] [t33976] [gl-resident] frame=2100 hits=15 upload_bytes=8802968 hash_bytes=3016100576 changed=818 fallback=450 evictions=0 occupied=9109504 capacity=33554432
+[2026-10-29 17:49:50.331] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:49:50.331] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=30 cpu_bytes=482225148 gpu_bytes=6474617144 reused_bytes=0 enabled=true
+[2026-10-29 17:49:50.331] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=10119964 exported_tiles=3037236 enabled=true
+[2026-10-29 17:49:50.331] [info] [core] [t33976] [gl-depth-cache] cumulative executed=2508 reused=0 mutation=421754 enabled=false direct=2508
+[2026-10-29 17:49:50.331] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=605561814 scalar_bytes=0 enabled=true
+[2026-10-29 17:49:52.298] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:52.298] [info] [core] [t33976] [auto-memory] retired=8 pressure=false completed_frame=2158 staging_deferred=0
+[2026-10-29 17:49:52.298] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:49:54.964] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 8.6 | pass c=t1328p1280f d=t0p1280f: 2.79 (4.0x, 459 draws) | pass c=- d=t0p1280f: 1.65 (6.0x, 157 draws) | pass c=t0p1280 d=t0p1280f: 0.65 (3.0x, 3 draws) | pass c=t1328p1280f d=-: 0.38 (3.1x, 12 draws) | resolve p1280 1280x720: 0.32 (5.2x, 0 draws) | pass c=t1216p1040 d=t0p1040f: 0.31 (6.0x, 32 draws) | resolve p1280 1280x256: 0.31 (6.0x, 0 draws) | pass c=t1536p1280 d=t0p1280f: 0.29 (3.0x, 21 draws) | resolve depth p1280 1280x720: 0.20 (3.0x, 0 draws) | pass c=t1280p320f d=-: 0.16 (6.0x, 6 draws) | pass c=t1316p160f d=-: 0.13 (6.0x, 6 draws) | pass c=t1325p80f d=-: 0.13 (6.0x, 6 draws) | pass c=t1328p1280 d=t0p1280f: 0.12 (2.1x, 37 draws) | pass c=t1326p80f d=-: 0.12 (6.0x, 6 draws)
+[2026-10-29 17:49:56.331] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:49:56.331] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:49:56.331] [info] [core] [t33976] [native] slow frame 67 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:49:56.331] [info] [core] [t33976] [native] slow frame 67 ms: waited for the game 4.7 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 0.8 ms; 762 draws, 0 texture uploads (0 made now), 0 shaders, 1 pipelines
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=300 p50=33.341 p95=46.584 p99=48.057 max=66.793 ms; over33.33ms=154 over25ms=282 dropped=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=300 p50=7.545 p95=9.109 p99=9.827 max=61.629 ms; over33.33ms=1 over25ms=1 dropped=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=300 p50=0.048 p95=0.057 p99=0.068 max=0.155 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=300 p50=9.870 p95=10.860 p99=20.211 max=21.299 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] last 10 s: 4907150 packets, 245147 draws, 14592 copies, 300 swaps, 0 waits cut short
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] renderer: 230747 drawn, 14400 skipped, 14592 resolves, 20324 passes, 300 submissions, 122 shaders, 134 pipelines, 62 textures (6 MB), 4490 MB vertices (26 MB of them aged out of the stream, 1372 MB partial, whole: 25 small 3080 index 0 range 10 room), 4996 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] ring thread ms per frame: state 0.26, indices 0.81, vertices 3.22, constants+textures 1.17, recording 0.99, resolves 1.05, swap 0.12
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.038, decode 0.022, hash+lookup 0.667, allocation 0.012, conversion 0.069
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] resolve CPU ms each (14592 resolves): decode/setup 0.012, source/import 0.000, pre-destination 0.001, destination lookup 0.000, copy/convert 0.006, clear/tail 0.001
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.107, final submit 0.000, frame bookkeeping 0.009
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.048 fence=0.000 wall-excluding-fence=0.048; calls=493670 forced_submits=0
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-draw-cost] ring calls=245147 us/call wall=7.934 wall-excluding-tracked-waits=7.714; recorder us/draw=0.519 (wall, not CPU scheduler time)
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-descriptors] update calls=23421 writes=48642 ms/frame=0.032 updates/draw-call=0.096
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.087, outside callback 0.020
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.845, auxiliary upload 1.001, fallback copy 0.010; bytes: cpu=341548084 gpu_zero=2889923960 reused=0; shadow hash hits=0 uncached_sparse_bytes=1927984404
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=27169064 dynamic=0 budget=0 allocation=0 changed=0 dense=10381112
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] textures: 0 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] most uploaded textures: 1D5C0000 fmt 38 7x1024: 24 (2688 KB, last 47B8) | 1D6C0000 fmt 38 7x1024: 19 (2128 KB, last 829A) | 1D640000 fmt 38 7x1024: 17 (1904 KB, last DEB6) | 1D540000 fmt 38 1x1024: 2 (32 KB, last 6FD9)
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] per frame: renderer CPU 7.7 ms, GPU 10.0 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] per frame: 769 draws, 0 state rebuilds, 219 texture binding rebuilds
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] per frame: 0.8 waits for the game, 11.0 ms waiting
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] slow frames: 1 over 50 ms, 0 over 100 ms; in them 1 pipelines, 0 shaders, 0 texture uploads, 0 render targets
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] state changes by register (10 s): 2180:74125 2200:47708 2203:42180 2181:40522 2208:39448 2205:36748 2206:33448 2204:33448 2082:32720 2001:18760 2182:17604 210D:16062
+[2026-10-29 17:49:59.816] [info] [core] [t33976] [native] skipped by reason: 7:14400
+[2026-10-29 17:50:00.331] [info] [core] [t33976] [gl-edram] frame=2400 imported_tiles_total=2359228 published_tiles_total=3685468 unknown_tiles=1112
+[2026-10-29 17:50:00.331] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:50:00.331] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:50:00.363] [info] [core] [t33976] [gl-resident] frame=2400 hits=37 upload_bytes=15548568 hash_bytes=3378262068 changed=1065 fallback=1508 evictions=0 occupied=15990784 capacity=33554432
+[2026-10-29 17:50:00.363] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:50:00.363] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=31 cpu_bytes=827000880 gpu_bytes=9360154032 reused_bytes=0 enabled=true
+[2026-10-29 17:50:00.363] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=12757564 exported_tiles=3687636 enabled=true
+[2026-10-29 17:50:00.363] [info] [core] [t33976] [gl-depth-cache] cumulative executed=3408 reused=0 mutation=626324 enabled=false direct=3408
+[2026-10-29 17:50:00.363] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=949888048 scalar_bytes=0 enabled=true
+[2026-10-29 17:50:01.056] [info] [core] [t33976] [gl-atlas] base=1B130000 fetch=2048x3072 pitch=2048 vk=70 fragments=3 frame=2422 event=1200
+[2026-10-29 17:50:04.331] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:50:04.331] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:50:05.651] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 7.7 | pass c=t1328p1280f d=t0p1280f: 2.72 (4.0x, 461 draws) | pass c=- d=t0p1280f: 1.39 (6.0x, 159 draws) | pass c=t0p1280 d=t0p1280f: 0.58 (3.0x, 3 draws) | pass c=t1328p1280f d=-: 0.39 (3.1x, 12 draws) | resolve p1280 1280x720: 0.30 (5.3x, 0 draws) | pass c=t1216p1040 d=t0p1040f: 0.27 (6.0x, 33 draws) | resolve depth p1280 1280x720: 0.16 (3.0x, 0 draws) | pass c=t1280p320f d=-: 0.16 (6.0x, 6 draws) | pass c=t1328p1280 d=t0p1280f: 0.14 (2.1x, 48 draws) | resolve p1280 1280x256: 0.12 (6.0x, 0 draws) | pass c=t1536p1280 d=t0p1280f: 0.12 (3.0x, 21 draws) | resolve p320 320x184: 0.12 (6.3x, 0 draws) | pass c=t1316p160f d=-: 0.12 (6.0x, 6 draws) | pass c=t1325p80f d=-: 0.12 (6.0x, 6 draws)
+[2026-10-29 17:50:08.316] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:50:08.316] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-frame-distribution] swap-completion interval (not display scanout): n=300 p50=33.292 p95=47.375 p99=48.177 max=48.846 ms; over33.33ms=148 over25ms=235 dropped=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=300 p50=7.101 p95=9.649 p99=10.320 max=11.657 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-frame-distribution] allocation wall per frame (includes fences): n=300 p50=0.047 p95=0.067 p99=0.079 max=0.170 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-frame-distribution] allocation fence wait per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-frame-distribution] all renderer fence waits per frame: n=300 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-frame-distribution] completed GPU submission duration (not same-frame latency): n=300 p50=9.145 p95=10.461 p99=10.747 max=10.825 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] last 10 s: 4999654 packets, 247111 draws, 14592 copies, 300 swaps, 0 waits cut short
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] renderer: 232711 drawn, 14400 skipped, 14592 resolves, 20324 passes, 300 submissions, 122 shaders, 134 pipelines, 56 textures (6 MB), 4445 MB vertices (32 MB of them aged out of the stream, 1359 MB partial, whole: 25 small 3042 index 0 range 18 room), 4951 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] ring thread ms per frame: state 0.08, indices 0.78, vertices 3.13, constants+textures 1.18, recording 0.96, resolves 1.01, swap 0.11
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] indices CPU ms per frame: begin-recording 0.037, decode 0.022, hash+lookup 0.641, allocation 0.012, conversion 0.065
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] resolve CPU ms each (14592 resolves): decode/setup 0.012, source/import 0.000, pre-destination 0.001, destination lookup 0.000, copy/convert 0.006, clear/tail 0.001
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] swap CPU ms per frame: frontbuffer lookup 0.001, presenter refresh 0.095, final submit 0.000, frame bookkeeping 0.015
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-allocation] ms/frame wall=0.050 fence=0.000 wall-excluding-fence=0.050; calls=504234 forced_submits=0
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-draw-cost] ring calls=247111 us/call wall=7.473 wall-excluding-tracked-waits=7.260; recorder us/draw=0.511 (wall, not CPU scheduler time)
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-descriptors] update calls=23420 writes=48640 ms/frame=0.029 updates/draw-call=0.095
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] presentation CPU ms per frame: native callback 0.076, outside callback 0.019
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-vertex-window] CPU ms per frame: hash 0.837, auxiliary upload 0.932, fallback copy 0.010; bytes: cpu=386088960 gpu_zero=2807790328 reused=0; shadow hash hits=0 uncached_sparse_bytes=1900259368
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [gl-vertex-window] fallback bytes: off=0 size=26743580 dynamic=0 budget=0 allocation=0 changed=0 dense=15541772
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] textures: 0 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] most uploaded textures: 1D6C0000 fmt 38 7x1024: 21 (2352 KB, last 3A19) | 1D640000 fmt 38 7x1024: 19 (2128 KB, last 6635) | 1D5C0000 fmt 38 7x1024: 16 (1792 KB, last 3FA8)
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] per frame: renderer CPU 7.3 ms, GPU 8.9 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] per frame: 776 draws, 0 state rebuilds, 219 texture binding rebuilds
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] per frame: 0.5 waits for the game, 6.6 ms waiting
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] slow frames: 0 over 50 ms, 0 over 100 ms; in them 0 pipelines, 0 shaders, 0 texture uploads, 0 render targets
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] state changes by register (10 s): 2180:76508 2200:47708 2203:42180 2181:42068 2208:39448 2205:36748 2206:33448 2204:33448 2082:32720 2182:19130 2001:18760 210D:16396
+[2026-10-29 17:50:09.831] [info] [core] [t33976] [native] skipped by reason: 7:14400
+[2026-10-29 17:50:10.318] [info] [core] [t33976] [gl-edram] frame=2700 imported_tiles_total=2793628 published_tiles_total=4335868 unknown_tiles=1112
+[2026-10-29 17:50:10.364] [info] [core] [t33976] [gl-resident] frame=2700 hits=59 upload_bytes=16504720 hash_bytes=3742373484 changed=1315 fallback=2533 evictions=0 occupied=16973824 capacity=33554432
+[2026-10-29 17:50:10.364] [info] [core] [t33976] [gl-partial-submit] limit=0 cumulative count=0 wall_ms=0.000; includes recorder/upload/slot waits
+[2026-10-29 17:50:10.364] [info] [core] [t33976] [gl-vertex-delta] shadow_mib=30 cpu_bytes=1214908464 gpu_bytes=12167672360 reused_bytes=0 enabled=true
+[2026-10-29 17:50:10.364] [info] [core] [t33976] [gl-edram-lazy] deferred_tiles=15395164 exported_tiles=4338036 enabled=true
+[2026-10-29 17:50:10.364] [info] [core] [t33976] [gl-depth-cache] cumulative executed=4308 reused=0 mutation=832790 enabled=false direct=4308
+[2026-10-29 17:50:10.364] [info] [core] [t33976] [gl-index-copy] cumulative bulk_bytes=1295489318 scalar_bytes=0 enabled=true
+[2026-10-29 17:50:12.317] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:50:12.317] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:50:16.318] [info] [core] [t33976] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 8.0 | pass c=t1328p1280f d=t0p1280f: 3.14 (4.0x, 460 draws) | pass c=- d=t0p1280f: 1.31 (6.0x, 158 draws) | pass c=t0p1280 d=t0p1280f: 0.50 (3.0x, 3 draws) | pass c=t1328p1280f d=-: 0.36 (3.1x, 12 draws) | resolve p1280 1280x720: 0.33 (5.3x, 0 draws) | pass c=t1216p1040 d=t0p1040f: 0.22 (6.0x, 33 draws) | pass c=t1328p1280 d=t0p1280f: 0.17 (2.1x, 66 draws) | resolve depth p1280 1280x720: 0.16 (3.0x, 0 draws) | pass c=t1280p320f d=-: 0.16 (6.0x, 6 draws) | resolve p320 320x184: 0.14 (6.3x, 0 draws) | resolve p1040 1024x1024: 0.13 (2.0x, 0 draws) | pass c=t1325p80f d=-: 0.13 (6.0x, 6 draws) | resolve p1280 1280x256: 0.12 (6.0x, 0 draws) | pass c=t1316p160f d=-: 0.12 (6.0x, 6 draws)
+[2026-10-29 17:50:16.319] [info] [core] [t33976] [auto-memory] staging=0 MiB deferred=0 pressure=false
+[2026-10-29 17:50:16.319] [info] [core] [t33976] [gl-fetch] rejected GetView calls cumulative: invalid_texture=988 invalid_vertex=0 vertex=0 unsupported_format=0 pending=217
+[2026-10-29 17:50:18.651] [info] [core] [t6712] Window closing, shutting down...
+[2026-10-29 17:50:18.652] [info] [core] [t37748] Execution complete
+[2026-10-29 17:50:18.655] [info] [core] [t6712] Title terminated; hard-exiting process.

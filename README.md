@@ -5,7 +5,19 @@ Recompilação da versão Xbox 360 usando ReXGlue, libnx e Mesa/NVK.
 corrigidos, confirmados pelo usuário no teste 068. O desempenho ainda não é suficiente.**
 Não é um port concluído; estabilidade e gráficos de todas as fases não foram validados.
 
-## Estado em 24/10/2026 — hardware 074
+## Atualização de 29/10/2026
+
+As rodadas de PC de27–29/10 estão [documentadas aqui](docs/RESULTADOS_2026_10_27_29.md).
+Incluem instrumentação por quadro, auditoria de30repositórios Xbox360,
+submissões parciais e geometria GPU residente. Os caminhos exercitados passaram
+nas verificações de buffers, mas **nenhuma dessas variantes demonstrou ganho
+global suficiente para ser promovida como otimização de FPS no Switch**.
+
+Submissões parciais permanecem desligadas; o cache residente fica em
+[fontes experimentais separadas](experiments/geometry-resident/README.md).
+O último resultado de hardware deste caminho Vulkan continua sendo o074.
+
+## Estado confirmado no Switch — hardware 074
 
 - Menu chega a aproximadamente 24–25 FPS; fase pesada ficou em 7,3–8,8 FPS no074.
 - Conversão direta de depth/stencil, exportação EDRAM sob demanda e uploads
@@ -21,6 +33,8 @@ Não é um port concluído; estabilidade e gráficos de todas as fases não fora
 
 ## Por onde começar
 
+- [Resultados das rodadas de27–29/10](docs/RESULTADOS_2026_10_27_29.md)
+- [Pesquisa dos outros ports Xbox360](docs/PORTS_X360_AUDIT_2026-10-28.md)
 - [Resultados 071–074, validação e limitações](docs/RESULTADOS_071_074.md)
 - [Estado e histórico atual](docs/PORT_STATUS.md)
 - [Conversão direta de profundidade](docs/FPS_DEPTH_CACHE.md)

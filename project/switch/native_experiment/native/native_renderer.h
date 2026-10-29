@@ -79,6 +79,11 @@ struct RendererStats {
   uint64_t vertex_sparse_cpu_bytes = 0, vertex_sparse_gpu_bytes = 0;
   uint64_t vertex_sparse_reused_bytes = 0, vertex_shadow_hash_hits = 0;
   uint64_t vertex_sparse_uncached_bytes = 0;
+  uint64_t allocation_ns = 0, allocation_fence_ns = 0, allocation_calls = 0;
+  uint64_t allocation_forced_submits = 0;
+  uint64_t draw_wall_ns = 0, draw_calls = 0, draw_tracked_wait_ns = 0;
+  uint64_t record_worker_ns = 0, record_worker_draws = 0;
+  uint64_t descriptor_update_calls = 0, descriptor_writes = 0, descriptor_update_ns = 0;
   // Auxiliary upload fallback bytes: disabled feature, size, dynamic buffer,
   // shadow budget, allocation failure, majority changed, dense/fragmented.
   uint64_t vertex_upload_fallback_bytes[7] = {};

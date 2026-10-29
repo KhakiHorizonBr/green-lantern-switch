@@ -1,0 +1,24 @@
+{
+  "same_executable": true,
+  "executable_sha256": "9C1B221B8D24481511AFCF7D67A554954421D7CCC6B713C2C6E2602A0E0C1880",
+  "cases": [
+    {
+      "mode": "baseline",
+      "frames": 1529,
+      "p50_ms": 33.3815,
+      "p95_ms": 34.236,
+      "p99_ms": 34.7653,
+      "max_ms": 48.4598
+    },
+    {
+      "mode": "experimental",
+      "frames": 1520,
+      "p50_ms": 33.4112,
+      "p95_ms": 35.4317,
+      "p99_ms": 36.1354,
+      "max_ms": 36.8002
+    }
+  ],
+  "decision": "Keep baseline pacing: repeated comparison did not demonstrate improvement.",
+  "switch_nro_sha256": "273D76DFC49FE9AEA9A30F58754051B631FB382812DF39607CDDA1528D76CEC0"
+}

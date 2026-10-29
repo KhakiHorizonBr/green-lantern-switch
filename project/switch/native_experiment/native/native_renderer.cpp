@@ -12,6 +12,7 @@
 // everything about EDRAM, fragment shader interlock and tessellation is gone.
 
 #include "native_renderer.h"
+#include "frame_diagnostics.h"
 
 #include <algorithm>
 #include <malloc.h>
@@ -149,9 +150,22 @@ REXCVAR_DEFINE_BOOL(nx_edram_color_cache, true, "Switch",
                     "Preserve EDRAM words across RGBA8/RG16_SNORM color target aliases (1x)");
 REXCVAR_DEFINE_BOOL(nx_gpu_profile, true, "Switch",
                     "Log GPU time by render pass and resolve, measured on one frame in 16");
+REXCVAR_DEFINE_BOOL(nx_frame_timeline, false, "Graphics",
+                    "Write bounded diagnostic CPU timeline events (profiling overhead; not a benchmark)");
+#if defined(__SWITCH__)
+REXCVAR_DEFINE_STRING(nx_frame_timeline_path, "sdmc:/switch/green_lantern/rex_timeline.jsonl", "Graphics",
+                     "Diagnostic timeline output path");
+#else
+REXCVAR_DEFINE_STRING(nx_frame_timeline_path, "logs/rex_timeline.jsonl", "Graphics",
+                     "Diagnostic timeline output path");
+#endif
+
 REXCVAR_DEFINE_BOOL(nx_record_thread, true, "Switch",
                     "Make the Vulkan calls of draws on a second thread, so the command ring "
                     "thread prepares the next draw meanwhile");
+REXCVAR_DEFINE_UINT32(nx_partial_submit_draws, 0, "Graphics",
+                     "Submit after N recorded draws to overlap CPU/GPU (0 = baseline; experimental)")
+    .range(0, 4096);
 REXCVAR_DEFINE_BOOL(nx_msaa, false, "Switch",
                     "Render with the multisampling the game asks for; off draws every target "
                     "with one sample, which costs the GPU much less memory bandwidth");
@@ -866,6 +880,26 @@ struct Renderer::Impl {
       std::fwrite(shader.ucode_disassembly().data(), 1, shader.ucode_disassembly().size(), file);
       std::fclose(file);
     }
+    // Host-order microcode is the input for an offline backend translator.
+    // Keep it local, beside the diagnostic disassembly (never a release asset).
+    if (FILE* file = std::fopen((path + ".ucode").c_str(), "wb")) {
+      std::fwrite(shader.ucode_data().data(), sizeof(uint32_t), shader.ucode_dword_count(), file);
+      std::fclose(file);
+    }
+  }
+
+  void DumpBackendShader(const VulkanShader::VulkanTranslation& translation) {
+    const std::string dir = REXCVAR_GET(nx_dump_shaders_path);
+    if (dir.empty()) return;
+    const auto& shader = translation.shader();
+    const auto& binary = translation.translated_binary();
+    const std::string path = fmt::format("{}/{}_{:016X}_{:016X}.spv", dir,
+        shader.type() == xenos::ShaderType::kPixel ? "ps" : "vs",
+        shader.ucode_data_hash(), translation.modification());
+    if (FILE* file = std::fopen(path.c_str(), "wb")) {
+      std::fwrite(binary.data(), 1, binary.size(), file);
+      std::fclose(file);
+    }
   }
 
   // The properties of the pixel shader's textures that choose its fast path
@@ -1511,6 +1545,7 @@ struct Renderer::Impl {
     }
   }
 
+  std::atomic<uint64_t> record_worker_ns{0}, record_worker_draws{0};
   void RecordThread() {
 #if defined(__SWITCH__)
     svcSetThreadPriority(CUR_THREAD_HANDLE, 0x2C);
@@ -1518,11 +1553,30 @@ struct Renderer::Impl {
     svcSetThreadCoreMask(CUR_THREAD_HANDLE, 1, 0x3);
 #endif
     uint32_t idle = 0;
+    uint64_t diagnostic_batch = 0;
     while (true) {
       uint32_t tail = record_tail.load(std::memory_order_relaxed);
       if (tail != record_head.load(std::memory_order_acquire)) {
-        ExecuteDrawCommand(record_queue[tail % kRecordQueueSize]);
-        record_tail.store(tail + 1, std::memory_order_release);
+        // The producer cannot change frame/submission before this queue is
+        // drained. Capture their identity before releasing the last draw.
+        const uint64_t batch_frame = frame, batch_submission = submission_number;
+        const uint32_t count = std::min(kRecordBatch,
+            uint32_t(record_head.load(std::memory_order_acquire) - tail));
+        const uint64_t begin = NowNs();
+        for (uint32_t n = 0; n < count; ++n) {
+          ExecuteDrawCommand(record_queue[tail % kRecordQueueSize]);
+          ++tail;
+          if (n + 1 < count) record_tail.store(tail, std::memory_order_release);
+        }
+        const uint64_t duration = NowNs() - begin;
+        record_worker_ns.fetch_add(duration, std::memory_order_relaxed);
+        record_worker_draws.fetch_add(count, std::memory_order_relaxed);
+        // Keep complete cost counters, but sample short trace scopes to avoid
+        // drowning frame/fence/presentation events in one event per draw.
+        if ((++diagnostic_batch & 31) == 0 || duration >= 1000000)
+          diagnostics::Trace().Add("record", duration >= 1000000 ? "record_batch_slow" : "record_batch_sample",
+              batch_frame, batch_submission, begin, duration, count);
+        record_tail.store(tail, std::memory_order_release);
         idle = 0;
         continue;
       }
@@ -1544,6 +1598,7 @@ struct Renderer::Impl {
   }
 
   void SubmitDraw(const DrawCommand& d) {
+    ++submission_draws;
     if (!record_threaded) {
       ExecuteDrawCommand(d);
       return;
@@ -1563,6 +1618,9 @@ struct Renderer::Impl {
     if (head + 1 - record_tail.load(std::memory_order_relaxed) >= kRecordBatch) WakeRecorder();
   }
   static constexpr uint32_t kRecordBatch = 32;
+  // Producer-owned count. Reset on every submission, including stream rollover.
+  uint32_t submission_draws = 0;
+  uint64_t partial_submit_count = 0, partial_submit_wall_ns = 0;
 
   void KickRecorder() {
     if (record_threaded &&
@@ -1609,6 +1667,8 @@ struct Renderer::Impl {
   }
 
   void Completed(Submission& s) {
+    const uint64_t observed = diagnostics::Trace().enabled() ? NowNs() : 0;
+    uint64_t measured_gpu_ns = 0;
     s.pending = false;
     UpdateCompletedFrame();
     ProfileCollect(uint32_t(&s - submissions));
@@ -1618,11 +1678,15 @@ struct Renderer::Impl {
       if (dfn().vkGetQueryPoolResults(vk, timestamps, slot * 2, 2, sizeof(ticks), ticks,
                                       sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
           ticks[1] > ticks[0]) {
-        stats().gpu_ns += uint64_t(double(ticks[1] - ticks[0]) * timestamp_period);
+        measured_gpu_ns = uint64_t(double(ticks[1] - ticks[0]) * timestamp_period);
+        stats().gpu_ns += measured_gpu_ns;
+        diagnostics::CompletedGpuSubmissions().Add(measured_gpu_ns);
         ++stats().gpu_submissions;
       }
       s.timed = false;
     }
+    if (observed) diagnostics::Trace().Add("ring", "gpu_completion_observed", s.frame, s.number,
+        observed, 0, measured_gpu_ns);
   }
 
   // This frame's waits and texture time (RendererStats::frame_*).
@@ -1638,7 +1702,11 @@ struct Renderer::Impl {
     if (s.pending) {
       uint64_t start = NowNs();
       dfn().vkWaitForFences(vk, 1, &s.fence, VK_TRUE, UINT64_MAX);
-      frame_fence_wait_ns += NowNs() - start;
+      const uint64_t duration = NowNs() - start;
+      frame_fence_wait_ns += duration;
+      // frame identifies the CPU frame waiting; value identifies the older
+      // frame that owns the waited submission.
+      diagnostics::Trace().Add("ring", "fence_wait", frame, s.number, start, duration, s.frame);
       Completed(s);
     }
   }
@@ -1657,6 +1725,7 @@ struct Renderer::Impl {
       return;
     }
     ++submission_number;
+    submission_draws = 0;
     Submission& s = current();
     WaitSubmission(s);
     dfn().vkResetFences(vk, 1, &s.fence);
@@ -1752,10 +1821,13 @@ struct Renderer::Impl {
     submit.commandBufferCount = 2;
     submit.pCommandBuffers = buffers;
     {
+      const uint64_t submit_start = diagnostics::Trace().enabled() ? NowNs() : 0;
       auto queue = device->AcquireQueue(device->queue_family_graphics_compute(), 0);
       if (dfn().vkQueueSubmit(queue.queue(), 1, &submit, s.fence) != VK_SUCCESS) {
         REXLOG_ERROR("[native] vkQueueSubmit failed");
       }
+      if (submit_start) diagnostics::Trace().Add("ring", "queue_submit", frame, submission_number,
+          submit_start, NowNs() - submit_start);
     }
     s.pending = true;
     recording = false;
@@ -1774,6 +1846,21 @@ struct Renderer::Impl {
   }
 
   uint8_t* Allocate(VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize& offset_out) {
+    struct AllocationTiming {
+      Impl& impl;
+      uint64_t start = NowNs(), fence_before;
+      VkDeviceSize bytes;
+      AllocationTiming(Impl& i, VkDeviceSize b) : impl(i), fence_before(i.frame_fence_wait_ns), bytes(b) {
+        ++impl.stats().allocation_calls;
+      }
+      ~AllocationTiming() {
+        const uint64_t duration = NowNs() - start;
+        impl.stats().allocation_ns += duration;
+        impl.stats().allocation_fence_ns += impl.frame_fence_wait_ns - fence_before;
+        if (duration >= 1000000) diagnostics::Trace().Add("ring", "allocation_slow", impl.frame,
+            impl.submission_number, start, duration, bytes);
+      }
+    } allocation_timing(*this, size);
     if (size > stream_capacity / 4) {
       return nullptr;
     }
@@ -1789,6 +1876,7 @@ struct Renderer::Impl {
     // The current submission itself must not wrap onto what it still reads.
     const uint64_t fence_before = frame_fence_wait_ns;
     if (end - current().stream_oldest > stream_capacity) {
+      ++stats().allocation_forced_submits;
       Submit();
       WaitSubmission(submissions[submission_number % kSubmissionSlots]);
       BeginRecording();
@@ -1903,6 +1991,12 @@ struct Renderer::Impl {
   }
 
   // --- Shaders, layouts and pipelines ----------------------------------------------
+  void UpdateDescriptors(uint32_t count, const VkWriteDescriptorSet* writes) {
+    TextureTimer timer(stats().descriptor_update_ns);
+    ++stats().descriptor_update_calls;
+    stats().descriptor_writes += count;
+    dfn().vkUpdateDescriptorSets(vk, count, writes, 0, nullptr);
+  }
 
   VkDescriptorSetLayout GetTextureSetLayout(bool vertex, uint32_t textures, uint32_t samplers);
   const PipelineLayout* GetPipelineLayout(uint32_t tex_vs, uint32_t samp_vs, uint32_t tex_ps,
@@ -1975,6 +2069,7 @@ struct Renderer::Impl {
 // --- Setup -------------------------------------------------------------------------
 
 bool Renderer::Impl::Initialize() {
+  diagnostics::Trace().Configure(REXCVAR_GET(nx_frame_timeline), REXCVAR_GET(nx_frame_timeline_path));
   device = provider->vulkan_device();
   vk = device->device();
   auto get_proc = device->vulkan_instance()->functions().vkGetDeviceProcAddr;
@@ -2125,7 +2220,7 @@ bool Renderer::Impl::Initialize() {
   writes[1].descriptorCount = SpirvShaderTranslator::kConstantBufferCount;
   writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
   writes[1].pBufferInfo = constant_infos;
-  dfn().vkUpdateDescriptorSets(vk, 2, writes, 0, nullptr);
+  UpdateDescriptors(2, writes);
 
   // Submissions.
   for (Submission& s : submissions) {
@@ -2329,7 +2424,7 @@ bool Renderer::Impl::CreateDepthConversion() {
   write.descriptorCount = 1;
   write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   write.pBufferInfo = &buffer;
-  dfn().vkUpdateDescriptorSets(vk, 1, &write, 0, nullptr);
+  UpdateDescriptors(1, &write);
 
   VkDescriptorSetLayoutBinding copy_bindings[2] = {};
   copy_bindings[0].binding = 0;
@@ -2411,7 +2506,7 @@ bool Renderer::Impl::ComputeColorCopy(VkCommandBuffer c, VkImageView source, VkI
         i ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     writes[i].pImageInfo = &images[i];
   }
-  dfn().vkUpdateDescriptorSets(vk, 2, writes, 0, nullptr);
+  UpdateDescriptors(2, writes);
   // Earlier writes of the source (rendering, copies, compute) before the
   // reads, and earlier reads of the destination before the writes.
   VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
@@ -2472,7 +2567,7 @@ bool Renderer::Impl::ResolvePackedDepthDirect(RenderTarget& source, ResolveDesti
     writes[i].descriptorType = i < 2 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     writes[i].pImageInfo = &images[i];
   }
-  dfn().vkUpdateDescriptorSets(vk, 4, writes, 0, nullptr);
+  UpdateDescriptors(4, writes);
   VkMemoryBarrier before = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr,
       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT |
           VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
@@ -2740,7 +2835,7 @@ bool Renderer::Impl::CreateSwapResources() {
     write.descriptorCount = 1;
     write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
     write.pTexelBufferView = &ramp_views[i];
-    dfn().vkUpdateDescriptorSets(vk, 1, &write, 0, nullptr);
+    UpdateDescriptors(1, &write);
   }
   return true;
 }
@@ -2954,6 +3049,7 @@ bool Renderer::Impl::EnsureTranslated(VulkanShader::VulkanTranslation* translati
       bool ok = translator->TranslateAnalyzedShader(*translation);
       if (ok) {
         UseEmbeddedReplacement(*translation);
+        DumpBackendShader(*translation);
         translation->GetOrCreateShaderModule();
       }
       ++stats().shaders_translated;
@@ -3011,6 +3107,7 @@ void Renderer::Impl::TranslationThread() {
     }
     if (worker_translator->TranslateAnalyzedShader(*translation)) {
       UseEmbeddedReplacement(*translation);
+      DumpBackendShader(*translation);
       translation->GetOrCreateShaderModule();
     } else {
       REXLOG_ERROR("[native] Shader {:016X} did not translate",
@@ -4231,6 +4328,20 @@ void Renderer::Impl::VerifyVertexDelta(VkDeviceSize offset, const uint8_t* expec
 
 void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_index_words) {
   SectionTimer section{stats().section_ns, 0};
+  const uint32_t partial_limit = REXCVAR_GET(nx_partial_submit_draws);
+  if (partial_limit && recording && submission_draws >= partial_limit) {
+    // Only at a producer draw boundary: no current DrawCommand or upload has
+    // been prepared. Submit drains the recorder and closes its render pass;
+    // BeginRecording resets binding caches exactly as for stream rollover.
+    const uint64_t start = NowNs(), submitted = submission_number;
+    const uint32_t draws = submission_draws;
+    Submit();
+    BeginRecording();
+    const uint64_t elapsed = NowNs() - start;
+    ++partial_submit_count;
+    partial_submit_wall_ns += elapsed;
+    diagnostics::Trace().Add("ring", "partial_submit", frame, submitted, start, elapsed, draws);
+  }
   const RegisterFile& r = *regs;
   // The reasons, in order: 0 no surface pitch, 1 no vertex shader, 2 memory
   // export, 3 no rasterization, 4 primitive type, 5 no geometry shaders,
@@ -4951,7 +5062,7 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
         w.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
         w.pImageInfo = infos + texture_bindings.size();
       }
-      dfn().vkUpdateDescriptorSets(vk, write_count, writes, 0, nullptr);
+      UpdateDescriptors(write_count, writes);
       tb.sets[stage] = set;
     }
     tb.slots |= tb.used_mask;
@@ -5630,7 +5741,7 @@ void Renderer::Impl::Resolve() {
                   i ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
               writes[i].pImageInfo = &images[i];
             }
-            dfn().vkUpdateDescriptorSets(vk, 2, writes, 0, nullptr);
+            UpdateDescriptors(2, writes);
             int32_t params[4] = {x0, y0, int32_t(width), int32_t(height)};
             dfn().vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_copy_pipeline);
             dfn().vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, depth_copy_layout, 0,
@@ -5999,7 +6110,7 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
           writes[1].dstSet = swap_sets[slot][2];
           writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
           writes[1].pImageInfo = &dest_info;
-          dfn().vkUpdateDescriptorSets(vk, 2, writes, 0, nullptr);
+          UpdateDescriptors(2, writes);
           FlushResolveBarrier();
           VkCommandBuffer c = cmd();
           VkImageMemoryBarrier barrier = {};
@@ -6047,6 +6158,9 @@ void Renderer::Impl::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, u
   Submit();
   phases.Mark(3);
   // Frame boundary.
+  if (frame % 300 == 0)
+    REXLOG_INFO("[gl-partial-submit] limit={} cumulative count={} wall_ms={:.3f}; includes recorder/upload/slot waits",
+        REXCVAR_GET(nx_partial_submit_draws), partial_submit_count, double(partial_submit_wall_ns) / 1e6);
   if (frame % 300 == 0)
     REXLOG_INFO("[gl-vertex-delta] shadow_mib={} cpu_bytes={} gpu_bytes={} reused_bytes={} enabled={}",
         vertex_shadow_bytes >> 20, vertex_delta_cpu, vertex_delta_gpu, vertex_delta_reused,
@@ -6365,7 +6479,12 @@ struct CpuTimer {
 
 void Renderer::Draw(const uint32_t* immediate_indices, uint32_t immediate_index_words) {
   CpuTimer timer(stats_.cpu_ns);
+  CpuTimer draw_timer(stats_.draw_wall_ns);
+  ++stats_.draw_calls;
+  const uint64_t waits_before = impl_->frame_fence_wait_ns + impl_->frame_drain_wait_ns + impl_->frame_upload_wait_ns;
   impl_->Draw(immediate_indices, immediate_index_words);
+  stats_.draw_tracked_wait_ns += impl_->frame_fence_wait_ns + impl_->frame_drain_wait_ns +
+      impl_->frame_upload_wait_ns - waits_before;
 }
 
 void Renderer::Resolve() {
@@ -6377,6 +6496,8 @@ void Renderer::Swap(rex::ui::Presenter* presenter, uint32_t frontbuffer, uint32_
                     uint32_t height) {
   CpuTimer timer(stats_.cpu_ns);
   impl_->Swap(presenter, frontbuffer, width, height);
+  stats_.record_worker_ns = impl_->record_worker_ns.load(std::memory_order_relaxed);
+  stats_.record_worker_draws = impl_->record_worker_draws.load(std::memory_order_relaxed);
 }
 
 void Renderer::SetGammaRamp256(const uint32_t* entries) {

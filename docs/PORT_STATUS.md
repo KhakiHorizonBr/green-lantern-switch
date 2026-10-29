@@ -1,4 +1,20 @@
-# Estado atual — 24/10/2026
+# Estado atual — 29/10/2026
+
+## Rodadas PC posteriores ao074
+
+Instrumentação por quadro e timeline limitada implementadas. Pacing alternativo
+não demonstrou ganho. Submissões parciais256 pioraram p95 no PC34,37→46,87ms:
+opção mantida desligada. Cache residente32MiB foi implementado e testado numa
+cópia independente: p95 34,62→34,69ms, sem ganho claro;8buffers residentes
+(10.930.000bytes) passaram na leitura dirigida da GPU. Nenhuma variante foi
+promovida e não há novo teste de hardware deste caminho Vulkan.
+
+Auditoria de30repositórios identificou dois caminhos deko3d distintos, além de
+soluções de upload e resolução. Os trabalhos deko3d paralelos não são o objeto
+desta atualização Vulkan. [Resumo/evidências](RESULTADOS_2026_10_27_29.md).
+Cache residente continua separado em`experiments/geometry-resident/`.
+
+---
 
 ## Resumo
 

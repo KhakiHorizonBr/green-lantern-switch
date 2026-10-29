@@ -1,0 +1,35 @@
+{
+  "pin": "f961303fe3c6e3a90905b379ff4bf3de9a35a757",
+  "files": [
+    {
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/nx-mod/rexglue-sdk-nx/f961303fe3c6e3a90905b379ff4bf3de9a35a757/LICENSE",
+      "bytes": 1659
+    },
+    {
+      "path": "include/rex/x360/deko/render.h",
+      "url": "https://raw.githubusercontent.com/nx-mod/rexglue-sdk-nx/f961303fe3c6e3a90905b379ff4bf3de9a35a757/include/rex/x360/deko/render.h",
+      "bytes": 40335
+    },
+    {
+      "path": "src/x360/deko/dibujos.cpp",
+      "url": "https://raw.githubusercontent.com/nx-mod/rexglue-sdk-nx/f961303fe3c6e3a90905b379ff4bf3de9a35a757/src/x360/deko/dibujos.cpp",
+      "bytes": 94054
+    },
+    {
+      "path": "include/rex/ui/deko3d/nucleo.h",
+      "url": "https://raw.githubusercontent.com/nx-mod/rexglue-sdk-nx/f961303fe3c6e3a90905b379ff4bf3de9a35a757/include/rex/ui/deko3d/nucleo.h",
+      "bytes": 14984
+    },
+    {
+      "path": "src/ui/deko3d/nucleo.cpp",
+      "url": "https://raw.githubusercontent.com/nx-mod/rexglue-sdk-nx/f961303fe3c6e3a90905b379ff4bf3de9a35a757/src/ui/deko3d/nucleo.cpp",
+      "bytes": 23764
+    },
+    {
+      "path": "src/x360/deko/geometria.cpp",
+      "url": "https://raw.githubusercontent.com/nx-mod/rexglue-sdk-nx/f961303fe3c6e3a90905b379ff4bf3de9a35a757/src/x360/deko/geometria.cpp",
+      "bytes": 13295
+    }
+  ]
+}

@@ -21,6 +21,7 @@
 #include "native_system.h"
 #include "../guest_pacing_stats.h"
 #include "native_renderer.h"
+#include "frame_diagnostics.h"
 
 #include <algorithm>
 #include <atomic>
@@ -321,9 +322,11 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
       }
     }
     if (renderer_ready_) {
+      Report();
       renderer_.Shutdown();
       renderer_ready_ = false;
     }
+    diagnostics::Trace().Close();
     DestroyVulkan();
     if (presenter_) {
       if (app_context_) {
@@ -411,6 +414,12 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
   void WriteMmio(uint32_t address, uint32_t value) {
     const uint32_t index = (address & 0xFFFF) / 4;
     if (index == kRegCpRbWptr) {
+      if (diagnostics::Trace().enabled()) {
+        const uint64_t now = diagnostics::NowNs();
+        uint64_t before = last_doorbell_trace_ns_.load(std::memory_order_relaxed);
+        if (now - before >= 5000000 && last_doorbell_trace_ns_.compare_exchange_strong(before, now))
+          diagnostics::Trace().Add("producer", "ring_doorbell_sample", UINT64_MAX, 0, now, 0, value);
+      }
       write_pointer_.store(value, std::memory_order_release);
       // Taking the lock for an instant keeps the wakeup from being lost when
       // the ring thread is between checking and going to sleep.
@@ -666,6 +675,13 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
   }
 
   void Report() {
+    frame_intervals_.Report("swap-completion interval (not display scanout)");
+    renderer_walls_.Report("renderer wall per frame (includes tracked waits)");
+    allocation_walls_.Report("allocation wall per frame (includes fences)");
+    allocation_fences_.Report("allocation fence wait per frame");
+    gpu_waits_.Report("all renderer fence waits per frame");
+    diagnostics::CompletedGpuSubmissions().Report("completed GPU submission duration (not same-frame latency)");
+    diagnostics::Trace().Flush();
     REXLOG_INFO(
         "[native] last 10 s: {} packets, {} draws, {} copies, {} swaps, {} waits cut short",
         packets_ - reported_packets_, draws_ - reported_draws_, copies_ - reported_copies_,
@@ -734,6 +750,26 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
             double(s.swap_phase_ns[3] - reported_render_.swap_phase_ns[3]) / 1e6 / double(frames));
         const uint64_t callback_ns = s.present_callback_ns - reported_render_.present_callback_ns;
         const uint64_t refresh_ns = s.swap_phase_ns[1] - reported_render_.swap_phase_ns[1];
+        const uint64_t alloc_wall = s.allocation_ns - reported_render_.allocation_ns;
+        const uint64_t alloc_fence = s.allocation_fence_ns - reported_render_.allocation_fence_ns;
+        const uint64_t draw_wall = s.draw_wall_ns - reported_render_.draw_wall_ns;
+        const uint64_t draw_wait = s.draw_tracked_wait_ns - reported_render_.draw_tracked_wait_ns;
+        const uint64_t draw_calls = std::max<uint64_t>(1, s.draw_calls - reported_render_.draw_calls);
+        const uint64_t worker_calls = std::max<uint64_t>(1, s.record_worker_draws - reported_render_.record_worker_draws);
+        REXLOG_INFO("[gl-allocation] ms/frame wall={:.3f} fence={:.3f} wall-excluding-fence={:.3f}; calls={} forced_submits={}",
+            double(alloc_wall) / 1e6 / frames, double(alloc_fence) / 1e6 / frames,
+            double(alloc_wall > alloc_fence ? alloc_wall - alloc_fence : 0) / 1e6 / frames,
+            s.allocation_calls - reported_render_.allocation_calls,
+            s.allocation_forced_submits - reported_render_.allocation_forced_submits);
+        REXLOG_INFO("[gl-draw-cost] ring calls={} us/call wall={:.3f} wall-excluding-tracked-waits={:.3f}; recorder us/draw={:.3f} (wall, not CPU scheduler time)",
+            draw_calls, double(draw_wall) / 1e3 / draw_calls,
+            double(draw_wall > draw_wait ? draw_wall - draw_wait : 0) / 1e3 / draw_calls,
+            double(s.record_worker_ns - reported_render_.record_worker_ns) / 1e3 / worker_calls);
+        REXLOG_INFO("[gl-descriptors] update calls={} writes={} ms/frame={:.3f} updates/draw-call={:.3f}",
+            s.descriptor_update_calls - reported_render_.descriptor_update_calls,
+            s.descriptor_writes - reported_render_.descriptor_writes,
+            double(s.descriptor_update_ns - reported_render_.descriptor_update_ns) / 1e6 / frames,
+            double(s.descriptor_update_calls - reported_render_.descriptor_update_calls) / draw_calls);
         REXLOG_INFO("[native] presentation CPU ms per frame: native callback {:.3f}, outside callback {:.3f}",
             double(callback_ns) / 1e6 / double(frames),
             double(refresh_ns > callback_ns ? refresh_ns - callback_ns : 0) / 1e6 / double(frames));
@@ -1286,11 +1322,32 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
     frame_start_skips_ = skips;
     const auto previous = frame_start_;
     frame_start_ = now;
-    if (!renderer_ready_ || previous.time_since_epoch().count() == 0) return;
+    if (!renderer_ready_) return;
+    if (previous.time_since_epoch().count() == 0) { frame_diagnostics_before_ = renderer_.stats(); return; }
     const double ms =
         double(std::chrono::duration_cast<std::chrono::microseconds>(now - previous).count()) /
         1000.0;
     const RendererStats& s = renderer_.stats();
+    const uint64_t interval_ns = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(now - previous).count());
+    const uint64_t renderer_ns = s.cpu_ns - frame_diagnostics_before_.cpu_ns;
+    const uint64_t allocation_ns = s.allocation_ns - frame_diagnostics_before_.allocation_ns;
+    const uint64_t allocation_fence_ns = s.allocation_fence_ns - frame_diagnostics_before_.allocation_fence_ns;
+    frame_intervals_.Add(interval_ns);
+    renderer_walls_.Add(renderer_ns);
+    allocation_walls_.Add(allocation_ns);
+    allocation_fences_.Add(allocation_fence_ns);
+    gpu_waits_.Add(s.frame_fence_wait_ns);
+    const uint64_t end_ns = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count());
+    const uint64_t frame_id = swaps_ - 1;
+    diagnostics::Trace().Add("ring", "frame_interval", frame_id, 0, end_ns - interval_ns, interval_ns, s.frame_draws);
+    diagnostics::Trace().Add("ring", "frame_renderer_wall_ns", frame_id, 0, end_ns, 0, renderer_ns);
+    diagnostics::Trace().Add("ring", "frame_allocation_wall_ns", frame_id, 0, end_ns, 0, allocation_ns);
+    diagnostics::Trace().Add("ring", "frame_allocation_fence_ns", frame_id, 0, end_ns, 0, allocation_fence_ns);
+    diagnostics::Trace().Add("ring", "frame_fence_wait_ns", frame_id, 0, end_ns, 0, s.frame_fence_wait_ns);
+    diagnostics::Trace().Add("ring", "frame_recorder_wait_ns", frame_id, 0, end_ns, 0, s.frame_drain_wait_ns);
+    diagnostics::Trace().Add("ring", "frame_producer_idle_ns", frame_id, 0, end_ns, 0, idle_ns);
+    diagnostics::Trace().Add("ring", "frame_pacing_hold_ns", frame_id, 0, end_ns, 0, hold_ns);
+    frame_diagnostics_before_ = s;
     const uint64_t pipelines = s.pipelines_created - frame_start_pipelines_;
     const uint64_t shaders = s.shaders_translated - frame_start_shaders_;
     const uint64_t textures = s.textures_uploaded - frame_start_textures_;
@@ -1346,6 +1403,7 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
   }
 
   void Present() {
+    diagnostics::Scope present_scope("ring", "present_refresh", swaps_);
     const uint64_t swap = ++swaps_;
     g_swaps_presented.fetch_add(1, std::memory_order_relaxed);
     counter_.fetch_add(1, std::memory_order_relaxed);
@@ -1605,6 +1663,9 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
   uint64_t waits_ = 0, wait_ns_ = 0, reported_waits_ = 0, reported_wait_ns_ = 0;
   uint64_t reported_packets_ = 0, reported_draws_ = 0, reported_copies_ = 0,
            reported_swaps_ = 0;
+  diagnostics::Distribution frame_intervals_, renderer_walls_, allocation_walls_, allocation_fences_, gpu_waits_;
+  RendererStats frame_diagnostics_before_;
+  std::atomic<uint64_t> last_doorbell_trace_ns_{0};
 
   struct Framebuffer {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;

@@ -1,0 +1,374 @@
+{
+  "source": "outputs\\native-pc-user\\resident-32\\logs\\rex_timeline.jsonl",
+  "total_events": 67730,
+  "dropped_events": 0,
+  "selected_frames": 851,
+  "first_frame": 3050,
+  "last_frame": 3900,
+  "incomplete_frame_rows": 0,
+  "min_draws_filter": 400,
+  "warning": "CPU wall observations. Overlapping scopes are not additive. Doorbells are sampled; guest frame boundaries and display scanout are not measured. GPU completion time is host observation; GPU timestamps have a separate clock. Diagnostic I/O affects timing.",
+  "metrics": {
+    "interval": {
+      "n": 851,
+      "p50_ms": 33.3016,
+      "p95_ms": 34.685,
+      "p99_ms": 46.9676,
+      "max_ms": 83.1494,
+      "over_33_33_ms": 417,
+      "over_25_ms": 831,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        0,
+        20,
+        0,
+        414,
+        415,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    "frame_renderer_wall_ns": {
+      "n": 851,
+      "p50_ms": 6.8692,
+      "p95_ms": 10.1307,
+      "p99_ms": 11.9433,
+      "max_ms": 67.424,
+      "over_33_33_ms": 1,
+      "over_25_ms": 1,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        849,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "frame_allocation_wall_ns": {
+      "n": 851,
+      "p50_ms": 0.055,
+      "p95_ms": 0.0797,
+      "p99_ms": 0.0904,
+      "max_ms": 0.1134,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        851,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "frame_allocation_fence_ns": {
+      "n": 851,
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0,
+      "max_ms": 0.0061,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        851,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "frame_fence_wait_ns": {
+      "n": 851,
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0,
+      "max_ms": 0.0061,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        851,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "frame_recorder_wait_ns": {
+      "n": 851,
+      "p50_ms": 0.536,
+      "p95_ms": 0.6328,
+      "p99_ms": 0.7133,
+      "max_ms": 0.8163,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        851,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "frame_producer_idle_ns": {
+      "n": 851,
+      "p50_ms": 0.0001,
+      "p95_ms": 0.0002,
+      "p99_ms": 0.0004,
+      "max_ms": 0.0005,
+      "over_33_33_ms": 0,
+      "over_25_ms": 0,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        851,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "frame_pacing_hold_ns": {
+      "n": 851,
+      "p50_ms": 12.3573,
+      "p95_ms": 23.4189,
+      "p99_ms": 27.0328,
+      "max_ms": 29.7255,
+      "over_33_33_ms": 0,
+      "over_25_ms": 26,
+      "histogram_upper_bounds_ms": [
+        16.666667,
+        25,
+        28.571429,
+        33.333333,
+        50,
+        66.666667,
+        100,
+        150,
+        null
+      ],
+      "histogram_counts": [
+        800,
+        25,
+        25,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "draw_counts": {
+    "min": 783,
+    "max": 941
+  },
+  "allocation_wall_excluding_fence": {
+    "n": 851,
+    "p50_ms": 0.055,
+    "p95_ms": 0.0797,
+    "p99_ms": 0.0901,
+    "max_ms": 0.1134,
+    "over_33_33_ms": 0,
+    "over_25_ms": 0,
+    "histogram_upper_bounds_ms": [
+      16.666667,
+      25,
+      28.571429,
+      33.333333,
+      50,
+      66.666667,
+      100,
+      150,
+      null
+    ],
+    "histogram_counts": [
+      851,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "completed_gpu_submissions": {
+    "n": 851,
+    "p50_ms": 8.266912,
+    "p95_ms": 8.959264,
+    "p99_ms": 18.032096,
+    "max_ms": 19.942912,
+    "over_33_33_ms": 0,
+    "over_25_ms": 0,
+    "histogram_upper_bounds_ms": [
+      16.666667,
+      25,
+      28.571429,
+      33.333333,
+      50,
+      66.666667,
+      100,
+      150,
+      null
+    ],
+    "histogram_counts": [
+      839,
+      12,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "gpu_duration_sum_per_fully_completed_frame": {
+    "n": 851,
+    "p50_ms": 8.266912,
+    "p95_ms": 8.959264,
+    "p99_ms": 18.032096,
+    "max_ms": 19.942912,
+    "over_33_33_ms": 0,
+    "over_25_ms": 0,
+    "histogram_upper_bounds_ms": [
+      16.666667,
+      25,
+      28.571429,
+      33.333333,
+      50,
+      66.666667,
+      100,
+      150,
+      null
+    ],
+    "histogram_counts": [
+      839,
+      12,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "observed_scope_counts": {
+    "ring_doorbell_sample": 6192,
+    "queue_submit": 3901,
+    "present_refresh": 3901,
+    "gpu_completion_observed": 3900,
+    "frame_interval": 3900,
+    "frame_renderer_wall_ns": 3900,
+    "frame_allocation_wall_ns": 3900,
+    "frame_allocation_fence_ns": 3900,
+    "frame_fence_wait_ns": 3900,
+    "frame_recorder_wait_ns": 3900,
+    "frame_producer_idle_ns": 3900,
+    "frame_pacing_hold_ns": 3900,
+    "record_batch_sample": 18632,
+    "fence_wait": 4
+  }
+}
