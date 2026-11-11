@@ -9,7 +9,11 @@ Não é um port concluído; estabilidade e gráficos de todas as fases não fora
 
 Infelizmente, não consegui continuar o desenvolvimento por questões pessoais, mas deixei tudo aqui para quem quiser continuar. Boa sorte!
 
-O acervo inclui o renderer Vulkan, o protótipo deko3d, overlays de dependências, diagnósticos e experimentos até o hardware 092. No Vulkan, use 100% de resolução interna e submissões parciais desativadas como referência. A escala de 75% foi testada e não apresentou ganho sustentado. O protótipo deko3d chegou ao gameplay, com custo alto de sincronização e lacunas na cobertura de shaders.
+**O renderer Vulkan/NVK foi consideravelmente mais estável nos testes do Switch e é a base recomendada para retomar o port.** No teste 088, chegou a **29,8 FPS em uma janela de cerca de 10 segundos**. Nos trechos mais pesados, houve janelas prolongadas de 7–9 FPS. [Medições do teste 088](logs/run-088/RESULTADO_088.md)
+
+**O deko3d foi um protótipo.** Chegou ao gameplay no teste 085, mas as janelas pesadas ficaram perto de 2 FPS, com custo alto de sincronização e variantes de shaders ainda ausentes. [Relatório do protótipo deko3d](docs/RELATORIO_DEKO3D_ATE_085.md)
+
+O acervo inclui os dois renderers, overlays de dependências, diagnósticos e experimentos até o teste 092. Para retomar o Vulkan, use 100% de resolução interna e submissões parciais desativadas. A escala de 75% não apresentou ganho sustentado.
 
 **[Guia de retomada, cronologia e dependências](docs/RETOMADA.md)**
 
