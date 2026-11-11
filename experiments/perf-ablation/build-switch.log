@@ -1,0 +1,6 @@
+Compiling native_renderer
+Compiling native_system
+Compiling native_geometry_shaders
+Compiling native_textures
+Compiling green_lantern_switch_main
+{"file": "<WORKSPACE>\\outputs\\perf-ablation\\green_lantern_diagnostico.nro", "size": 54646981, "sha256": "f3f8cc40be55fe696ddd2a7d988a03635d72283e511a21f30b7ecfcb05bf910e"}

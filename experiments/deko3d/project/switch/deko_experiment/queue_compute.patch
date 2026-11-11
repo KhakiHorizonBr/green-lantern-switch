@@ -1,0 +1,18 @@
+--- a/src/ui/deko3d/nucleo.cpp
++++ b/src/ui/deko3d/nucleo.cpp
+@@ -103,11 +103,13 @@
+ 
+   DkQueueMaker qm;
+   dkQueueMakerDefaults(&qm, dispositivo_);
+-  qm.flags = DkQueueFlags_Graphics | DkQueueFlags_MediumPrio |
++  // Lanterna depth resolves dispatch compute. Dropping this default flag
++  // leaves Queue::m_computeQueue null and crashes on ComputeBindShader.
++  qm.flags = DkQueueFlags_Graphics | DkQueueFlags_Compute | DkQueueFlags_MediumPrio |
+              (zcull ? DkQueueFlags_EnableZcull : DkQueueFlags_DisableZcull);
+   qm.commandMemorySize = 1u << 20;
+   qm.flushThreshold = qm.commandMemorySize / 8;
+-  Registro("[dk] creando la cola: graficos, ZCULL %s", zcull ? "activo" : "apagado");
++  Registro("[dk] creando la cola: graficos + compute, ZCULL %s", zcull ? "activo" : "apagado");
+   VaciarRegistro();
+   cola_ = dkQueueCreate(&qm);
+ }

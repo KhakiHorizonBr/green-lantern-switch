@@ -1073,8 +1073,21 @@ Result __wrap_nvFenceWait(NvFence* f, s32 timeout_us) {
 
 Result __wrap_nvGpuChannelKickoff(NvGpuChannel* c) {
   const u64 desde = armGetSystemTick();
+  const u32 pending = c ? c->num_entries : 0;
   const Result rc = __real_nvGpuChannelKickoff(c);
   Anotar(kKickoff, desde);
+  if (R_FAILED(rc)) {
+    NvNotification notification{}; NvError error{};
+    const Result nr = nvGpuChannelGetErrorNotification(c, &notification);
+    const Result er = nvGpuChannelGetErrorInfo(c, &error);
+    REXLOG_ERROR("[gl-nv-kickoff] result=0x{:08X} module={} description={} entries={} "
+                 "notification_result=0x{:08X} status={} info32={} info16={} "
+                 "error_result=0x{:08X} type={} info={:08X},{:08X},{:08X},{:08X},{:08X}",
+                 rc, R_MODULE(rc), R_DESCRIPTION(rc), pending, nr,
+                 notification.status, notification.info32, notification.info16,
+                 er,error.type,error.info[0],error.info[1],error.info[2],error.info[3],error.info[4]);
+    rex::FlushLogging();
+  }
   return rc;
 }
 

@@ -1,0 +1,212 @@
+{
+  "100": {
+    "exe_sha256": "898BCA662195C89DAAE54E81E135067A2F3DD48BCFA29E486B509A3EB73DE73E",
+    "dlls": [
+      {
+        "Name": "rexgpu-xenos.dll",
+        "SHA256": "1A616B52F1360F6FB7C1AF8DF568F74DAE712925595CF78AC4498CA5BB1A41F7"
+      },
+      {
+        "Name": "rexruntime.dll",
+        "SHA256": "B363B95090CF1C42503DE07AFFE0542DC25CB090EA514063E2CD846230549182"
+      }
+    ],
+    "exit_code": 0,
+    "arguments": [
+      "--input_replay_file=\"<WORKSPACE>\\outputs\\native-pc-user\\gameplay-vertex-cache.replay\"",
+      "--log_file=\"<WORKSPACE>\\outputs\\native-pc-user\\internal-scale-100-aligned/game.log\"",
+      "--user_data_root=\"<WORKSPACE>\\outputs\\native-pc-user\\internal-scale-100-aligned/user\"",
+      "--pc_capture_directory=\"<WORKSPACE>\\outputs\\native-pc-user\\internal-scale-100-aligned/frames\"",
+      "--nx_renderer=native",
+      "--nx_async_pipelines=false",
+      "--nx_stream_mib=160",
+      "--nx_guest_depth_range=true",
+      "--nx_zero_clear_alias=true",
+      "--nx_stencil_color_layout=true",
+      "--nx_capture_frame=1200",
+      "--nx_trace_frame=0",
+      "--nx_trace_frames=1",
+      "--nx_trace_draws=false",
+      "--nx_debug_material_no_depth=false",
+      "--nx_debug_full_vertex_fetch=false",
+      "--nx_vertex_fetch_safety=8",
+      "--nx_depth_resolve_cache=false",
+      "--nx_depth_packed_direct=true",
+      "--nx_verify_depth_direct=false",
+      "--nx_edram_lazy_export=true",
+      "--nx_verify_edram_lazy=false",
+      "--nx_vertex_delta_upload=true",
+      "--nx_verify_vertex_delta=false",
+      "--nx_index_fast_copy=true",
+      "--gpu_debug_material_sample=0",
+      "--nx_internal_scale_percent=100",
+      "--nx_ablation_mode=0",
+      "--nx_partial_submit_draws=0"
+    ],
+    "gpu_samples": [
+      {
+        "timestamp": "2026-11-05 12:56:32.476",
+        "total_ms": 1.6,
+        "main_ms": 0.23,
+        "main_draws": 3
+      },
+      {
+        "timestamp": "2026-11-05 12:56:43.142",
+        "total_ms": 1.1,
+        "main_ms": 0.1,
+        "main_draws": 1
+      },
+      {
+        "timestamp": "2026-11-05 12:56:57.007",
+        "total_ms": 5.1,
+        "main_ms": 1.64,
+        "main_draws": 38
+      },
+      {
+        "timestamp": "2026-11-05 12:57:08.009",
+        "total_ms": 5.2,
+        "main_ms": 1.63,
+        "main_draws": 38
+      },
+      {
+        "timestamp": "2026-11-05 12:57:28.091",
+        "total_ms": 4.2,
+        "main_ms": 1.46,
+        "main_draws": 167
+      },
+      {
+        "timestamp": "2026-11-05 12:57:38.757",
+        "total_ms": 7.2,
+        "main_ms": 2.39,
+        "main_draws": 454
+      },
+      {
+        "timestamp": "2026-11-05 12:57:49.424",
+        "total_ms": 7.4,
+        "main_ms": 2.36,
+        "main_draws": 460
+      }
+    ],
+    "scale_progress": [
+      "[2026-11-05 12:56:31.842] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0",
+      "[2026-11-05 12:56:41.841] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0",
+      "[2026-11-05 12:56:55.040] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0",
+      "[2026-11-05 12:57:05.288] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0",
+      "[2026-11-05 12:57:24.510] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0",
+      "[2026-11-05 12:57:34.790] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0",
+      "[2026-11-05 12:57:44.790] [info] [core] [t34152] [gl-internal-scale] percent=100 cumulative scopes=0 blits=0 surfaces=0"
+    ],
+    "allocations": [],
+    "fatal_markers": [],
+    "fragment_variants": 0,
+    "fragcoord_variants_patched": 0
+  },
+  "75": {
+    "exe_sha256": "898BCA662195C89DAAE54E81E135067A2F3DD48BCFA29E486B509A3EB73DE73E",
+    "dlls": [
+      {
+        "Name": "rexgpu-xenos.dll",
+        "SHA256": "1A616B52F1360F6FB7C1AF8DF568F74DAE712925595CF78AC4498CA5BB1A41F7"
+      },
+      {
+        "Name": "rexruntime.dll",
+        "SHA256": "B363B95090CF1C42503DE07AFFE0542DC25CB090EA514063E2CD846230549182"
+      }
+    ],
+    "exit_code": 0,
+    "arguments": [
+      "--input_replay_file=\"<WORKSPACE>\\outputs\\native-pc-user\\gameplay-vertex-cache.replay\"",
+      "--log_file=\"<WORKSPACE>\\outputs\\native-pc-user\\internal-scale-75-aligned/game.log\"",
+      "--user_data_root=\"<WORKSPACE>\\outputs\\native-pc-user\\internal-scale-75-aligned/user\"",
+      "--pc_capture_directory=\"<WORKSPACE>\\outputs\\native-pc-user\\internal-scale-75-aligned/frames\"",
+      "--nx_renderer=native",
+      "--nx_async_pipelines=false",
+      "--nx_stream_mib=160",
+      "--nx_guest_depth_range=true",
+      "--nx_zero_clear_alias=true",
+      "--nx_stencil_color_layout=true",
+      "--nx_capture_frame=1200",
+      "--nx_trace_frame=0",
+      "--nx_trace_frames=1",
+      "--nx_trace_draws=false",
+      "--nx_debug_material_no_depth=false",
+      "--nx_debug_full_vertex_fetch=false",
+      "--nx_vertex_fetch_safety=8",
+      "--nx_depth_resolve_cache=false",
+      "--nx_depth_packed_direct=true",
+      "--nx_verify_depth_direct=false",
+      "--nx_edram_lazy_export=true",
+      "--nx_verify_edram_lazy=false",
+      "--nx_vertex_delta_upload=true",
+      "--nx_verify_vertex_delta=false",
+      "--nx_index_fast_copy=true",
+      "--gpu_debug_material_sample=0",
+      "--nx_internal_scale_percent=75",
+      "--nx_internal_scale_dump_shaders=true",
+      "--nx_ablation_mode=0",
+      "--nx_partial_submit_draws=0"
+    ],
+    "gpu_samples": [
+      {
+        "timestamp": "2026-11-05 12:54:25.979",
+        "total_ms": 1.1,
+        "main_ms": 0.18,
+        "main_draws": 3
+      },
+      {
+        "timestamp": "2026-11-05 12:54:36.663",
+        "total_ms": 0.5,
+        "main_ms": 0.2,
+        "main_draws": 1
+      },
+      {
+        "timestamp": "2026-11-05 12:54:51.411",
+        "total_ms": 5.4,
+        "main_ms": 0.95,
+        "main_draws": 31
+      },
+      {
+        "timestamp": "2026-11-05 12:55:02.363",
+        "total_ms": 5.9,
+        "main_ms": 1.19,
+        "main_draws": 37
+      },
+      {
+        "timestamp": "2026-11-05 12:55:21.411",
+        "total_ms": 7.2,
+        "main_ms": 1.97,
+        "main_draws": 248
+      },
+      {
+        "timestamp": "2026-11-05 12:55:32.078",
+        "total_ms": 9.5,
+        "main_ms": 2.55,
+        "main_draws": 456
+      }
+    ],
+    "scale_progress": [
+      "[2026-11-05 12:54:25.344] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=739 blits=3074 surfaces=3",
+      "[2026-11-05 12:54:35.361] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=1339 blits=5474 surfaces=3",
+      "[2026-11-05 12:54:49.444] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=5465 blits=31904 surfaces=10",
+      "[2026-11-05 12:54:59.618] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=10255 blits=62336 surfaces=10",
+      "[2026-11-05 12:55:17.698] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=12552 blits=73474 surfaces=10",
+      "[2026-11-05 12:55:28.111] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=18892 blits=107834 surfaces=10",
+      "[2026-11-05 12:55:38.111] [info] [core] [t33480] [gl-internal-scale] percent=75 cumulative scopes=25256 blits=142290 surfaces=10"
+    ],
+    "allocations": [
+      "[2026-11-05 12:54:14.639] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x2048 -> host 960x1536 vk129 base=0 depth=1",
+      "[2026-11-05 12:54:14.841] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x2048 -> host 960x1536 vk130 base=0 depth=1",
+      "[2026-11-05 12:54:15.812] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x720 -> host 960x540 vk97 base=1328 depth=0",
+      "[2026-11-05 12:54:39.715] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x256 -> host 960x192 vk37 base=0 depth=0",
+      "[2026-11-05 12:54:39.804] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x256 -> host 960x192 vk37 base=1536 depth=0",
+      "[2026-11-05 12:54:39.804] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x256 -> host 960x192 vk37 base=1280 depth=0",
+      "[2026-11-05 12:54:39.804] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x256 -> host 960x192 vk37 base=1792 depth=0",
+      "[2026-11-05 12:54:39.885] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x256 -> host 960x192 vk37 base=1024 depth=0",
+      "[2026-11-05 12:54:45.899] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x720 -> host 960x540 vk37 base=1328 depth=0",
+      "[2026-11-05 12:54:46.440] [info] [core] [t33480] [gl-internal-scale] allocate guest 1280x256 -> host 960x192 vk37 base=768 depth=0"
+    ],
+    "fatal_markers": [],
+    "fragment_variants": 49,
+    "fragcoord_variants_patched": 17
+  }
+}

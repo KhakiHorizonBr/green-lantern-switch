@@ -1,0 +1,11 @@
+imagen 0x0000001ecebe5000, codigo hasta 0x0000001ed11d7000
+
+Muestreo de pilas: desactivado
+==== 0.0 s | modo: arranque | juego 0.0 fps | CPU total 0% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 0 | invitado 308/238 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     [gl-memory-budget] malloc_used_mib=1150.48 malloc_free_mib=0.29 (malloc only; free total is not largest contiguous block; driver allocations may be separate)
+     audio: 4 bloques de cliente mezclados, 0 solicitudes sin datos, 0/1 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.000 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 35.4 C, placa 35.9 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 0 (0.0 ms), esperadas 3379200000 (54013140000.0 ms) | kickoff 85382400000 (2196272000.0 ms) | NvMap nuevos 0.0 con cache (0.0 MB) y 460800000.0 sin cache (8652825000.0 MB), 1263267000.0 ms | direcciones de GPU 0.0 (0.0 ms), mapeos 979200000.0 (1524000000.0 MB, 885058000.0 ms) | armDCacheClean 115200000 (450000.0 MB, 106000.0 ms) | cola de la ventana 3379200000.0 (449706000.0 ms), sacar buffer 3379200000.0 (524064000.0 ms) | svcSleepThread: 0 0, ceder 43214169600000, hasta 1 ms 1095782400000 (551287018000.0 ms), mas 19891200000
+     [gl-vk-timing] cache: last_hits=0 map_hits=0 misses=0 | shader_calls=0 shader_ms=0.000 | driver_creates=0 driver_ms=0.000 driver_failures=0 | configure_ms=0.000 draw_ms=0.000 resolve_ms=0.000 end_submission_ms=0.000 | fence_waits=0 fence_wait_ms=0.000 | gpu_span_samples=0 gpu_span_avg_ms=0.000 | interval_ms=0.000 (wall times overlap; GPU span includes gaps between submissions)
+

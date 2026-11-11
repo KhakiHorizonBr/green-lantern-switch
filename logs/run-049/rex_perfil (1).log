@@ -1,0 +1,582 @@
+imagen 0x000000165823d000, codigo hasta 0x000000165a833000
+
+Muestreo de pilas: desactivado
+==== 0.0 s | modo: arranque | juego 19200000.0 fps | CPU total 0% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 0 | invitado 308/238 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 1281/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     audio: 0 bloques de cliente mezclados, 0 solicitudes sin datos, 0/0 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.000 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 37.1 C, placa 37.8 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 13536000000 (394880000.0 ms), esperadas 5510400000 (164254000.0 ms) | kickoff 6854400000 (294720000.0 ms) | NvMap nuevos 844800000.0 con cache (2586000000.0 MB) y 710400000.0 sin cache (2374800000.0 MB), 614597000.0 ms | direcciones de GPU 1862400000.0 (90232000.0 ms), mapeos 1881600000.0 (0.0 MB, 720565000.0 ms) | armDCacheClean 1363200000 (2592070312.5 MB, 187296000.0 ms) | cola de la ventana 3417600000.0 (515037000.0 ms), sacar buffer 3417600000.0 (622787000.0 ms) | svcSleepThread: 0 0, ceder 45949267200000, hasta 1 ms 1130860800000 (597978740000.0 ms), mas 19411200000
+     por fotograma: 0 dibujados | tijera 0.0 pantallas | 0.0 envios | 0.0 resolves (0.00 pantallas) | transferencias: 0.0 llamadas, 0.0 render targets, 0.0 dibujados | 0.0 texturas cargadas | 0.00 MB de memoria compartida subida | pipelines creados en el intervalo: 0
+     dibujados por ancho de superficie: 1600+ 0 | 1280-1599 0 | 640-1279 0 | 256-639 0 | menos de 256 0
+
+==== 10.0 s | modo: normal | juego 21.0 fps | CPU total 174% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 16 | invitado 328/324 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 1281/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     audio: 2349 bloques de cliente mezclados, 3 solicitudes sin datos, 335/472 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.597 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 38.2 C, placa 38.0 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 123 (4.9 ms), esperadas 52 (297.0 ms) | kickoff 42 (2.1 ms) | NvMap nuevos 12.2 con cache (14.3 MB) y 3.9 sin cache (1.4 MB), 6.2 ms | direcciones de GPU 34.4 (4.6 ms), mapeos 34.7 (0.0 MB, 10.1 ms) | armDCacheClean 31 (45.1 MB, 4.0 ms) | cola de la ventana 20.9 (3.7 ms), sacar buffer 20.9 (4.5 ms) | svcSleepThread: 0 0, ceder 73023, hasta 1 ms 5830 (4509.2 ms), mas 285
+     por fotograma: 0 dibujados | tijera 0.0 pantallas | 0.0 envios | 0.0 resolves (0.00 pantallas) | transferencias: 0.0 llamadas, 0.0 render targets, 0.0 dibujados | 0.0 texturas cargadas | 0.00 MB de memoria compartida subida | pipelines creados en el intervalo: 0
+     dibujados por ancho de superficie: 1600+ 0 | 1280-1599 0 | 640-1279 0 | 256-639 0 | menos de 256 0
+
+-- hilo 6605 "eGraphicsRender": CPU 77.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6606 "RndMoviePlayerT": CPU 15.6% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6592 "GPU ring native": CPU 14.7% | prioridad 0x2C, nucleo preferido 2, mascara 0x4
+   sin muestras
+
+-- hilo 6594 "Main Thread (F8": CPU 14.4% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6600 "XThread9F21AE00": CPU 13.5% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6601 "XThread9E973A20": CPU 13.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6596 "XThread9E9736C0": CPU 5.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6611 "XThreadA1466560": CPU 5.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6610 "XThreadA387AD60": CPU 2.9% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6583 "Audio Worker (F": CPU 2.2% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6608 "XThread9EBACF00": CPU 2.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6589 "?": CPU 2.2% | prioridad 0x2C, nucleo preferido 1, mascara 0x3
+   sin muestras
+
+-- hilo 6580 "rex::thread::TimerQueue": CPU 1.7% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6597 "XThread9E958340": CPU 1.4% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6609 "?": CPU 0.9% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6584 "?": CPU 0.5% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6586 "?": CPU 0.4% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6585 "?": CPU 0.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6607 "EGraphicsPostLo": CPU 0.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6581 "?": CPU 0.2% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6587 "?": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6591 "GPU VSync nativ": CPU 0.1% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6598 "XThread9E95FE00": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6542 "main (interfaz)": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6593 "Kernel Dispatch": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6604 "XThread9E9EA600": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6603 "XThread9F41CE80": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6602 "XThread9E9EFC60": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6599 "XThread9E9589C0": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6582 "XMA Decoder (F8": CPU 0.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6588 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6595 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6590 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+==== 10.0 s | modo: normal | juego 21.0 fps | CPU total 176% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 0 | invitado 329/324 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 1281/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     audio: 1896 bloques de cliente mezclados, 0 solicitudes sin datos, 224/474 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.347 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 38.9 C, placa 38.3 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 209 (10.2 ms), esperadas 66 (651.9 ms) | kickoff 42 (2.4 ms) | NvMap nuevos 0.7 con cache (0.1 MB) y 0.0 sin cache (0.0 MB), 0.4 ms | direcciones de GPU 20.0 (3.7 ms), mapeos 20.0 (0.0 MB, 4.4 ms) | armDCacheClean 19 (45.7 MB, 4.1 ms) | cola de la ventana 21.1 (3.9 ms), sacar buffer 21.1 (5.6 ms) | svcSleepThread: 0 0, ceder 59233, hasta 1 ms 4974 (4072.5 ms), mas 255
+     por fotograma: 0 dibujados | tijera 0.0 pantallas | 0.0 envios | 0.0 resolves (0.00 pantallas) | transferencias: 0.0 llamadas, 0.0 render targets, 0.0 dibujados | 0.0 texturas cargadas | 0.00 MB de memoria compartida subida | pipelines creados en el intervalo: 0
+     dibujados por ancho de superficie: 1600+ 0 | 1280-1599 0 | 640-1279 0 | 256-639 0 | menos de 256 0
+
+-- hilo 6605 "eGraphicsRender": CPU 94.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6596 "XThread9E9736C0": CPU 27.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6594 "Main Thread (F8": CPU 18.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6592 "GPU ring native": CPU 12.2% | prioridad 0x2C, nucleo preferido 2, mascara 0x4
+   sin muestras
+
+-- hilo 6611 "XThreadA1466560": CPU 4.8% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6610 "XThreadA387AD60": CPU 3.8% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6607 "EGraphicsPostLo": CPU 3.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6589 "?": CPU 2.9% | prioridad 0x2C, nucleo preferido 1, mascara 0x3
+   sin muestras
+
+-- hilo 6597 "XThread9E958340": CPU 2.5% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6608 "XThread9EBACF00": CPU 2.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6583 "Audio Worker (F": CPU 2.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6580 "rex::thread::TimerQueue": CPU 1.6% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6609 "?": CPU 0.9% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6581 "?": CPU 0.2% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6582 "XMA Decoder (F8": CPU 0.2% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6587 "?": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6613 "XThreadA82EC380": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6591 "GPU VSync nativ": CPU 0.1% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6598 "XThread9E95FE00": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6586 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6542 "main (interfaz)": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6585 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6584 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6603 "XThread9F41CE80": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6614 "CRIMovieIOThrea": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6612 "XThreadA628D080": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6606 "RndMoviePlayerT": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6604 "XThread9E9EA600": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6602 "XThread9E9EFC60": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6601 "XThread9E973A20": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6600 "XThread9F21AE00": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6599 "XThread9E9589C0": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6595 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6588 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6593 "Kernel Dispatch": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6590 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+==== 10.1 s | modo: normal | juego 27.9 fps | CPU total 187% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 3 | invitado 333/329 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 1281/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     audio: 1896 bloques de cliente mezclados, 0 solicitudes sin datos, 0/474 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.000 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 39.4 C, placa 38.7 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 278 (13.9 ms), esperadas 83 (821.1 ms) | kickoff 56 (3.4 ms) | NvMap nuevos 0.0 con cache (0.0 MB) y 0.0 sin cache (0.0 MB), 0.0 ms | direcciones de GPU 0.0 (0.0 ms), mapeos 0.0 (0.0 MB, 0.0 ms) | armDCacheClean 0 (0.0 MB, 0.0 ms) | cola de la ventana 27.8 (4.7 ms), sacar buffer 27.8 (7.7 ms) | svcSleepThread: 0 0, ceder 52779, hasta 1 ms 4965 (4038.2 ms), mas 260
+     por fotograma: 0 dibujados | tijera 0.0 pantallas | 0.0 envios | 0.0 resolves (0.00 pantallas) | transferencias: 0.0 llamadas, 0.0 render targets, 0.0 dibujados | 0.0 texturas cargadas | 0.00 MB de memoria compartida subida | pipelines creados en el intervalo: 0
+     dibujados por ancho de superficie: 1600+ 0 | 1280-1599 0 | 640-1279 0 | 256-639 0 | menos de 256 0
+
+-- hilo 6605 "eGraphicsRender": CPU 94.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6596 "XThread9E9736C0": CPU 47.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6594 "Main Thread (F8": CPU 18.6% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6592 "GPU ring native": CPU 8.1% | prioridad 0x2C, nucleo preferido 2, mascara 0x4
+   sin muestras
+
+-- hilo 6597 "XThread9E958340": CPU 4.4% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6589 "?": CPU 2.7% | prioridad 0x2C, nucleo preferido 1, mascara 0x3
+   sin muestras
+
+-- hilo 6610 "XThreadA387AD60": CPU 2.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6608 "XThread9EBACF00": CPU 2.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6607 "EGraphicsPostLo": CPU 2.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6583 "Audio Worker (F": CPU 2.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6580 "rex::thread::TimerQueue": CPU 1.7% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6609 "?": CPU 0.9% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6581 "?": CPU 0.2% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6611 "XThreadA1466560": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6613 "XThreadA82EC380": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6591 "GPU VSync nativ": CPU 0.1% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6598 "XThread9E95FE00": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6542 "main (interfaz)": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6587 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6614 "CRIMovieIOThrea": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6590 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6612 "XThreadA628D080": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6582 "XMA Decoder (F8": CPU 0.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6606 "RndMoviePlayerT": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6584 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6604 "XThread9E9EA600": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6603 "XThread9F41CE80": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6602 "XThread9E9EFC60": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6601 "XThread9E973A20": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6600 "XThread9F21AE00": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6599 "XThread9E9589C0": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6585 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6586 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6595 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6593 "Kernel Dispatch": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6588 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+==== 10.0 s | modo: normal | juego 27.8 fps | CPU total 186% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 19 | invitado 417/409 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 1281/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     audio: 1892 bloques de cliente mezclados, 0 solicitudes sin datos, 0/473 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.000 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 39.5 C, placa 39.0 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 278 (14.0 ms), esperadas 83 (773.7 ms) | kickoff 56 (3.3 ms) | NvMap nuevos 0.0 con cache (0.0 MB) y 0.0 sin cache (0.0 MB), 0.0 ms | direcciones de GPU 0.4 (0.0 ms), mapeos 0.4 (0.0 MB, 0.1 ms) | armDCacheClean 0 (0.0 MB, 0.0 ms) | cola de la ventana 27.9 (4.9 ms), sacar buffer 27.9 (7.8 ms) | svcSleepThread: 0 0, ceder 50474, hasta 1 ms 5010 (4075.0 ms), mas 260
+     por fotograma: 0 dibujados | tijera 0.0 pantallas | 0.0 envios | 0.0 resolves (0.00 pantallas) | transferencias: 0.0 llamadas, 0.0 render targets, 0.0 dibujados | 0.0 texturas cargadas | 0.00 MB de memoria compartida subida | pipelines creados en el intervalo: 0
+     dibujados por ancho de superficie: 1600+ 0 | 1280-1599 0 | 640-1279 0 | 256-639 0 | menos de 256 0
+
+-- hilo 6605 "eGraphicsRender": CPU 89.9% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6596 "XThread9E9736C0": CPU 48.6% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6594 "Main Thread (F8": CPU 17.5% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6592 "GPU ring native": CPU 8.0% | prioridad 0x2C, nucleo preferido 2, mascara 0x4
+   sin muestras
+
+-- hilo 6597 "XThread9E958340": CPU 5.6% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6607 "EGraphicsPostLo": CPU 3.5% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6589 "?": CPU 2.6% | prioridad 0x2C, nucleo preferido 1, mascara 0x3
+   sin muestras
+
+-- hilo 6610 "XThreadA387AD60": CPU 2.4% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6608 "XThread9EBACF00": CPU 2.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6583 "Audio Worker (F": CPU 2.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6580 "rex::thread::TimerQueue": CPU 1.7% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6609 "?": CPU 0.9% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6581 "?": CPU 0.2% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6611 "XThreadA1466560": CPU 0.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6613 "XThreadA82EC380": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6591 "GPU VSync nativ": CPU 0.1% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6598 "XThread9E95FE00": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6587 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6542 "main (interfaz)": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6584 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6614 "CRIMovieIOThrea": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6590 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6612 "XThreadA628D080": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6582 "XMA Decoder (F8": CPU 0.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6606 "RndMoviePlayerT": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6604 "XThread9E9EA600": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6603 "XThread9F41CE80": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6602 "XThread9E9EFC60": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6601 "XThread9E973A20": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6600 "XThread9F21AE00": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6599 "XThread9E9589C0": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6585 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6586 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6595 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6593 "Kernel Dispatch": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6588 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+==== 10.0 s | modo: normal | juego 25.8 fps | CPU total 225% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 7 | invitado 424/498 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 1281/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s
+     audio: 2831 bloques de cliente mezclados, 57 solicitudes sin datos, 242/472 buffers audout con PCM no nulo, 0 muestras saturadas (mas de 1,0 antes de recortar), 0 buffers con pico de 0,98 o mas, pico maximo 0.374 | consola en modo portatil
+     Reverse-NX: sin bloque (consola en las manos, manda ella)
+     relojes: CPU 1020.0 MHz, GPU 460.8 MHz, memoria 1331.2 MHz | nucleos del proceso 3 (mascara 0x7) | SoC 38.8 C, placa 39.1 C
+     libnx por segundo (llamadas y ms dentro): fences consultadas 165 (7.7 ms), esperadas 62 (301.2 ms) | kickoff 51 (2.7 ms) | NvMap nuevos 0.4 con cache (0.1 MB) y 0.6 sin cache (0.1 MB), 0.5 ms | direcciones de GPU 7.7 (1.0 ms), mapeos 7.8 (0.0 MB, 1.6 ms) | armDCacheClean 4 (0.9 MB, 0.1 ms) | cola de la ventana 25.8 (4.6 ms), sacar buffer 25.8 (6.0 ms) | svcSleepThread: 0 0, ceder 37516, hasta 1 ms 4236 (4442.8 ms), mas 335
+     por fotograma: 0 dibujados | tijera 0.0 pantallas | 0.0 envios | 0.0 resolves (0.00 pantallas) | transferencias: 0.0 llamadas, 0.0 render targets, 0.0 dibujados | 0.0 texturas cargadas | 0.00 MB de memoria compartida subida | pipelines creados en el intervalo: 0
+     dibujados por ancho de superficie: 1600+ 0 | 1280-1599 0 | 640-1279 0 | 256-639 0 | menos de 256 0
+
+-- hilo 6605 "eGraphicsRender": CPU 47.9% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6606 "RndMoviePlayerT": CPU 39.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6600 "XThread9F21AE00": CPU 35.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6601 "XThread9E973A20": CPU 34.4% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6612 "XThreadA628D080": CPU 20.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6594 "Main Thread (F8": CPU 16.7% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6592 "GPU ring native": CPU 14.8% | prioridad 0x2C, nucleo preferido 2, mascara 0x4
+   sin muestras
+
+-- hilo 6583 "Audio Worker (F": CPU 2.6% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6610 "XThreadA387AD60": CPU 2.5% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6608 "XThread9EBACF00": CPU 2.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6596 "XThread9E9736C0": CPU 2.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6580 "rex::thread::TimerQueue": CPU 1.7% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6589 "?": CPU 1.6% | prioridad 0x2C, nucleo preferido 1, mascara 0x3
+   sin muestras
+
+-- hilo 6597 "XThread9E958340": CPU 1.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6584 "?": CPU 1.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6609 "?": CPU 1.1% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6611 "XThreadA1466560": CPU 0.3% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6581 "?": CPU 0.2% | prioridad 0x2B, nucleo preferido 0, mascara 0x1
+   sin muestras
+
+-- hilo 6613 "XThreadA82EC380": CPU 0.2% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6585 "?": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6586 "?": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6591 "GPU VSync nativ": CPU 0.1% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6598 "XThread9E95FE00": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6607 "EGraphicsPostLo": CPU 0.1% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6542 "main (interfaz)": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6587 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6614 "CRIMovieIOThrea": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6593 "Kernel Dispatch": CPU 0.0% | prioridad 0x2C, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6582 "XMA Decoder (F8": CPU 0.0% | prioridad 0x2B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6604 "XThread9E9EA600": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6603 "XThread9F41CE80": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6602 "XThread9E9EFC60": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6588 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6599 "XThread9E9589C0": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6590 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+
+-- hilo 6595 "?": CPU 0.0% | prioridad 0x3B, nucleo preferido -1, mascara 0x7
+   sin muestras
+

@@ -1,0 +1,31 @@
+[resume-stub] image 0x4f84554000 alias 0x4f88600000 map 0x0 perm 0x0 view 0xD401
+[resume-stub] mode 2: 256 stubs
+[exception-probe] PASS: 32 vectors, FPCR and FPSR across 16 scheduled exceptions
+[saltynx] no conecta con los puertos de SaltyNX. Ultimo error 0xF201 (61953)
+[saltynx] nuestro TID: 01001C8016B4E000 (SaltyNX admite <= 01FFFFFFFFFFFFFF y sin 0x1F00)
+[saltynx] puerto InjectServ: error 0xF201 (61953)
+[saltynx] puerto SaltySD: error 0xF201 (61953)
+[saltynx] control: 'sm:' SI da sesion nueva, asi que el limite es del puerto de SaltyNX
+[saltynx] sesiones usadas / tope: 1 / 5
+[saltynx] eventos usados / tope: 0 / 0
+[saltynx] hilos usados / tope: 23 / 96
+[saltynx] memorias transferibles usadas / tope: 1 / 32
+[apm] de partida: config 0x00020003, GPU 307.2 MHz, memoria 1331.2 MHz
+[apm] PUESTA la configuracion 0x92220008 (tabla: GPU 460, EMC 1331): GPU 460.8 MHz (era 307.2) y la memoria se queda en 1331.2 MHz, comprobada durante 1.5 s seguidos; queda vigilada
+[gl-vector] phase=0 valid=1 table=82B4F590 sp=7063B540 r3=00000001 r4=826B0000 r5=826ADBA8 r6=826ADBA0 r10=82B50000 r11=82B4F590 r28=00000001 lr=826F15BC
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=00000001 r5=00000001 r6=F63266C0 r10=70635910 r11=70635980 r28=00000001 lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6322F80 r4=0000000F r5=00000001 r6=F6326700 r10=70635910 r11=70635980 r28=0000000F lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=0000000F r5=00000001 r6=F6326740 r10=70635910 r11=70635980 r28=0000000F lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6322F80 r4=0000000D r5=00000001 r6=F6326780 r10=70635910 r11=70635980 r28=0000000D lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=0000000D r5=00000001 r6=F63267C0 r10=70635910 r11=70635980 r28=0000000D lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6322F80 r4=0000000B r5=00000001 r6=F6326800 r10=70635910 r11=70635980 r28=0000000B lr=82718138
+[gl-vector] phase=1 valid=1 table=82B4F590 sp=70635A90 r3=F6323400 r4=0000000B r5=00000001 r6=F6326840 r10=70635910 r11=70635980 r28=0000000B lr=82718138
+[saltynx] no conecta con los puertos de SaltyNX. Ultimo error 0xF201 (61953)
+[saltynx] nuestro TID: 01001C8016B4E000 (SaltyNX admite <= 01FFFFFFFFFFFFFF y sin 0x1F00)
+[saltynx] puerto InjectServ: error 0xF201 (61953)
+[saltynx] puerto SaltySD: error 0xF201 (61953)
+[saltynx] control: 'sm:' SI da sesion nueva, asi que el limite es del puerto de SaltyNX
+[saltynx] sesiones usadas / tope: 1 / 5
+[saltynx] eventos usados / tope: 0 / 0
+[saltynx] hilos usados / tope: 32 / 96
+[saltynx] memorias transferibles usadas / tope: 1 / 32

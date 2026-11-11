@@ -1,0 +1,477 @@
+[2026-10-15 23:46:30.362] [info] [core] [t29924] Vulkan instance API version 1.4.341. Enabled layers and extensions:
+[2026-10-15 23:46:30.362] [info] [core] [t29924] * VK_KHR_surface
+[2026-10-15 23:46:30.362] [info] [core] [t29924] * VK_KHR_win32_surface
+[2026-10-15 23:46:30.362] [info] [core] [t29924] * VK_EXT_debug_utils
+[2026-10-15 23:46:30.362] [info] [core] [t29924] * VK_KHR_portability_enumeration
+[2026-10-15 23:46:30.365] [warning] [core] [t29924] Available Vulkan physical devices (use the 'vulkan_device' configuration variable to force a specific device):
+[2026-10-15 23:46:30.365] [warning] [core] [t29924] * 0: NVIDIA GeForce RTX 3060
+[2026-10-15 23:46:30.365] [info] [core] [t29924] Vulkan device 'NVIDIA GeForce RTX 3060': API 1.4.341, vendor 0x10DE, device 0x2504, driver version 0x98960000
+[2026-10-15 23:46:30.365] [info] [core] [t29924] Enabled Vulkan device extensions:
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * VK_KHR_swapchain
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * VK_EXT_custom_border_color
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * VK_EXT_fragment_shader_interlock
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * VK_EXT_memory_budget
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * VK_EXT_non_seamless_cube_map
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * VK_EXT_robustness2
+[2026-10-15 23:46:30.365] [info] [core] [t29924] Vulkan device properties and enabled features:
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * driverID: NvidiaProprietary
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * driverName: NVIDIA
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * driverInfo: 610.88
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * conformanceVersion: 1.4.3.3
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * timestampPeriod: 1
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxImageDimension2D: 32768
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxImageDimension3D: 16384
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxImageDimensionCube: 32768
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxImageArrayLayers: 2048
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxStorageBufferRange: 4294967295
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxSamplerAllocationCount: 4000
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxPerStageDescriptorSamplers: 1048576
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxPerStageDescriptorStorageBuffers: 1048576
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxPerStageDescriptorSampledImages: 1048576
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxPerStageResources: 4294967295
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxVertexOutputComponents: 128
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxTessellationEvaluationOutputComponents: 128
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxGeometryInputComponents: 128
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxGeometryOutputComponents: 128
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxFragmentInputComponents: 128
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxFragmentCombinedOutputResources: 4294967295
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxSamplerAnisotropy: 16
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxViewportDimensions[0]: 32768
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxViewportDimensions[1]: 32768
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * minUniformBufferOffsetAlignment: 64
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * minStorageBufferOffsetAlignment: 16
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxFramebufferWidth: 32768
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxFramebufferHeight: 32768
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * framebufferColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * framebufferDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * framebufferStencilSampleCounts: { 1 | 2 | 4 | 8 | 16 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * framebufferNoAttachmentsSampleCounts: { 1 | 2 | 4 | 8 | 16 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sampledImageColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sampledImageIntegerSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sampledImageDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sampledImageStencilSampleCounts: { 1 | 2 | 4 | 8 | 16 }
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * standardSampleLocations: 1
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * optimalBufferCopyOffsetAlignment: 1
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * optimalBufferCopyRowPitchAlignment: 1
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * nonCoherentAtomSize: 64
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * robustBufferAccess
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * fullDrawIndexUint32
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * independentBlend
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * geometryShader
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * tessellationShader
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sampleRateShading
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * depthClamp
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * fillModeNonSolid
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * samplerAnisotropy
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * occlusionQueryPrecise
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * vertexPipelineStoresAndAtomics
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * fragmentStoresAndAtomics
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderClipDistance
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderCullDistance
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sparseBinding
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * sparseResidencyBuffer
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * samplerMirrorClampToEdge
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * uniformBufferStandardLayout
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * scalarBlockLayout
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderDemoteToHelperInvocation
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * dynamicRendering
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * constantAlphaColorBlendFactors
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * imageViewFormatReinterpretation
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * imageViewFormatSwizzle
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * pointPolygons
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * separateStencilMaskRef
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderSampleRateInterpolationFunctions
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderSignedZeroInfNanPreserveFloat32: 1
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderDenormFlushToZeroFloat32: 0
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * shaderRoundingModeRTEFloat32: 1
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * fragmentShaderSampleInterlock
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * fragmentShaderPixelInterlock
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * nonSeamlessCubeMap
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * customBorderColors
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * customBorderColorWithoutFormat
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * maxCustomBorderColorSamplers: 4000
+[2026-10-15 23:46:30.365] [info] [core] [t29924] * nullDescriptor
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message): Inserted device layer "VK_LAYER_OBS_HOOK" (C:\ProgramData\obs-studio-hook\graphics-hook64.dll) (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message): Inserted device layer "VK_LAYER_NV_present" (C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll) (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message): Inserted device layer "VK_LAYER_NV_optimus" (C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll) (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message): vkCreateDevice layer callstack setup to: (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):    <Application> (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):    <Loader> (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):    VK_LAYER_NV_optimus (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Type: Implicit (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Enabled By: Implicit Layer (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):                Disable Env Var:  DISABLE_LAYER_NV_OPTIMUS_1 (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Manifest: C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nv-vk64.json (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Library:  C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):    VK_LAYER_NV_present (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Type: Implicit (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Enabled By: Implicit Layer (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):                Disable Env Var:  DISABLE_LAYER_NV_PRESENT_1 (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Manifest: C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nv-vk64.json (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Library:  C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):    VK_LAYER_OBS_HOOK (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Type: Implicit (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Enabled By: Implicit Layer (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):                Disable Env Var:  DISABLE_VULKAN_OBS_CAPTURE (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Manifest: C:\ProgramData\obs-studio-hook\obs-vulkan64.json (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):            Library:  C:\ProgramData\obs-studio-hook\graphics-hook64.dll (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):      || (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):    <Device> (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.366] [info] [gpu] [t29924] Vulkan Info ({ General }, ID 0: Loader Message):        Using "NVIDIA GeForce RTX 3060" with driver: "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_0373d825005116d0\nvoglv64.dll" (object 0: Instance 0x1f991d8c530)
+[2026-10-15 23:46:30.518] [info] [core] [t29924] VulkanPresenter: Created 1920x1080 swapchain with format 44, color space 0, presentation mode 0
+[2026-10-15 23:46:30.518] [info] [sys] [t29924] Guest memory arena mapped: virtual base 0x0000000100000000, physical base 0x0000000200000000
+[2026-10-15 23:46:30.566] [info] [core] [t29924] Function table initialized for module: code=82140000-827758EC, image=82000000-82E00000
+[2026-10-15 23:46:30.638] [info] [gpu] [t7624] VulkanTextureCache: Format k_Cr_Y1_Cb_Y0_REP (unsigned) is supported via a fallback format (using the Vulkan format 37 instead of the preferred 1000156000)
+[2026-10-15 23:46:30.638] [info] [gpu] [t7624] VulkanTextureCache: Format k_Y1_Cr_Y0_Cb_REP (unsigned) is supported via a fallback format (using the Vulkan format 37 instead of the preferred 1000156001)
+[2026-10-15 23:46:30.693] [warning] [core] [t29924] SDL GameControllerDB: file 'gamecontrollerdb.txt' does not exist.
+[2026-10-15 23:46:30.693] [info] [core] [t29924] SDL input driver initialized successfully
+[2026-10-15 23:46:30.743] [info] [core] [t29924] Initializing shader storage for title 575207E9...
+[2026-10-15 23:46:31.541] [info] [gpu] [t39156] Creating graphics pipeline state with VS 1E6883FCCDE1F688
+[2026-10-15 23:46:31.541] [info] [gpu] [t23888] Creating graphics pipeline state with VS B6C9863F710683EC
+[2026-10-15 23:46:31.541] [info] [gpu] [t32228] Creating graphics pipeline state with VS 1E6883FCCDE1F688, PS A4A965C189287B99
+[2026-10-15 23:46:31.541] [info] [gpu] [t15612] Creating graphics pipeline state with VS 1E6883FCCDE1F688
+[2026-10-15 23:46:31.541] [info] [gpu] [t34076] Creating graphics pipeline state with VS 101E86A7F525A236, PS F57B6BC95EB4EC9B
+[2026-10-15 23:46:31.541] [info] [gpu] [t39504] Creating graphics pipeline state with VS 101E86A7F525A236
+[2026-10-15 23:46:31.541] [info] [gpu] [t39456] Creating graphics pipeline state with VS 101E86A7F525A236
+[2026-10-15 23:46:31.542] [info] [gpu] [t10004] Creating graphics pipeline state with VS 1F2DA39236C77154, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.542] [info] [gpu] [t31764] Creating graphics pipeline state with VS B6C9863F710683EC
+[2026-10-15 23:46:31.542] [info] [gpu] [t2224] Creating graphics pipeline state with VS F69C0C5F422D381D, PS 71B2A4BFD069D142
+[2026-10-15 23:46:31.542] [info] [gpu] [t38312] Creating graphics pipeline state with VS 1F2DA39236C77154, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.542] [info] [gpu] [t23356] Creating graphics pipeline state with VS F69C0C5F422D381D, PS 71B2A4BFD069D142
+[2026-10-15 23:46:31.542] [info] [gpu] [t39456] Creating graphics pipeline state with VS 1750A1D3D13A98A8, PS 13A6DDC87B0F321C
+[2026-10-15 23:46:31.542] [info] [gpu] [t39504] Creating graphics pipeline state with VS 1E6883FCCDE1F688, PS A4A965C189287B99
+[2026-10-15 23:46:31.543] [info] [gpu] [t34076] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS 78E208CE59A74EE1
+[2026-10-15 23:46:31.543] [info] [gpu] [t38312] Creating graphics pipeline state with VS B6C9863F710683EC
+[2026-10-15 23:46:31.543] [info] [gpu] [t10004] Creating graphics pipeline state with VS 1E6883FCCDE1F688, PS A4A965C189287B99
+[2026-10-15 23:46:31.543] [info] [gpu] [t31764] Creating graphics pipeline state with VS 1750A1D3D13A98A8, PS 13A6DDC87B0F321C
+[2026-10-15 23:46:31.543] [info] [gpu] [t38312] Creating graphics pipeline state with VS 2EF3DF763F7A2BA6
+[2026-10-15 23:46:31.543] [info] [gpu] [t23888] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS AE9AB0B9A64870A3
+[2026-10-15 23:46:31.543] [info] [gpu] [t31764] Creating graphics pipeline state with VS 2E0C4203FD94411E
+[2026-10-15 23:46:31.543] [info] [gpu] [t39456] Creating graphics pipeline state with VS 101E86A7F525A236, PS 09B540165140DBF6
+[2026-10-15 23:46:31.543] [info] [gpu] [t39504] Creating graphics pipeline state with VS 2E0C4203FD94411E
+[2026-10-15 23:46:31.543] [info] [gpu] [t39156] Creating graphics pipeline state with VS 101E86A7F525A236, PS 09B540165140DBF6
+[2026-10-15 23:46:31.543] [info] [gpu] [t15612] Creating graphics pipeline state with VS 101E86A7F525A236
+[2026-10-15 23:46:31.543] [info] [gpu] [t34076] Creating graphics pipeline state with VS 2E0C4203FD94411E
+[2026-10-15 23:46:31.543] [info] [gpu] [t15612] Creating graphics pipeline state with VS FC7DCD711D5725A5, PS 3A268A0AF2C8E391
+[2026-10-15 23:46:31.543] [info] [gpu] [t38312] Creating graphics pipeline state with VS F5941B30A0E57C26, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.543] [info] [gpu] [t31764] Creating graphics pipeline state with VS C9B66F07429A3E93, PS AF5024E80369970F
+[2026-10-15 23:46:31.543] [info] [gpu] [t34076] Creating graphics pipeline state with VS F5941B30A0E57C26, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.543] [info] [gpu] [t10004] Creating graphics pipeline state with VS 2E0C4203FD94411E
+[2026-10-15 23:46:31.543] [info] [gpu] [t39504] Creating graphics pipeline state with VS 2E0C4203FD94411E
+[2026-10-15 23:46:31.543] [info] [gpu] [t10004] Creating graphics pipeline state with VS FC7DCD711D5725A5, PS 3A268A0AF2C8E391
+[2026-10-15 23:46:31.543] [info] [gpu] [t39504] Creating graphics pipeline state with VS B899D356E95DDA53, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.543] [info] [gpu] [t23888] Creating graphics pipeline state with VS 65EB243D714B2F1C, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.543] [info] [gpu] [t39504] Creating graphics pipeline state with VS F3F53C579B2B12CD, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.543] [info] [gpu] [t32228] Creating graphics pipeline state with VS 2DCA0671B364D5EB, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.544] [info] [gpu] [t39456] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS F8A6C6FA322BA5E6
+[2026-10-15 23:46:31.544] [info] [gpu] [t39156] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 054CB56CFB7FA519
+[2026-10-15 23:46:31.544] [info] [gpu] [t10004] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 54C7484F0F73F4DB
+[2026-10-15 23:46:31.544] [info] [gpu] [t15612] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 0B4E8E9C6EDB1187
+[2026-10-15 23:46:31.544] [info] [gpu] [t38312] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS 8015A214CD6740E7
+[2026-10-15 23:46:31.544] [info] [gpu] [t31764] Creating graphics pipeline state with VS 70220C443B8AC85D
+[2026-10-15 23:46:31.544] [info] [gpu] [t39504] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 73C3E368D09E30ED
+[2026-10-15 23:46:31.544] [info] [gpu] [t32228] Creating graphics pipeline state with VS 34687A02A422F4E7
+[2026-10-15 23:46:31.544] [info] [gpu] [t31764] Creating graphics pipeline state with VS 90363E4604EBA918
+[2026-10-15 23:46:31.544] [info] [gpu] [t38312] Creating graphics pipeline state with VS AF28D2765AAA26D5, PS 661AA86C99CEBF6C
+[2026-10-15 23:46:31.544] [info] [gpu] [t34076] Creating graphics pipeline state with VS FAE17476D5992F64, PS 9A68539EE8578330
+[2026-10-15 23:46:31.544] [info] [gpu] [t39456] Creating graphics pipeline state with VS 32776387F305117B, PS 661AA86C99CEBF6C
+[2026-10-15 23:46:31.544] [info] [gpu] [t10004] Creating graphics pipeline state with VS A0B299DBD1F5B740, PS 7DF3BE1B63AF688B
+[2026-10-15 23:46:31.544] [info] [gpu] [t32228] Creating graphics pipeline state with VS FC7DCD711D5725A5, PS 1BDBC0BB6D34126D
+[2026-10-15 23:46:31.544] [info] [gpu] [t39504] Creating graphics pipeline state with VS 1E6883FCCDE1F688, PS A4A965C189287B99
+[2026-10-15 23:46:31.544] [info] [gpu] [t39156] Creating graphics pipeline state with VS E2C30E411E331417, PS 4552077EBAC4587E
+[2026-10-15 23:46:31.544] [info] [gpu] [t39504] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS ED691A46211B5EC3
+[2026-10-15 23:46:31.544] [info] [gpu] [t31764] Creating graphics pipeline state with VS 1E6883FCCDE1F688, PS A4A965C189287B99
+[2026-10-15 23:46:31.544] [info] [gpu] [t32228] Creating graphics pipeline state with VS 1E6883FCCDE1F688, PS A4A965C189287B99
+[2026-10-15 23:46:31.544] [info] [gpu] [t31764] Creating graphics pipeline state with VS A79D941EF7A33FCF, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.544] [info] [gpu] [t39504] Creating graphics pipeline state with VS 6C4CC79267203F84, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.544] [info] [gpu] [t32228] Creating graphics pipeline state with VS 4C1C6FF8BE7D46F6, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.544] [info] [gpu] [t15612] Creating graphics pipeline state with VS 101E86A7F525A236, PS 09B540165140DBF6
+[2026-10-15 23:46:31.545] [info] [gpu] [t38312] Creating graphics pipeline state with VS D2AA187C5BB3F356, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.545] [info] [gpu] [t32228] Creating graphics pipeline state with VS 08282F9E8E0E5E04, PS B7A4B086855946DA
+[2026-10-15 23:46:31.546] [info] [gpu] [t38312] Creating graphics pipeline state with VS 11887B0810E6A80F, PS E1187A2497EBF95F
+[2026-10-15 23:46:31.546] [info] [gpu] [t15612] Creating graphics pipeline state with VS 6BDE1453F966A102, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.546] [info] [gpu] [t10004] Creating graphics pipeline state with VS 11887B0810E6A80F, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.545] [info] [gpu] [t39156] Creating graphics pipeline state with VS 1F2DA39236C77154, PS 8BBEED1A498163D9
+[2026-10-15 23:46:31.545] [info] [gpu] [t39504] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS AE9AB0B9A64870A3
+[2026-10-15 23:46:31.545] [info] [gpu] [t23888] Creating graphics pipeline state with VS 1750A1D3D13A98A8, PS 13A6DDC87B0F321C
+[2026-10-15 23:46:31.545] [info] [gpu] [t39456] Creating graphics pipeline state with VS F5941B30A0E57C26, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.546] [info] [gpu] [t2224] Creating graphics pipeline state with VS DCE394B13F29BBFF, PS 42C9E8C29B5C6118
+[2026-10-15 23:46:31.546] [info] [gpu] [t23356] Creating graphics pipeline state with VS 6BDE1453F966A102, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.546] [info] [gpu] [t31764] Creating graphics pipeline state with VS DAE919B9EEE7EC56, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.546] [info] [gpu] [t39504] Creating graphics pipeline state with VS 08282F9E8E0E5E04, PS B7A4B086855946DA
+[2026-10-15 23:46:31.546] [info] [gpu] [t32228] Creating graphics pipeline state with VS 4263D80C44DE071C
+[2026-10-15 23:46:31.546] [info] [gpu] [t39504] Creating graphics pipeline state with VS 101E86A7F525A236
+[2026-10-15 23:46:31.546] [info] [gpu] [t39504] Creating graphics pipeline state with VS 11887B0810E6A80F, PS E1187A2497EBF95F
+[2026-10-15 23:46:31.546] [info] [gpu] [t23356] Creating graphics pipeline state with VS 11887B0810E6A80F, PS E1187A2497EBF95F
+[2026-10-15 23:46:31.546] [info] [gpu] [t31764] Creating graphics pipeline state with VS 5B402116E452CFBB, PS E1187A2497EBF95F
+[2026-10-15 23:46:31.546] [info] [gpu] [t38312] Creating graphics pipeline state with VS 69196D7EB444E8B0, PS F6F88D02ED501079
+[2026-10-15 23:46:31.546] [info] [gpu] [t23888] Creating graphics pipeline state with VS BD8DE18BA980BA44, PS F6F88D02ED501079
+[2026-10-15 23:46:31.546] [info] [gpu] [t34076] Creating graphics pipeline state with VS 11165020020CD2DD, PS D3B4BA04107B42FF
+[2026-10-15 23:46:31.546] [info] [gpu] [t2224] Creating graphics pipeline state with VS EFBC6D54093EE611, PS D3B4BA04107B42FF
+[2026-10-15 23:46:31.546] [info] [gpu] [t31764] Creating graphics pipeline state with VS 378E18FA1F0B369A, PS BBAEA94F2ACB7A7D
+[2026-10-15 23:46:31.546] [info] [gpu] [t32228] Creating graphics pipeline state with VS A05F115668BCCCEB, PS BBAEA94F2ACB7A7D
+[2026-10-15 23:46:31.546] [info] [gpu] [t39456] Creating graphics pipeline state with VS 84EB2300878B61F1, PS B2FC715FD69439CF
+[2026-10-15 23:46:31.547] [info] [gpu] [t38312] Creating graphics pipeline state with VS 11887B0810E6A80F, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.546] [info] [gpu] [t10004] Creating graphics pipeline state with VS B13DC33A6ED5B261, PS 5D1FD6C76C487808
+[2026-10-15 23:46:31.546] [info] [gpu] [t15612] Creating graphics pipeline state with VS F5941B30A0E57C26, PS 4955A241E4E75893
+[2026-10-15 23:46:31.547] [info] [gpu] [t39504] Creating graphics pipeline state with VS 11887B0810E6A80F, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.547] [info] [gpu] [t23356] Creating graphics pipeline state with VS 5B402116E452CFBB, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.547] [info] [gpu] [t23888] Creating graphics pipeline state with VS 69196D7EB444E8B0, PS AE2C523DBD5B25FF
+[2026-10-15 23:46:31.547] [info] [gpu] [t10004] Creating graphics pipeline state with VS BD8DE18BA980BA44, PS AE2C523DBD5B25FF
+[2026-10-15 23:46:31.547] [info] [gpu] [t2224] Creating graphics pipeline state with VS EFBC6D54093EE611, PS 0AD0FD65D5E9C893
+[2026-10-15 23:46:31.547] [info] [gpu] [t34076] Creating graphics pipeline state with VS 11165020020CD2DD, PS 0AD0FD65D5E9C893
+[2026-10-15 23:46:31.547] [info] [gpu] [t23356] Creating graphics pipeline state with VS 9E48EFA31E1A9A2C, PS 0AD0FD65D5E9C893
+[2026-10-15 23:46:31.547] [info] [gpu] [t39456] Creating graphics pipeline state with VS 378E18FA1F0B369A, PS 945A9C18D3A0A315
+[2026-10-15 23:46:31.547] [info] [gpu] [t39504] Creating graphics pipeline state with VS A05F115668BCCCEB, PS 945A9C18D3A0A315
+[2026-10-15 23:46:31.547] [info] [gpu] [t38312] Creating graphics pipeline state with VS B13DC33A6ED5B261, PS 168DD235A2F1B34D
+[2026-10-15 23:46:31.547] [info] [gpu] [t15612] Creating graphics pipeline state with VS 3F6073AFAE39AC94, PS F6F88D02ED501079
+[2026-10-15 23:46:31.547] [info] [gpu] [t39156] Creating graphics pipeline state with VS 47E50E383457465C, PS 3B7BF3A1B74028D4
+[2026-10-15 23:46:31.547] [info] [gpu] [t34076] Creating graphics pipeline state with VS 091418DCBF3399E4, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.548] [info] [gpu] [t23888] Creating graphics pipeline state with VS 3F6073AFAE39AC94, PS AE2C523DBD5B25FF
+[2026-10-15 23:46:31.548] [info] [gpu] [t15612] Creating graphics pipeline state with VS 47E50E383457465C, PS DCD32BFA0FF78CBA
+[2026-10-15 23:46:31.548] [info] [gpu] [t31764] Creating graphics pipeline state with VS 123C3A0A6621A428, PS 168DD235A2F1B34D
+[2026-10-15 23:46:31.548] [info] [gpu] [t23356] Creating graphics pipeline state with VS AF28D2765AAA26D5, PS 2C01172ECB51AE31
+[2026-10-15 23:46:31.548] [info] [gpu] [t32228] Creating graphics pipeline state with VS FAE17476D5992F64, PS B07F6B12512566D4
+[2026-10-15 23:46:31.548] [info] [gpu] [t23888] Creating graphics pipeline state with VS 32776387F305117B, PS 2C01172ECB51AE31
+[2026-10-15 23:46:31.548] [info] [gpu] [t34076] Creating graphics pipeline state with VS DAE919B9EEE7EC56, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.548] [info] [gpu] [t39456] Creating graphics pipeline state with VS 2503739AC49BF7A7, PS 99CF815E9AF264C7
+[2026-10-15 23:46:31.548] [info] [gpu] [t39504] Creating graphics pipeline state with VS 74EDE379EC22EEC9, PS 99CF815E9AF264C7
+[2026-10-15 23:46:31.548] [info] [gpu] [t34076] Creating graphics pipeline state with VS E8706CA4B9841A75, PS E1187A2497EBF95F
+[2026-10-15 23:46:31.548] [info] [gpu] [t2224] Creating graphics pipeline state with VS E8706CA4B9841A75, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.548] [info] [gpu] [t15612] Creating graphics pipeline state with VS DAE919B9EEE7EC56, PS 4955A241E4E75893
+[2026-10-15 23:46:31.549] [info] [gpu] [t10004] Creating graphics pipeline state with VS 91E9AC79A5E38D04, PS AF5024E80369970F
+[2026-10-15 23:46:31.549] [info] [gpu] [t23356] Creating graphics pipeline state with VS 74EDE379EC22EEC9, PS C48BDB5A9AF07560
+[2026-10-15 23:46:31.549] [info] [gpu] [t31764] Creating graphics pipeline state with VS FAE17476D5992F64, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.549] [info] [gpu] [t39156] Creating graphics pipeline state with VS AF28D2765AAA26D5, PS A08C0BEC8C685FCA
+[2026-10-15 23:46:31.549] [info] [gpu] [t38312] Creating graphics pipeline state with VS 4263D80C44DE071C, PS F03A5777B6675BBE
+[2026-10-15 23:46:31.549] [info] [gpu] [t23888] Creating graphics pipeline state with VS 32776387F305117B, PS A08C0BEC8C685FCA
+[2026-10-15 23:46:31.549] [info] [gpu] [t39456] Creating graphics pipeline state with VS F9C75FBF162EDE86, PS 4955A241E4E75893
+[2026-10-15 23:46:31.549] [info] [gpu] [t34076] Creating graphics pipeline state with VS BA0291608A5AD2DB, PS 99CF815E9AF264C7
+[2026-10-15 23:46:31.549] [info] [gpu] [t2224] Creating graphics pipeline state with VS 7BCCE3BA3809134F, PS DCD32BFA0FF78CBA
+[2026-10-15 23:46:31.549] [info] [gpu] [t39456] Creating graphics pipeline state with VS F5941B30A0E57C26, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.549] [info] [gpu] [t31764] Creating graphics pipeline state with VS D7C67DF804D0486C, PS E1187A2497EBF95F
+[2026-10-15 23:46:31.549] [info] [gpu] [t39456] Creating graphics pipeline state with VS 717BBE4D4C8746EA, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.549] [info] [gpu] [t39504] Creating graphics pipeline state with VS D09A9C88C45CF7EF, PS ED843190AB2281DF
+[2026-10-15 23:46:31.549] [info] [gpu] [t32228] Creating graphics pipeline state with VS A0B299DBD1F5B740, PS 4A183FBD23E68C98
+[2026-10-15 23:46:31.549] [info] [gpu] [t2224] Creating graphics pipeline state with VS CE3110CC96A1ACDA, PS D324CC7E6DDFD594
+[2026-10-15 23:46:31.549] [info] [gpu] [t2224] Creating graphics pipeline state with VS 266368471DD26C98, PS EB5DD69BD773CFC0
+[2026-10-15 23:46:31.549] [info] [gpu] [t23356] Creating graphics pipeline state with VS 4263D80C44DE071C, PS F03A5777B6675BBE
+[2026-10-15 23:46:31.549] [info] [gpu] [t31764] Creating graphics pipeline state with VS 266368471DD26C98, PS 03FD9AE4A40314CC
+[2026-10-15 23:46:31.549] [info] [gpu] [t23888] Creating graphics pipeline state with VS F131ECC7011477E8, PS F745674382D678CB
+[2026-10-15 23:46:31.550] [info] [gpu] [t39156] Creating graphics pipeline state with VS 2E0C4203FD94411E
+[2026-10-15 23:46:31.550] [info] [gpu] [t39156] Creating graphics pipeline state with VS 70220C443B8AC85D, PS 98805317F8F088AF
+[2026-10-15 23:46:31.550] [info] [gpu] [t39456] Creating graphics pipeline state with VS 34687A02A422F4E7, PS 98805317F8F088AF
+[2026-10-15 23:46:31.550] [info] [gpu] [t34076] Creating graphics pipeline state with VS 90363E4604EBA918, PS 98805317F8F088AF
+[2026-10-15 23:46:31.550] [info] [gpu] [t23356] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 054CB56CFB7FA519
+[2026-10-15 23:46:31.550] [info] [gpu] [t39504] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 54C7484F0F73F4DB
+[2026-10-15 23:46:31.550] [info] [gpu] [t23356] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS 73C3E368D09E30ED
+[2026-10-15 23:46:31.550] [info] [gpu] [t39504] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS E11BC3528789365C
+[2026-10-15 23:46:31.550] [info] [gpu] [t23356] Creating graphics pipeline state with VS FAE17476D5992F64, PS AE04ECF0553FC29D
+[2026-10-15 23:46:31.550] [info] [gpu] [t34076] Creating graphics pipeline state with VS AF28D2765AAA26D5, PS C0544A20D53BAADF
+[2026-10-15 23:46:31.550] [info] [gpu] [t31764] Creating graphics pipeline state with VS 85319008405089B5, PS 4955A241E4E75893
+[2026-10-15 23:46:31.550] [info] [gpu] [t39456] Creating graphics pipeline state with VS F47B1F1A2ECC3793, PS 21D3ED7D0EA2C33C
+[2026-10-15 23:46:31.550] [info] [gpu] [t32228] Creating graphics pipeline state with VS 32776387F305117B, PS C0544A20D53BAADF
+[2026-10-15 23:46:31.550] [info] [gpu] [t39156] Creating graphics pipeline state with VS 03CD6906D473459D, PS B354B57C2EA3E5C7
+[2026-10-15 23:46:31.550] [info] [gpu] [t2224] Creating graphics pipeline state with VS DCE394B13F29BBFF, PS 42C9E8C29B5C6118
+[2026-10-15 23:46:31.550] [info] [gpu] [t15612] Creating graphics pipeline state with VS CD9F15112BE4E6A7, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.550] [info] [gpu] [t2224] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS AE9AB0B9A64870A3
+[2026-10-15 23:46:31.550] [info] [gpu] [t39504] Creating graphics pipeline state with VS 4E307DC0DBD8F8D2, PS CFDF3D187A823E0A
+[2026-10-15 23:46:31.550] [info] [gpu] [t2224] Creating graphics pipeline state with VS A0B299DBD1F5B740, PS E5CA281D4FDD2244
+[2026-10-15 23:46:31.550] [info] [gpu] [t39156] Creating graphics pipeline state with VS A2225CC1761583A3, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.550] [info] [gpu] [t31764] Creating graphics pipeline state with VS C96F57E5FB162D56
+[2026-10-15 23:46:31.551] [info] [gpu] [t15612] Creating graphics pipeline state with VS AAD478399CE42F4C, PS A08C0BEC8C685FCA
+[2026-10-15 23:46:31.551] [info] [gpu] [t23356] Creating graphics pipeline state with VS B13DC33A6ED5B261, PS 329813125A505A2E
+[2026-10-15 23:46:31.551] [info] [gpu] [t32228] Creating graphics pipeline state with VS B13DC33A6ED5B261, PS EF816C15798B652D
+[2026-10-15 23:46:31.551] [info] [gpu] [t34076] Creating graphics pipeline state with VS AAD478399CE42F4C, PS C0544A20D53BAADF
+[2026-10-15 23:46:31.551] [info] [gpu] [t39504] Creating graphics pipeline state with VS 6779911BAF7DC3C7
+[2026-10-15 23:46:31.551] [info] [gpu] [t31764] Creating graphics pipeline state with VS A2FDFDE6BEAE14B3, PS A08C0BEC8C685FCA
+[2026-10-15 23:46:31.552] [info] [gpu] [t39156] Creating graphics pipeline state with VS 11887B0810E6A80F, PS 639B0D2FA5BE0E04
+[2026-10-15 23:46:31.552] [info] [gpu] [t23888] Creating graphics pipeline state with VS 11887B0810E6A80F, PS 19609576E95E3209
+[2026-10-15 23:46:31.552] [info] [gpu] [t39456] Creating graphics pipeline state with VS A2FDFDE6BEAE14B3, PS C0544A20D53BAADF
+[2026-10-15 23:46:31.552] [info] [gpu] [t39456] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS 887F179DAC6428DD
+[2026-10-15 23:46:31.552] [info] [gpu] [t10004] Creating graphics pipeline state with VS A2225CC1761583A3, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.552] [info] [gpu] [t34076] Creating graphics pipeline state with VS CD9F15112BE4E6A7, PS F420AFFB6C2106FC
+[2026-10-15 23:46:31.552] [info] [gpu] [t15612] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS A0C895C7A24B39B1
+[2026-10-15 23:46:31.552] [info] [gpu] [t31764] Creating graphics pipeline state with VS 3D5A82B5B890B037, PS 1A416A4FEE6D998C
+[2026-10-15 23:46:31.554] [info] [gpu] [t7624] Created 167 graphics pipelines from Vulkan storage (167 requested)
+[2026-10-15 23:46:31.556] [warning] [fs] [t31796] VFS: '\Device' -> [no device]
+[2026-10-15 23:46:31.556] [error] [fs] [t31796] ResolvePath(\Device) failed - device not found
+[2026-10-15 23:46:31.556] [warning] [krnl] [t31796] [NtCreateFile] FAILED: path='\Device\Image' -> 0xc000000f
+[2026-10-15 23:46:31.556] [warning] [krnl] [t31796] Stub XFileFsDeviceInformation!
+[2026-10-15 23:46:31.556] [warning] [krnl] [t31796] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-15 23:46:31.556] [warning] [krnl] [t31796] Stub XFileFsDeviceInformation!
+[2026-10-15 23:46:31.556] [warning] [krnl] [t31796] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-15 23:46:31.581] [info] [core] [t31796] SDL OnControllerDeviceAdded: "Xbox One Controller", JoystickType(1), GameControllerType(3), VendorID(0x045E), ProductID(0x02FF)
+[2026-10-15 23:46:31.581] [info] [core] [t31796] SDL OnControllerDeviceAdded: connection order 0, device 1.
+[2026-10-15 23:46:31.584] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.591] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.620] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.623] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.626] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.629] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.633] [warning] [krnl] [t31796] [NtCreateFile] FAILED: path='game:\gl\X360\eGraphicsSettings.cfg' -> 0xc000000f
+[2026-10-15 23:46:31.634] [info] [gpu] [t31796] SetInterruptCallback(825A08E0, 404C6D80)
+[2026-10-15 23:46:31.634] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x20000404 args_r7=0xFFFFFFFF args_r8=0x00000001
+[2026-10-15 23:46:31.634] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x20000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xA0000000-0xBFFFFFFF
+[2026-10-15 23:46:31.634] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.634] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xBFA90000 size=2 MiB
+[2026-10-15 23:46:31.635] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFF6F7000 size=3 MiB
+[2026-10-15 23:46:31.635] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00730000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=7 MiB adjusted=7 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEFC7000 size=7 MiB
+[2026-10-15 23:46:31.635] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEC2F000 size=3 MiB
+[2026-10-15 23:46:31.635] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8215E1CC caller_callsite=0x8215E1C8 args_r3=0x00400000 args_r4=0xFFFFFFFF args_r5=0x00000020 args_r6=0x00000404 args_r7=0xFFFFFFFF args_r8=0x00000020
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=4 MiB adjusted=4 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00000020 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.635] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFE81F000 size=4 MiB
+[2026-10-15 23:46:31.635] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.636] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.808] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.809] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.809] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.810] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.811] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.811] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.812] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.812] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:31.815] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x41635848 args_r8=0x00000001
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDDAE000 size=1 MiB
+[2026-10-15 23:46:31.815] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416358A8 args_r8=0x00000001
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDBB0000 size=1 MiB
+[2026-10-15 23:46:31.815] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416359E8 args_r8=0x00000001
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.815] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD9B2000 size=1 MiB
+[2026-10-15 23:46:31.873] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.873] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.873] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.873] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD741000 size=2 MiB
+[2026-10-15 23:46:31.873] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x01590000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.873] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=21 MiB adjusted=21 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.873] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBF2F000 size=21 MiB
+[2026-10-15 23:46:31.874] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD878 args_r8=0x00000001
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBE2F000 size=1 MiB
+[2026-10-15 23:46:31.874] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD8A8 args_r8=0x00000001
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.874] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBD2F000 size=1 MiB
+[2026-10-15 23:46:31.875] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00C00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.876] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=12 MiB adjusted=12 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.876] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.876] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFB12F000 size=12 MiB
+[2026-10-15 23:46:31.886] [info] [core] [t31796] Green Lantern pool-size query: function=0x8247B930 object=0x40002B40 vtable=0x82005720 slot=196 target=0x8228ED40
+[2026-10-15 23:46:31.886] [info] [core] [t31796] Green Lantern pool-size result: function=0x8247B930 target=0x8228ED40 size=0x0AF00000 (175 MiB)
+[2026-10-15 23:46:31.886] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8247B978 caller_callsite=0x8247B974 args_r3=0x0AF00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x00000001 args_r8=0x82020000
+[2026-10-15 23:46:31.886] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=175 MiB adjusted=175 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.886] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.887] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF0076000 size=175 MiB
+[2026-10-15 23:46:31.890] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00D00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x8228EDB0 args_r8=0x00000001
+[2026-10-15 23:46:31.890] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=13 MiB adjusted=13 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.890] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.891] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEF376000 size=13 MiB
+[2026-10-15 23:46:31.891] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x02300000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x82030000 args_r8=0x00000001
+[2026-10-15 23:46:31.891] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=35 MiB adjusted=35 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.891] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.891] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xED076000 size=35 MiB
+[2026-10-15 23:46:31.902] [info] [core] [t31796] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0200F000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 23:46:31.902] [info] [krnl] [t31796] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=32 MiB adjusted=32 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:31.902] [info] [krnl] [t31796] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:31.902] [info] [krnl] [t31796] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEB067000 size=32 MiB
+[2026-10-15 23:46:32.004] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:32.973] [info] [apu] [t31796] audio endpoint 'Alto-falantes (High Definition Audio Device)': 2 ch, 48000 Hz, format 0x8120; submitting 2 ch
+[2026-10-15 23:46:32.978] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:32.983] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:32.988] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:33.041] [warning] [krnl] [t39424] [NtCreateFile] FAILED: path='game:\gl\common\bin\pickupparticlesandsounds_1.bin_be' -> 0xc000000f
+[2026-10-15 23:46:33.044] [warning] [krnl] [t39424] [NtCreateFile] FAILED: path='game:\gl\common\bin\materialeffects_2.bin_be' -> 0xc000000f
+[2026-10-15 23:46:33.046] [warning] [krnl] [t39424] [NtCreateFile] FAILED: path='game:\gl\common\bin\preconfigactortemplate_2.bin_be' -> 0xc000000f
+[2026-10-15 23:46:33.048] [warning] [krnl] [t39424] [NtCreateFile] FAILED: path='game:\gl\common\bin\vehicleproperties_14.bin_be' -> 0xc000000f
+[2026-10-15 23:46:33.050] [warning] [krnl] [t39424] [NtCreateFile] FAILED: path='game:\gl\common\bin\wheelproperties_2.bin_be' -> 0xc000000f
+[2026-10-15 23:46:34.181] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:34.191] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:34.364] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.364] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.364] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.364] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEACBD000 size=1 MiB
+[2026-10-15 23:46:34.731] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA71B000 size=1 MiB
+[2026-10-15 23:46:34.731] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA5AB000 size=1 MiB
+[2026-10-15 23:46:34.731] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.731] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA44B000 size=1 MiB
+[2026-10-15 23:46:34.848] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA294000 size=1 MiB
+[2026-10-15 23:46:34.848] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEA134000 size=1 MiB
+[2026-10-15 23:46:34.848] [info] [core] [t7032] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000004A0 args_r8=0x00000001
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 23:46:34.848] [info] [krnl] [t7032] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xE9FD4000 size=1 MiB
+[2026-10-15 23:46:35.015] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.025] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.034] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.041] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.061] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.062] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.430] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.446] [error] [krnl] [t16044] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:35.463] [info] [apu] [t31796] audio endpoint 'Alto-falantes (High Definition Audio Device)': 2 ch, 48000 Hz, format 0x8120; submitting 2 ch
+[2026-10-15 23:46:47.262] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:50.263] [error] [krnl] [t31796] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:53.030] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:55.115] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:55.401] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:55.618] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:58.331] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:58.898] [error] [krnl] [t39424] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.148] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.160] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.172] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.184] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.196] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.208] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.220] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.226] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.233] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.240] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.247] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.254] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.261] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.278] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:46:59.492] [error] [krnl] [t28240] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 23:47:00.267] [info] [gpu] [t7624] Creating graphics pipeline state with VS C5FB67497206BF53
+[2026-10-15 23:47:00.268] [info] [gpu] [t14508] Creating graphics pipeline state with VS C5FB67497206BF53, PS 1E75454E4D5E68C5
+[2026-10-15 23:47:00.280] [warning] [gpu] [t7624] Skipped 1 Vulkan frame presentations in the last second (1 total) - a draw used an async placeholder pipeline, so the whole frame was dropped and the display is showing a stale image
+[2026-10-15 23:47:00.360] [info] [gpu] [t7624] Creating graphics pipeline state with VS 6779911BAF7DC3C7
+[2026-10-15 23:47:00.411] [info] [gpu] [t8328] Creating graphics pipeline state with VS 6779911BAF7DC3C7, PS 98805317F8F088AF
+[2026-10-15 23:54:52.626] [info] [core] [t29924] Window closing, shutting down...
+[2026-10-15 23:54:52.646] [info] [core] [t38384] Execution complete
+[2026-10-15 23:54:52.647] [info] [core] [t29924] Title terminated; hard-exiting process.

@@ -1,0 +1,840 @@
+{
+  "images": [
+    {
+      "file": "pass_f1919_r00_1D742000_n1.json",
+      "complete": true,
+      "width": 1024,
+      "height": 512,
+      "vk_format": 37,
+      "bytes": 2097152,
+      "row_bytes": 4096,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r00_9D742000_n0.json",
+      "complete": true,
+      "width": 1040,
+      "height": 512,
+      "vk_format": 37,
+      "bytes": 2129920,
+      "row_bytes": 4160,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r01_1B130000_n3.json",
+      "complete": true,
+      "width": 1024,
+      "height": 1024,
+      "vk_format": 70,
+      "bytes": 2097152,
+      "row_bytes": 2048,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r01_9B130000_n2.json",
+      "complete": true,
+      "width": 1040,
+      "height": 1024,
+      "vk_format": 78,
+      "bytes": 4259840,
+      "row_bytes": 4160,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r02_1B530000_n5.json",
+      "complete": true,
+      "width": 1024,
+      "height": 1024,
+      "vk_format": 70,
+      "bytes": 2097152,
+      "row_bytes": 2048,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r02_9B530000_n4.json",
+      "complete": true,
+      "width": 1040,
+      "height": 1024,
+      "vk_format": 78,
+      "bytes": 4259840,
+      "row_bytes": 4160,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r03_1F6F8000_n6.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 100,
+      "bytes": 3686400,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r04_1D128000_n8.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r04_9D128000_n7.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r05_1BF30000_n10.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 37,
+      "bytes": 3686400,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r05_9BF30000_n9.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r06_1CD90000_n12.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r06_9CD90000_n11.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r07_1D268000_n14.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r07_9D268000_n13.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r08_1C070000_n16.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r08_9C070000_n15.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r09_1CED0000_n18.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r09_9CED0000_n17.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r10_1D3A8000_n20.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r10_9D3A8000_n19.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r11_1C1B0000_n22.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r11_9C1B0000_n21.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r12_1D010000_n24.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r12_9D010000_n23.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r13_1EFC8000_n26.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 97,
+      "bytes": 7372800,
+      "row_bytes": 10240,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r13_9EFC8000_n25.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 97,
+      "bytes": 7372800,
+      "row_bytes": 10240,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r14_1F6F8000_n27.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 100,
+      "bytes": 3686400,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r19_9C660000_n28.json",
+      "complete": true,
+      "width": 640,
+      "height": 368,
+      "vk_format": 97,
+      "bytes": 1884160,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r20_9C840000_n29.json",
+      "complete": true,
+      "width": 320,
+      "height": 192,
+      "vk_format": 97,
+      "bytes": 491520,
+      "row_bytes": 2560,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r23_1C930000_n31.json",
+      "complete": true,
+      "width": 160,
+      "height": 96,
+      "vk_format": 97,
+      "bytes": 122880,
+      "row_bytes": 1280,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r23_9C930000_n30.json",
+      "complete": true,
+      "width": 160,
+      "height": 96,
+      "vk_format": 97,
+      "bytes": 122880,
+      "row_bytes": 1280,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r24_9C94E000_n32.json",
+      "complete": true,
+      "width": 160,
+      "height": 96,
+      "vk_format": 97,
+      "bytes": 122880,
+      "row_bytes": 1280,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r26_1C96C000_n34.json",
+      "complete": true,
+      "width": 80,
+      "height": 48,
+      "vk_format": 97,
+      "bytes": 30720,
+      "row_bytes": 640,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r26_9C96C000_n33.json",
+      "complete": true,
+      "width": 80,
+      "height": 48,
+      "vk_format": 97,
+      "bytes": 30720,
+      "row_bytes": 640,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r29_1C984000_n35.json",
+      "complete": true,
+      "width": 40,
+      "height": 24,
+      "vk_format": 97,
+      "bytes": 7680,
+      "row_bytes": 320,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f1919_r32_1C98C000_n36.json",
+      "complete": true,
+      "width": 24,
+      "height": 16,
+      "vk_format": 97,
+      "bytes": 3072,
+      "row_bytes": 192,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r00_1D742000_n1.json",
+      "complete": true,
+      "width": 1024,
+      "height": 512,
+      "vk_format": 37,
+      "bytes": 2097152,
+      "row_bytes": 4096,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r00_9D742000_n0.json",
+      "complete": true,
+      "width": 1040,
+      "height": 512,
+      "vk_format": 37,
+      "bytes": 2129920,
+      "row_bytes": 4160,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r01_1B130000_n3.json",
+      "complete": true,
+      "width": 1024,
+      "height": 1024,
+      "vk_format": 70,
+      "bytes": 2097152,
+      "row_bytes": 2048,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r01_9B130000_n2.json",
+      "complete": true,
+      "width": 1040,
+      "height": 1024,
+      "vk_format": 78,
+      "bytes": 4259840,
+      "row_bytes": 4160,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r02_1F6F8000_n4.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 100,
+      "bytes": 3686400,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r03_1D128000_n6.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r03_9D128000_n5.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r04_1BF30000_n8.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 37,
+      "bytes": 3686400,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r04_9BF30000_n7.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r05_1C2C8000_n10.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r05_9C2C8000_n9.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r06_1C660000_n12.json",
+      "complete": true,
+      "width": 1280,
+      "height": 360,
+      "vk_format": 37,
+      "bytes": 1843200,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r06_9C660000_n11.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r07_1CD90000_n14.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r07_9CD90000_n13.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r08_1D268000_n16.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r08_9D268000_n15.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r09_1C070000_n18.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r09_9C070000_n17.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r10_1C408000_n20.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r10_9C408000_n19.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r11_1C7A0000_n22.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r11_9C7A0000_n21.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r12_1CED0000_n24.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r12_9CED0000_n23.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r13_1D3A8000_n26.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r13_9D3A8000_n25.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r14_1C1B0000_n28.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r14_9C1B0000_n27.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r15_1C548000_n30.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r15_9C548000_n29.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r16_1C8E0000_n32.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r16_9C8E0000_n31.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r17_1D010000_n34.json",
+      "complete": true,
+      "width": 1280,
+      "height": 208,
+      "vk_format": 37,
+      "bytes": 1064960,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r17_9D010000_n33.json",
+      "complete": true,
+      "width": 1280,
+      "height": 256,
+      "vk_format": 37,
+      "bytes": 1310720,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r18_9EFC8000_n35.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 97,
+      "bytes": 7372800,
+      "row_bytes": 10240,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r19_1F6F8000_n36.json",
+      "complete": true,
+      "width": 1280,
+      "height": 720,
+      "vk_format": 100,
+      "bytes": 3686400,
+      "row_bytes": 5120,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r23_9C840000_n37.json",
+      "complete": true,
+      "width": 320,
+      "height": 192,
+      "vk_format": 97,
+      "bytes": 491520,
+      "row_bytes": 2560,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r26_1C94E000_n39.json",
+      "complete": true,
+      "width": 160,
+      "height": 96,
+      "vk_format": 97,
+      "bytes": 122880,
+      "row_bytes": 1280,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r26_9C94E000_n38.json",
+      "complete": true,
+      "width": 160,
+      "height": 96,
+      "vk_format": 97,
+      "bytes": 122880,
+      "row_bytes": 1280,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r29_9C96C000_n40.json",
+      "complete": true,
+      "width": 80,
+      "height": 48,
+      "vk_format": 97,
+      "bytes": 30720,
+      "row_bytes": 640,
+      "layout": "tightly-packed little-endian"
+    },
+    {
+      "file": "pass_f629_r32_1C984000_n41.json",
+      "complete": true,
+      "width": 40,
+      "height": 24,
+      "vk_format": 97,
+      "bytes": 7680,
+      "row_bytes": 320,
+      "layout": "tightly-packed little-endian"
+    }
+  ],
+  "shadow_conversion": [
+    {
+      "frame": 629,
+      "positive_source_pixels": 347699,
+      "destination_white_pixels": 347699,
+      "matches_scaled_clamped_formula_fraction": 1.0,
+      "maximum_unit_error": 0
+    },
+    {
+      "frame": 1919,
+      "positive_source_pixels": 0,
+      "destination_white_pixels": 0,
+      "matches_scaled_clamped_formula_fraction": 1.0,
+      "maximum_unit_error": 0
+    }
+  ],
+  "reconstruction": [
+    {
+      "frame": 629,
+      "rows": [
+        0,
+        256,
+        512
+      ],
+      "heights": [
+        256,
+        256,
+        208
+      ],
+      "note": "Reconstruction of captured pieces by byte offsets; not a validated reference frame."
+    },
+    {
+      "frame": 1919,
+      "rows": [
+        0,
+        256,
+        512
+      ],
+      "heights": [
+        256,
+        256,
+        208
+      ],
+      "note": "Reconstruction of captured pieces by byte offsets; not a validated reference frame."
+    }
+  ]
+}

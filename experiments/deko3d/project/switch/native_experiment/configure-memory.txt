@@ -1,0 +1,54 @@
+CMake Warning at <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/cmake/rex_version.cmake:33 (message):
+  rex_compute_version: no v* tag reachable from HEAD.  Falling back to
+  0.10.0.0-dev.unknown.  If this is a CI build, ensure tags are fetched
+  (fetch-depth: 0 + fetch-tags: true).  If this is a fork, push tags with:
+  git push <fork-remote> --tags
+Call Stack (most recent call first):
+  <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/cmake/rex_version.cmake:165 (rex_compute_version)
+  <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/CMakeLists.txt:226 (rex_resolve_version)
+
+
+-- xxHash build type: Release
+-- Architecture: AMD64
+-- {fmt} version: 12.1.0
+-- Build type: Release
+-- Build spdlog: 1.17.0
+-- Build type: Release
+-- Generating install
+-- Vulkan stack: SDK 1.4.357.0
+CMake Deprecation Warning at <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/thirdparty/glslang/CMakeLists.txt:39 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Warning (dev) at <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/thirdparty/glslang/CMakeLists.txt:233 (find_package):
+  Policy CMP0148 is not set: The FindPythonInterp and FindPythonLibs modules
+  are removed.  Run "cmake --help-policy CMP0148" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning.
+
+Call Stack (most recent call first):
+  <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/thirdparty/glslang/CMakeLists.txt:239 (find_host_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+<WORKSPACE>\work\rexglue-sdk\work\rexglue-sdk-horizon-reference\thirdparty\glslang\build_info.py:142: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  formatted = datetime.datetime.utcfromtimestamp(timestamp).isoformat()
+-- ===========================================
+-- ReXGlue Configuration Summary:
+--   Version: 0.10.0.0-dev.unknown (dev)
+--   Platform: switch-arm64
+--   Compiler: GNU 16.1.0
+--   Configurations: 
+--   Output Dir: <WORKSPACE>/work/rexglue-sdk/work/rexglue-sdk-horizon-reference/out/switch-arm64
+--   C++ Standard: C++23
+--   Graphics: D3D12=OFF Vulkan=ON
+--   FidelityFX: OFF
+--   Tracy: OFF
+--   Perf Counters: ON
+-- ===========================================
+-- Configuring done (2.4s)
+-- Generating done (1.8s)
+-- Build files have been written to: <WORKSPACE>/work/green-lantern-360/project/switch/build/generated-full-runtime

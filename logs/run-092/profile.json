@@ -1,0 +1,307 @@
+{
+  "sha256": "4197773f55911a5c955e4298182e8bde9b901e12f7581c11684b5cbec763f691",
+  "scale_percent": 75,
+  "windows": [
+    {
+      "timestamp": "2026-11-05 14:03:43.171",
+      "seconds": 10.024165,
+      "swaps": 256,
+      "fps": 25.538,
+      "draws_per_frame": 4.53515625,
+      "shaders_cumulative": 15,
+      "pipelines_cumulative": 13,
+      "sections_ms": {
+        "state": 0.41,
+        "indices": 0.2,
+        "vertices": 0.03,
+        "constants_textures": 0.69,
+        "recording": 0.71,
+        "resolves": 0.62,
+        "swap": 11.12
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:03:53.326",
+      "seconds": 10.155273,
+      "swaps": 46,
+      "fps": 4.53,
+      "draws_per_frame": 101.65217391304348,
+      "shaders_cumulative": 54,
+      "pipelines_cumulative": 57,
+      "sections_ms": {
+        "state": 31.43,
+        "indices": 1.98,
+        "vertices": 2.68,
+        "constants_textures": 7.2,
+        "recording": 14.2,
+        "resolves": 6.18,
+        "swap": 144.63
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:04:03.547",
+      "seconds": 10.220798,
+      "swaps": 36,
+      "fps": 3.522,
+      "draws_per_frame": 126.30555555555556,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 58,
+      "sections_ms": {
+        "state": 0.59,
+        "indices": 3.77,
+        "vertices": 4.14,
+        "constants_textures": 2.53,
+        "recording": 18.59,
+        "resolves": 7.41,
+        "swap": 224.01
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:04:13.745",
+      "seconds": 10.197912,
+      "swaps": 36,
+      "fps": 3.53,
+      "draws_per_frame": 131.0,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 58,
+      "sections_ms": {
+        "state": 0.14,
+        "indices": 3.44,
+        "vertices": 4.0,
+        "constants_textures": 2.45,
+        "recording": 19.02,
+        "resolves": 7.44,
+        "swap": 235.41
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:04:23.957",
+      "seconds": 10.212266,
+      "swaps": 36,
+      "fps": 3.525,
+      "draws_per_frame": 131.0,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 58,
+      "sections_ms": {
+        "state": 0.14,
+        "indices": 3.78,
+        "vertices": 4.24,
+        "constants_textures": 2.48,
+        "recording": 18.74,
+        "resolves": 7.52,
+        "swap": 236.02
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:04:34.158",
+      "seconds": 10.200944,
+      "swaps": 36,
+      "fps": 3.529,
+      "draws_per_frame": 131.0,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 58,
+      "sections_ms": {
+        "state": 0.14,
+        "indices": 4.08,
+        "vertices": 4.21,
+        "constants_textures": 2.44,
+        "recording": 18.49,
+        "resolves": 7.45,
+        "swap": 235.6
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:04:44.354",
+      "seconds": 10.195498,
+      "swaps": 36,
+      "fps": 3.531,
+      "draws_per_frame": 131.0,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 58,
+      "sections_ms": {
+        "state": 0.14,
+        "indices": 3.78,
+        "vertices": 4.18,
+        "constants_textures": 2.43,
+        "recording": 18.73,
+        "resolves": 7.3,
+        "swap": 234.3
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:04:54.352",
+      "seconds": 9.998075,
+      "swaps": 37,
+      "fps": 3.701,
+      "draws_per_frame": 114.8108108108108,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 61,
+      "sections_ms": {
+        "state": 0.91,
+        "indices": 3.89,
+        "vertices": 3.57,
+        "constants_textures": 2.44,
+        "recording": 16.74,
+        "resolves": 6.79,
+        "swap": 224.29
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:05:04.400",
+      "seconds": 10.048552,
+      "swaps": 126,
+      "fps": 12.539,
+      "draws_per_frame": 56.15873015873016,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 61,
+      "sections_ms": {
+        "state": 0.04,
+        "indices": 1.28,
+        "vertices": 0.21,
+        "constants_textures": 0.34,
+        "recording": 1.56,
+        "resolves": 3.06,
+        "swap": 68.59
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:05:14.415",
+      "seconds": 10.015118,
+      "swaps": 122,
+      "fps": 12.182,
+      "draws_per_frame": 59.278688524590166,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 61,
+      "sections_ms": {
+        "state": 0.05,
+        "indices": 1.39,
+        "vertices": 0.22,
+        "constants_textures": 0.35,
+        "recording": 1.6,
+        "resolves": 3.13,
+        "swap": 72.31
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:05:24.444",
+      "seconds": 10.028903,
+      "swaps": 123,
+      "fps": 12.265,
+      "draws_per_frame": 59.642276422764226,
+      "shaders_cumulative": 55,
+      "pipelines_cumulative": 61,
+      "sections_ms": {
+        "state": 0.05,
+        "indices": 1.07,
+        "vertices": 0.22,
+        "constants_textures": 0.35,
+        "recording": 1.71,
+        "resolves": 3.45,
+        "swap": 71.19
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:05:35.915",
+      "seconds": 11.470952,
+      "swaps": 118,
+      "fps": 10.287,
+      "draws_per_frame": 60.78813559322034,
+      "shaders_cumulative": 105,
+      "pipelines_cumulative": 112,
+      "sections_ms": {
+        "state": 15.22,
+        "indices": 1.03,
+        "vertices": 0.73,
+        "constants_textures": 0.74,
+        "recording": 1.72,
+        "resolves": 3.58,
+        "swap": 70.62
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:05:46.181",
+      "seconds": 10.265936,
+      "swaps": 35,
+      "fps": 3.409,
+      "draws_per_frame": 713.2,
+      "shaders_cumulative": 120,
+      "pipelines_cumulative": 130,
+      "sections_ms": {
+        "state": 30.64,
+        "indices": 7.62,
+        "vertices": 26.11,
+        "constants_textures": 15.38,
+        "recording": 17.54,
+        "resolves": 6.22,
+        "swap": 177.14
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:05:59.630",
+      "seconds": 13.448832,
+      "swaps": 34,
+      "fps": 2.528,
+      "draws_per_frame": 735.1176470588235,
+      "shaders_cumulative": 134,
+      "pipelines_cumulative": 145,
+      "sections_ms": {
+        "state": 119.06,
+        "indices": 9.41,
+        "vertices": 17.28,
+        "constants_textures": 7.88,
+        "recording": 17.54,
+        "resolves": 6.57,
+        "swap": 204.77
+      }
+    },
+    {
+      "timestamp": "2026-11-05 14:06:09.673",
+      "seconds": 10.043305,
+      "swaps": 30,
+      "fps": 2.987,
+      "draws_per_frame": 795.5333333333333,
+      "shaders_cumulative": 145,
+      "pipelines_cumulative": 161,
+      "sections_ms": {
+        "state": 70.92,
+        "indices": 25.75,
+        "vertices": 107.17,
+        "constants_textures": 9.81,
+        "recording": 18.42,
+        "resolves": 7.55,
+        "swap": 81.41
+      }
+    }
+  ],
+  "scale_progress": [
+    "[2026-11-05 14:03:40.529] [info] [core] [t1857456588064350431] [gl-internal-scale] percent=75 cumulative scopes=711 blits=2970 surfaces=3",
+    "[2026-11-05 14:04:42.700] [info] [core] [t1857456588064350431] [gl-internal-scale] percent=75 cumulative scopes=6079 blits=38080 surfaces=10",
+    "[2026-11-05 14:05:15.170] [info] [core] [t1857456588064350431] [gl-internal-scale] percent=75 cumulative scopes=8043 blits=48364 surfaces=10",
+    "[2026-11-05 14:05:59.590] [info] [core] [t1857456588064350431] [gl-internal-scale] percent=75 cumulative scopes=10412 blits=59934 surfaces=10"
+  ],
+  "gpu_samples": [
+    "[2026-11-05 14:03:41.164] [info] [core] [t1857456588064350431] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 22.1 | pass c=- d=t0p1280f: 12.80 (0.9x, 1 draws) | pass c=t1328p1280f d=t0p1280f: 4.84 (0.8x, 4 draws) | pass c=t720p1280 d=t720p1280f: 1.59 (0.5x, 0 draws) | pass c=t1328p1280f d=-: 1.11 (0.6x, 2 draws) | resolve p1280 1280x720: 0.95 (0.9x, 0 draws) | resolve p1280 1280x256: 0.39 (1.0x, 0 draws) | pass c=- d=t1072p1280: 0.16 (0.5x, 0 draws) | pass c=- d=t1328p1280: 0.12 (0.5x, 0 draws) | resolve p1280 1280x208: 0.05 (0.5x, 0 draws) | pass c=t1072p1280 d=-: 0.04 (1.5x, 0 draws) | pass c=- d=t720p1280f: 0.03 (0.5x, 1 draws)",
+    "[2026-11-05 14:04:53.989] [info] [core] [t1857456588064350431] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 131.1 | pass c=- d=t0p1280f: 60.25 (4.5x, 11 draws) | pass c=t1328p1280f d=t0p1280f: 23.23 (2.5x, 29 draws) | pass c=t0p1280 d=t0p1280f: 10.73 (2.2x, 2 draws) | pass c=t1328p1280 d=t0p1280f: 8.79 (1.4x, 3 draws) | pass c=t1536p1280 d=t0p1280f: 5.62 (2.2x, 7 draws) | pass c=t1024p1280 d=t0p1280f: 5.22 (2.2x, 7 draws) | pass c=t768p1280 d=t0p1280f: 4.63 (2.1x, 6 draws) | pass c=t1328p1280f d=-: 3.49 (1.7x, 2 draws) | resolve p1280 1280x720: 2.25 (3.1x, 0 draws) | pass c=t1280p320f d=-: 1.11 (4.5x, 4 draws) | resolve depth p1280 1280x720: 1.02 (1.4x, 0 draws) | resolve p1280 1280x256: 0.79 (6.0x, 0 draws) | pass c=t1144p640f d=-: 0.58 (0.8x, 1 draws) | pass c=t1216p1040 d=t0p1040f: 0.49 (2.1x, 4 draws)",
+    "[2026-11-05 14:05:20.079] [info] [core] [t1857456588064350431] [native] GPU by pass, ms per frame (sampled, as the driver reports it): total 49.8 | pass c=- d=t0p1280f: 25.82 (2.0x, 2 draws) | pass c=t1328p1280f d=t0p1280f: 13.43 (1.0x, 41 draws) | pass c=t720p1280 d=t720p1280f: 2.70 (1.0x, 1 draws) | pass c=t1328p1280f d=-: 1.63 (1.0x, 1 draws) | pass c=t1280p320f d=-: 1.51 (6.0x, 6 draws) | resolve p1280 1280x720: 1.39 (2.0x, 0 draws) | pass c=t1144p640f d=-: 0.74 (1.0x, 1 draws) | resolve p1280 1280x256: 0.68 (2.0x, 0 draws) | resolve p320 320x184: 0.57 (6.0x, 0 draws) | resolve p640 640x360: 0.35 (1.0x, 0 draws) | pass c=- d=t1072p1280: 0.32 (1.0x, 1 draws) | pass c=t1316p160f d=-: 0.24 (3.0x, 3 draws) | pass c=- d=t1328p1280: 0.22 (1.0x, 1 draws) | resolve p160 160x96: 0.09 (3.0x, 0 draws)"
+  ],
+  "clock_samples": [
+    "[2026-11-05 14:03:25.852] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=307200000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:03:33.139] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:03:43.165] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:03:53.316] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:03.538] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:13.733] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:23.944] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:34.143] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:44.345] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:54.344] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:04.392] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:14.406] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:24.436] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:35.911] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:46.179] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:59.627] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:06:09.667] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization"
+  ],
+  "critical_markers": []
+}

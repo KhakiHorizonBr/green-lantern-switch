@@ -1,0 +1,14 @@
+{
+  "log": "outputs\\run-090\\green_lantern_090.log",
+  "windows": [],
+  "measured_seconds": 0,
+  "completion_fps": null,
+  "seconds_by_window_fps": {
+    "below10": 0,
+    "10to20": 0,
+    "20to25": 0,
+    "25plus": 0
+  },
+  "clock_reports": [],
+  "warning": "Host-observed completion intervals. Bands classify one-second averages, not individual frames or screen scanout. Includes menus/loading unless filtered by frame. Partial final window omitted."
+}

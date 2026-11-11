@@ -131,6 +131,7 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       // The PC comparison did not prove a pacing improvement; keep baseline.
       bool pace_before_present = false;
       unsigned partial_submit_draws = 0;
+      unsigned ablation_mode = 0;
       bool index_fast_copy = true;
       if (FILE* tuning = std::fopen("sdmc:/switch/green_lantern/tuning.ini", "r")) {
         char line[128];
@@ -172,6 +173,8 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
             frame_timeline = value != 0;
           if (std::sscanf(line, " pace_before_present = %u %c", &value, &trailing) == 1 && value <= 1)
             pace_before_present = value != 0;
+          if (std::sscanf(line, " ablation_mode = %u %c", &value, &trailing) == 1 && value <= 3)
+            ablation_mode = value;
           if (std::sscanf(line, " partial_submit_draws = %u %c", &value, &trailing) == 1 && value <= 4096)
             partial_submit_draws = value;
           if (std::sscanf(line, " native_stream_mib = %u %c", &value, &trailing) == 1 &&
@@ -202,6 +205,8 @@ class GreenLanternSwitchApp final : public rex::ReXApp {
       const bool pacing_applied = rex::cvar::SetFlagByName("nx_pace_before_present",
           pace_before_present ? "true" : "false");
       REXLOG_INFO("[gl-pacing] before_present={} applied={}; vblank cap unchanged", pace_before_present, pacing_applied);
+      const bool ablation_applied = rex::cvar::SetFlagByName("nx_ablation_mode", std::to_string(ablation_mode).c_str());
+      REXLOG_INFO("[gl-ablation-v1] mode={} applied={}; diagnostic modes may produce invalid images; baseline=0; no clock changes", ablation_mode, ablation_applied);
       const std::string partial_submit_text = std::to_string(partial_submit_draws);
       const bool partial_applied = rex::cvar::SetFlagByName("nx_partial_submit_draws", partial_submit_text.c_str());
       REXLOG_INFO("[gl-partial-submit] limit={} applied={}; 0=baseline", partial_submit_draws, partial_applied);

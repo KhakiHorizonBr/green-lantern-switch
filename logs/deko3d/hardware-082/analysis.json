@@ -1,0 +1,22 @@
+{
+  "first": "2026-10-29 18:22:59.261000",
+  "last": "2026-10-29 18:33:51.934000",
+  "wall_s": 652.673,
+  "last_frame": 458,
+  "draws": 34118,
+  "resolves": 13238,
+  "checkpoint_pairs": 47356,
+  "checkpoint_span_s": 434.379,
+  "checkpoint_median_ms": 4.0,
+  "checkpoint_p95_ms": 12.0,
+  "log_bytes": 14765724,
+  "errors_unique": [
+    "[t10724071211773691079] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented",
+    "[t1140630568985129244] [deko-game] unsupported texture layout fetch=0 dimension=0 format=0 base=00000000",
+    "[t14877665191879501921] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented",
+    "[t14877665191879501921] ResolvePath(\\Device) failed - device not found",
+    "[t17011604869462355264] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented",
+    "[t5719844352967946830] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented"
+  ],
+  "interpretation": "Checkpoint spans include logging, submission and GPU waits; not a pure GPU timer. Rendering kept advancing to end; no proof of save completion."
+}

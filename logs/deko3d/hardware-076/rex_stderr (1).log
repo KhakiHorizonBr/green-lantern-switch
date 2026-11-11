@@ -1,0 +1,3 @@
+[resume-stub] image 0x36b13a3000 alias 0x36b5400000 map 0x0 perm 0x0 view 0xD401
+[resume-stub] mode 2: 256 stubs
+[exception-probe] PASS: 32 vectors, FPCR and FPSR across 16 scheduled exceptions

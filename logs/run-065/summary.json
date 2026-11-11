@@ -1,0 +1,19 @@
+{
+  "frames": [
+    827
+  ],
+  "draw_snapshots": 121,
+  "image_snapshots": 28,
+  "image_bytes_vs_064": {
+    "same": 4,
+    "changed": 24,
+    "no_pair": 0
+  },
+  "edram_log": [
+    "[gl-edram] candidate v1 enabled=true applied=true; heap unchanged; color cache requests10MiB",
+    "[gl-edram] v1 color-word cache ready: 10 MiB, 2048 tiles, 1x RGBA8/RG16_SNORM; unsupported writes invalidate tiles",
+    "[gl-edram] frame=300 imported_tiles_total=0 published_tiles_total=154192 unknown_tiles=2048",
+    "[gl-edram] frame=600 imported_tiles_total=0 published_tiles_total=488880 unknown_tiles=2048",
+    "[gl-edram] frame=900 imported_tiles_total=0 published_tiles_total=2982480 unknown_tiles=2048"
+  ]
+}

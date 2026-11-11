@@ -1,0 +1,10 @@
+# ReXGlue project manifest for local Green Lantern analysis.
+[project]
+name = "green_lantern"
+sdk_version = "0.10.0"
+game_root = "../extracted"
+
+[entrypoint]
+file_path = "../extracted/default.xex"
+out_directory_path = "generated/default_xex"
+includes = []

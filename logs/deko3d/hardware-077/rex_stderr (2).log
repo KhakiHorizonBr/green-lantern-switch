@@ -1,0 +1,13 @@
+[resume-stub] image 0x288c849000 alias 0x2890a00000 map 0x0 perm 0x0 view 0xD401
+[resume-stub] mode 2: 256 stubs
+[exception-probe] PASS: 32 vectors, FPCR and FPSR across 16 scheduled exceptions
+[saltynx] no conecta con los puertos de SaltyNX. Ultimo error 0xF201 (61953)
+[saltynx] nuestro TID: 01001C8016B4E000 (SaltyNX admite <= 01FFFFFFFFFFFFFF y sin 0x1F00)
+[saltynx] puerto InjectServ: error 0xF201 (61953)
+[saltynx] puerto SaltySD: error 0xF201 (61953)
+[saltynx] control: 'sm:' SI da sesion nueva, asi que el limite es del puerto de SaltyNX
+[saltynx] sesiones usadas / tope: 1 / 5
+[saltynx] eventos usados / tope: 0 / 0
+[saltynx] hilos usados / tope: 23 / 96
+[saltynx] memorias transferibles usadas / tope: 1 / 32
+[apm] de partida: config 0x00020003, GPU 307.2 MHz, memoria 1331.2 MHz

@@ -101,7 +101,7 @@ REXCVAR_DEFINE_STRING(nx_renderer, SIMPSONS_NX_RENDERER_DEFAULT, "Switch",
 
 #if defined(__SWITCH__)
 extern "C" {
-#include <switch/kernel/svc.h>
+#include <switch.h>
 }
 // The frame counter the console FPS overlay and the profiler read (the
 // emulated path counts its swaps there too).
@@ -674,7 +674,36 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
     return 0;
   }
 
+  void ReportClocks() {
+#if defined(__SWITCH__)
+    const Result init = clkrstInitialize();
+    uint32_t hz[3] = {}; Result rc[3] = {init, init, init};
+    const PcvModuleId ids[] = {PcvModuleId_CpuBus, PcvModuleId_GPU, PcvModuleId_EMC};
+    if (R_SUCCEEDED(init)) {
+      for (unsigned i = 0; i < 3; ++i) {
+        ClkrstSession session{};
+        rc[i] = clkrstOpenSession(&session, ids[i], 3);
+        if (R_SUCCEEDED(rc[i])) {
+          rc[i] = clkrstGetClockRate(&session, &hz[i]);
+          clkrstCloseSession(&session);
+        }
+      }
+      clkrstExit();
+    }
+    REXLOG_INFO("[gl-clocks-v1] operation_mode={} performance_mode={} CPU={}Hz rc={:08X} GPU={}Hz rc={:08X} RAM={}Hz rc={:08X}; read-only requested rates, not utilization",
+        unsigned(appletGetOperationMode()), unsigned(appletGetPerformanceMode()),
+        hz[0], rc[0], hz[1], rc[1], hz[2], rc[2]);
+#endif
+  }
   void Report() {
+    ReportClocks();
+    const auto report_now = Clock::now();
+    if (report_time_.time_since_epoch().count()) {
+      const double seconds = std::chrono::duration<double>(report_now - report_time_).count();
+      REXLOG_INFO("[gl-fps-window-v1] seconds={:.6f} swaps={} fps={:.3f}; swap count / measured wall time, not screen scanout",
+          seconds, swaps_ - reported_swaps_, double(swaps_ - reported_swaps_) / seconds);
+    }
+    report_time_ = report_now;
     frame_intervals_.Report("swap-completion interval (not display scanout)");
     renderer_walls_.Report("renderer wall per frame (includes tracked waits)");
     allocation_walls_.Report("allocation wall per frame (includes fences)");
@@ -1323,7 +1352,7 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
     const auto previous = frame_start_;
     frame_start_ = now;
     if (!renderer_ready_) return;
-    if (previous.time_since_epoch().count() == 0) { frame_diagnostics_before_ = renderer_.stats(); return; }
+    if (previous.time_since_epoch().count() == 0) { ReportClocks(); frame_diagnostics_before_ = renderer_.stats(); return; }
     const double ms =
         double(std::chrono::duration_cast<std::chrono::microseconds>(now - previous).count()) /
         1000.0;
@@ -1333,6 +1362,21 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
     const uint64_t allocation_ns = s.allocation_ns - frame_diagnostics_before_.allocation_ns;
     const uint64_t allocation_fence_ns = s.allocation_fence_ns - frame_diagnostics_before_.allocation_fence_ns;
     frame_intervals_.Add(interval_ns);
+    // Sum consecutive completion intervals: no fixed-ten-second assumption.
+    short_elapsed_ns_ += interval_ns;
+    ++short_frames_;
+    const unsigned bucket = interval_ns <= 35000000 ? 0 : interval_ns <= 50000000 ? 1 : interval_ns <= 100000000 ? 2 : 3;
+    ++short_buckets_[bucket];
+    short_frame_ms_.Add(interval_ns);
+    if (short_elapsed_ns_ >= 1000000000ULL) {
+      REXLOG_INFO("[gl-fps-second-v1] frame={} seconds={:.6f} frames={} fps={:.3f}; intervals <=35ms={} 35-50ms={} 50-100ms={} >100ms={}; completion intervals, not scanout",
+          swaps_ - 1, double(short_elapsed_ns_) / 1e9, short_frames_,
+          double(short_frames_) * 1e9 / double(short_elapsed_ns_),
+          short_buckets_[0], short_buckets_[1], short_buckets_[2], short_buckets_[3]);
+      short_frame_ms_.Report("one-second completion intervals");
+      short_elapsed_ns_ = 0; short_frames_ = 0;
+      for (auto& bucket_count : short_buckets_) bucket_count = 0;
+    }
     renderer_walls_.Add(renderer_ns);
     allocation_walls_.Add(allocation_ns);
     allocation_fences_.Add(allocation_fence_ns);
@@ -1663,6 +1707,9 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
   uint64_t waits_ = 0, wait_ns_ = 0, reported_waits_ = 0, reported_wait_ns_ = 0;
   uint64_t reported_packets_ = 0, reported_draws_ = 0, reported_copies_ = 0,
            reported_swaps_ = 0;
+  Clock::time_point report_time_{};
+  uint64_t short_elapsed_ns_ = 0, short_frames_ = 0, short_buckets_[4] = {};
+  diagnostics::Distribution short_frame_ms_;
   diagnostics::Distribution frame_intervals_, renderer_walls_, allocation_walls_, allocation_fences_, gpu_waits_;
   RendererStats frame_diagnostics_before_;
   std::atomic<uint64_t> last_doorbell_trace_ns_{0};

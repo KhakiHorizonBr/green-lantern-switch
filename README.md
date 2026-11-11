@@ -5,31 +5,11 @@ Recompilação da versão Xbox 360 usando ReXGlue, libnx e Mesa/NVK.
 corrigidos, confirmados pelo usuário no teste 068. O desempenho ainda não é suficiente.**
 Não é um port concluído; estabilidade e gráficos de todas as fases não foram validados.
 
-## Atualização de 29/10/2026
+## Encerramento do desenvolvimento local — 11/11/2026
 
-As rodadas de PC de27–29/10 estão [documentadas aqui](docs/RESULTADOS_2026_10_27_29.md).
-Incluem instrumentação por quadro, auditoria de30repositórios Xbox360,
-submissões parciais e geometria GPU residente. Os caminhos exercitados passaram
-nas verificações de buffers, mas **nenhuma dessas variantes demonstrou ganho
-global suficiente para ser promovida como otimização de FPS no Switch**.
+O acervo inclui o renderer Vulkan, o protótipo deko3d, overlays de dependências, diagnósticos e experimentos até o hardware 092. No Vulkan, use 100% de resolução interna e submissões parciais desativadas como referência. A escala de 75% foi testada e não apresentou ganho sustentado. O protótipo deko3d chegou ao gameplay, com custo alto de sincronização e lacunas na cobertura de shaders.
 
-Submissões parciais permanecem desligadas; o cache residente fica em
-[fontes experimentais separadas](experiments/geometry-resident/README.md).
-O último resultado de hardware deste caminho Vulkan continua sendo o074.
-
-## Estado confirmado no Switch — hardware 074
-
-- Menu chega a aproximadamente 24–25 FPS; fase pesada ficou em 7,3–8,8 FPS no074.
-- Conversão direta de depth/stencil, exportação EDRAM sob demanda e uploads
-  esparsos de vértices estão implementados, com comparações pontuais de bytes no PC.
-- O074 eliminou fallback de upload esparso por orçamento de sombra, mas a economia
-  de cópias ainda não demonstrou ganho global sustentado na fase pesada.
-- CPU, GPU e esperas por espaço no stream continuam caros. Mais RAM sozinha não
-  foi demonstrada como solução; heap de 2000 MiB e arena de 384 MiB preservadas.
-- Controles por posição Xbox preparados e compilados; teste de hardware adiado
-  pelo usuário até haver mais otimização.
-- Próxima meta solicitada: 35–40 FPS. Ainda não atingida; o pacing atual limita
-  o caminho nativo a 30 FPS mesmo em cenários leves.
+**[Guia de retomada, cronologia e dependências](docs/RETOMADA.md)**
 
 ## Por onde começar
 

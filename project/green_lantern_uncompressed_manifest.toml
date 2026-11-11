@@ -1,0 +1,9 @@
+[project]
+name = "green_lantern"
+sdk_version = "0.10.0"
+game_root = "../extracted"
+
+[entrypoint]
+file_path = "../extracted/default_uncompressed.xex"
+out_directory_path = "generated/uncompressed_xex"
+includes = []

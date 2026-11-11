@@ -1,0 +1,13 @@
+{
+  "native_frames": {
+    "936": 28
+  },
+  "native_pass_images": 28,
+  "native_draw_snapshots": 121,
+  "decoded_surface_status": {
+    "OK": 110,
+    "depth/array ainda n\u00c3\u00a3o suportado pelo decodificador": 4,
+    "formato de destino Xenos ainda n\u00c3\u00a3o suportado: 7": 2
+  },
+  "candidate_pixel_pairs": 26
+}

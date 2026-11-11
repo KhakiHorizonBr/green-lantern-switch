@@ -1,0 +1,47 @@
+# ReXGlue project manifest for local Green Lantern analysis.
+[project]
+name = "green_lantern"
+sdk_version = "0.10.0"
+game_root = "../extracted"
+
+[entrypoint]
+file_path = "../extracted/default.xex"
+out_directory_path = "generated/hinted"
+includes = []
+
+[entrypoint.functions."0x826800B0"]
+name = "manual_826800B0"
+
+[entrypoint.functions."0x8267181C"]
+name = "manual_8267181C"
+
+[entrypoint.functions."0x82671704"]
+name = "manual_82671704"
+
+[entrypoint.functions."0x82615340"]
+name = "manual_82615340"
+
+[entrypoint.functions."0x82680038"]
+name = "manual_82680038"
+
+[entrypoint.functions."0x826177E0"]
+name = "manual_826177E0"
+
+[entrypoint.functions."0x82680190"]
+name = "manual_82680190"
+
+[entrypoint.functions."0x82680180"]
+name = "manual_82680180"
+
+[entrypoint.functions."0x82680170"]
+name = "manual_82680170"
+
+[entrypoint.functions."0x82680160"]
+name = "manual_82680160"
+
+[entrypoint.functions."0x8266D0E8"]
+name = "manual_8266D0E8"
+
+[entrypoint.functions."0x82654F04"]
+name = "manual_82654F04"
+

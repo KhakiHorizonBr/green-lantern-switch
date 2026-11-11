@@ -1,0 +1,2 @@
+[binaries]
+rust = '/root/.cargo/bin/rustc'

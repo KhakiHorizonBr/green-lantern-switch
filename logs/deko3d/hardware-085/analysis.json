@@ -1,0 +1,523 @@
+{
+  "metrics": [
+    {
+      "frame": 61.0,
+      "wall_s": 5.0,
+      "fps": 12.2,
+      "draws_per_frame": 4.7,
+      "resolves_per_frame": 2.7,
+      "submits_per_frame": 8.4,
+      "queue_idle_wait_ms_per_frame": 6.99,
+      "image_mib": 117.7,
+      "skipped_total": 2982.0,
+      "timestamp": "2026-10-29 18:52:21.819"
+    },
+    {
+      "frame": 209.0,
+      "wall_s": 5.02,
+      "fps": 29.5,
+      "draws_per_frame": 18.1,
+      "resolves_per_frame": 3.9,
+      "submits_per_frame": 23.1,
+      "queue_idle_wait_ms_per_frame": 21.16,
+      "image_mib": 117.7,
+      "skipped_total": 10086.0,
+      "timestamp": "2026-10-29 18:52:26.835"
+    },
+    {
+      "frame": 240.0,
+      "wall_s": 5.57,
+      "fps": 5.57,
+      "draws_per_frame": 7.0,
+      "resolves_per_frame": 2.0,
+      "submits_per_frame": 10.1,
+      "queue_idle_wait_ms_per_frame": 9.07,
+      "image_mib": 120.6,
+      "skipped_total": 11574.0,
+      "timestamp": "2026-10-29 18:52:32.403"
+    },
+    {
+      "frame": 306.0,
+      "wall_s": 5.11,
+      "fps": 12.92,
+      "draws_per_frame": 19.3,
+      "resolves_per_frame": 7.0,
+      "submits_per_frame": 27.3,
+      "queue_idle_wait_ms_per_frame": 28.46,
+      "image_mib": 180.0,
+      "skipped_total": 14742.0,
+      "timestamp": "2026-10-29 18:52:37.513"
+    },
+    {
+      "frame": 333.0,
+      "wall_s": 5.03,
+      "fps": 5.37,
+      "draws_per_frame": 123.8,
+      "resolves_per_frame": 47.8,
+      "submits_per_frame": 172.6,
+      "queue_idle_wait_ms_per_frame": 152.66,
+      "image_mib": 228.8,
+      "skipped_total": 16038.0,
+      "timestamp": "2026-10-29 18:52:42.542"
+    },
+    {
+      "frame": 359.0,
+      "wall_s": 5.04,
+      "fps": 5.16,
+      "draws_per_frame": 125.3,
+      "resolves_per_frame": 51.0,
+      "submits_per_frame": 177.3,
+      "queue_idle_wait_ms_per_frame": 165.91,
+      "image_mib": 226.0,
+      "skipped_total": 17286.0,
+      "timestamp": "2026-10-29 18:52:47.581"
+    },
+    {
+      "frame": 386.0,
+      "wall_s": 5.18,
+      "fps": 5.21,
+      "draws_per_frame": 127.1,
+      "resolves_per_frame": 51.0,
+      "submits_per_frame": 179.1,
+      "queue_idle_wait_ms_per_frame": 163.08,
+      "image_mib": 220.0,
+      "skipped_total": 18582.0,
+      "timestamp": "2026-10-29 18:52:52.763"
+    },
+    {
+      "frame": 423.0,
+      "wall_s": 5.06,
+      "fps": 7.31,
+      "draws_per_frame": 90.7,
+      "resolves_per_frame": 33.8,
+      "submits_per_frame": 125.5,
+      "queue_idle_wait_ms_per_frame": 114.09,
+      "image_mib": 222.6,
+      "skipped_total": 20358.0,
+      "timestamp": "2026-10-29 18:52:57.823"
+    },
+    {
+      "frame": 492.0,
+      "wall_s": 5.04,
+      "fps": 13.7,
+      "draws_per_frame": 53.8,
+      "resolves_per_frame": 13.9,
+      "submits_per_frame": 68.7,
+      "queue_idle_wait_ms_per_frame": 60.19,
+      "image_mib": 201.5,
+      "skipped_total": 23670.0,
+      "timestamp": "2026-10-29 18:53:02.859"
+    },
+    {
+      "frame": 558.0,
+      "wall_s": 5.02,
+      "fps": 13.15,
+      "draws_per_frame": 58.0,
+      "resolves_per_frame": 15.0,
+      "submits_per_frame": 74.0,
+      "queue_idle_wait_ms_per_frame": 64.65,
+      "image_mib": 201.5,
+      "skipped_total": 26838.0,
+      "timestamp": "2026-10-29 18:53:07.877"
+    },
+    {
+      "frame": 626.0,
+      "wall_s": 5.04,
+      "fps": 13.5,
+      "draws_per_frame": 57.1,
+      "resolves_per_frame": 14.8,
+      "submits_per_frame": 72.9,
+      "queue_idle_wait_ms_per_frame": 63.93,
+      "image_mib": 201.5,
+      "skipped_total": 30102.0,
+      "timestamp": "2026-10-29 18:53:12.914"
+    },
+    {
+      "frame": 691.0,
+      "wall_s": 5.01,
+      "fps": 12.98,
+      "draws_per_frame": 60.1,
+      "resolves_per_frame": 14.8,
+      "submits_per_frame": 75.9,
+      "queue_idle_wait_ms_per_frame": 64.05,
+      "image_mib": 201.5,
+      "skipped_total": 33222.0,
+      "timestamp": "2026-10-29 18:53:17.921"
+    },
+    {
+      "frame": 757.0,
+      "wall_s": 5.03,
+      "fps": 13.12,
+      "draws_per_frame": 61.7,
+      "resolves_per_frame": 15.0,
+      "submits_per_frame": 77.7,
+      "queue_idle_wait_ms_per_frame": 64.98,
+      "image_mib": 201.5,
+      "skipped_total": 36390.0,
+      "timestamp": "2026-10-29 18:53:22.951"
+    },
+    {
+      "frame": 823.0,
+      "wall_s": 5.04,
+      "fps": 13.1,
+      "draws_per_frame": 58.0,
+      "resolves_per_frame": 15.0,
+      "submits_per_frame": 74.0,
+      "queue_idle_wait_ms_per_frame": 64.63,
+      "image_mib": 201.5,
+      "skipped_total": 39558.0,
+      "timestamp": "2026-10-29 18:53:27.990"
+    },
+    {
+      "frame": 886.0,
+      "wall_s": 5.94,
+      "fps": 10.6,
+      "draws_per_frame": 63.2,
+      "resolves_per_frame": 15.2,
+      "submits_per_frame": 79.5,
+      "queue_idle_wait_ms_per_frame": 66.97,
+      "image_mib": 320.4,
+      "skipped_total": 42582.0,
+      "timestamp": "2026-10-29 18:53:33.934"
+    },
+    {
+      "frame": 897.0,
+      "wall_s": 5.09,
+      "fps": 2.16,
+      "draws_per_frame": 662.7,
+      "resolves_per_frame": 44.3,
+      "submits_per_frame": 708.0,
+      "queue_idle_wait_ms_per_frame": 221.66,
+      "image_mib": 356.6,
+      "skipped_total": 43110.0,
+      "timestamp": "2026-10-29 18:53:39.022"
+    },
+    {
+      "frame": 910.0,
+      "wall_s": 5.28,
+      "fps": 2.46,
+      "draws_per_frame": 733.6,
+      "resolves_per_frame": 48.0,
+      "submits_per_frame": 782.7,
+      "queue_idle_wait_ms_per_frame": 228.71,
+      "image_mib": 360.3,
+      "skipped_total": 43734.0,
+      "timestamp": "2026-10-29 18:53:44.304"
+    },
+    {
+      "frame": 922.0,
+      "wall_s": 5.34,
+      "fps": 2.25,
+      "draws_per_frame": 734.5,
+      "resolves_per_frame": 49.2,
+      "submits_per_frame": 784.8,
+      "queue_idle_wait_ms_per_frame": 227.37,
+      "image_mib": 372.4,
+      "skipped_total": 44494.0,
+      "timestamp": "2026-10-29 18:53:49.644"
+    },
+    {
+      "frame": 934.0,
+      "wall_s": 5.02,
+      "fps": 2.39,
+      "draws_per_frame": 742.6,
+      "resolves_per_frame": 48.0,
+      "submits_per_frame": 791.7,
+      "queue_idle_wait_ms_per_frame": 231.84,
+      "image_mib": 372.4,
+      "skipped_total": 45219.0,
+      "timestamp": "2026-10-29 18:53:54.669"
+    },
+    {
+      "frame": 946.0,
+      "wall_s": 5.25,
+      "fps": 2.29,
+      "draws_per_frame": 765.7,
+      "resolves_per_frame": 48.0,
+      "submits_per_frame": 814.8,
+      "queue_idle_wait_ms_per_frame": 233.54,
+      "image_mib": 368.5,
+      "skipped_total": 45925.0,
+      "timestamp": "2026-10-29 18:53:59.917"
+    },
+    {
+      "frame": 958.0,
+      "wall_s": 5.25,
+      "fps": 2.29,
+      "draws_per_frame": 780.5,
+      "resolves_per_frame": 48.0,
+      "submits_per_frame": 829.7,
+      "queue_idle_wait_ms_per_frame": 234.04,
+      "image_mib": 368.5,
+      "skipped_total": 46631.0,
+      "timestamp": "2026-10-29 18:54:05.166"
+    },
+    {
+      "frame": 970.0,
+      "wall_s": 5.37,
+      "fps": 2.24,
+      "draws_per_frame": 837.0,
+      "resolves_per_frame": 46.3,
+      "submits_per_frame": 884.5,
+      "queue_idle_wait_ms_per_frame": 234.08,
+      "image_mib": 364.8,
+      "skipped_total": 47278.0,
+      "timestamp": "2026-10-29 18:54:10.535"
+    },
+    {
+      "frame": 981.0,
+      "wall_s": 5.2,
+      "fps": 2.11,
+      "draws_per_frame": 811.9,
+      "resolves_per_frame": 47.2,
+      "submits_per_frame": 860.3,
+      "queue_idle_wait_ms_per_frame": 230.68,
+      "image_mib": 383.9,
+      "skipped_total": 48413.0,
+      "timestamp": "2026-10-29 18:54:15.737"
+    },
+    {
+      "frame": 992.0,
+      "wall_s": 5.15,
+      "fps": 2.14,
+      "draws_per_frame": 812.3,
+      "resolves_per_frame": 48.0,
+      "submits_per_frame": 861.5,
+      "queue_idle_wait_ms_per_frame": 241.44,
+      "image_mib": 380.2,
+      "skipped_total": 49285.0,
+      "timestamp": "2026-10-29 18:54:20.887"
+    },
+    {
+      "frame": 1002.0,
+      "wall_s": 5.09,
+      "fps": 1.96,
+      "draws_per_frame": 862.7,
+      "resolves_per_frame": 50.7,
+      "submits_per_frame": 916.4,
+      "queue_idle_wait_ms_per_frame": 242.23,
+      "image_mib": 380.0,
+      "skipped_total": 49953.0,
+      "timestamp": "2026-10-29 18:54:25.977"
+    },
+    {
+      "frame": 1012.0,
+      "wall_s": 5.05,
+      "fps": 1.98,
+      "draws_per_frame": 841.5,
+      "resolves_per_frame": 49.7,
+      "submits_per_frame": 894.4,
+      "queue_idle_wait_ms_per_frame": 248.41,
+      "image_mib": 381.4,
+      "skipped_total": 50585.0,
+      "timestamp": "2026-10-29 18:54:31.030"
+    },
+    {
+      "frame": 1023.0,
+      "wall_s": 5.09,
+      "fps": 2.16,
+      "draws_per_frame": 791.3,
+      "resolves_per_frame": 47.2,
+      "submits_per_frame": 841.0,
+      "queue_idle_wait_ms_per_frame": 243.81,
+      "image_mib": 383.0,
+      "skipped_total": 51170.0,
+      "timestamp": "2026-10-29 18:54:36.118"
+    },
+    {
+      "frame": 1033.0,
+      "wall_s": 5.09,
+      "fps": 1.96,
+      "draws_per_frame": 901.7,
+      "resolves_per_frame": 46.0,
+      "submits_per_frame": 950.9,
+      "queue_idle_wait_ms_per_frame": 254.94,
+      "image_mib": 383.0,
+      "skipped_total": 51783.0,
+      "timestamp": "2026-10-29 18:54:41.210"
+    },
+    {
+      "frame": 1044.0,
+      "wall_s": 5.3,
+      "fps": 2.08,
+      "draws_per_frame": 901.6,
+      "resolves_per_frame": 46.0,
+      "submits_per_frame": 950.7,
+      "queue_idle_wait_ms_per_frame": 256.02,
+      "image_mib": 384.0,
+      "skipped_total": 52456.0,
+      "timestamp": "2026-10-29 18:54:46.506"
+    }
+  ],
+  "missing_shader_variants": 26,
+  "missing_shaders": [
+    [
+      "p",
+      "03FD9AE4A40314CC",
+      "00000D000000003F"
+    ],
+    [
+      "p",
+      "19609576E95E3209",
+      "00005100000000FF"
+    ],
+    [
+      "p",
+      "1E75454E4D5E68C5",
+      "00004000000000FF"
+    ],
+    [
+      "p",
+      "21D3ED7D0EA2C33C",
+      "00004000000000FF"
+    ],
+    [
+      "p",
+      "329813125A505A2E",
+      "00005100000000FF"
+    ],
+    [
+      "p",
+      "37D6C3165A564E5C",
+      "00005100000000FF"
+    ],
+    [
+      "p",
+      "639B0D2FA5BE0E04",
+      "00005100000000FF"
+    ],
+    [
+      "p",
+      "7F3850BBDD3618E1",
+      "00005500000003FF"
+    ],
+    [
+      "p",
+      "9D03455FD4F570B6",
+      "00005500000003FF"
+    ],
+    [
+      "p",
+      "A68D275A4A9CE153",
+      "00005100000000FF"
+    ],
+    [
+      "p",
+      "BC4FC6A0CFD98F88",
+      "000040000000003F"
+    ],
+    [
+      "p",
+      "CFDF3D187A823E0A",
+      "0000410000000000"
+    ],
+    [
+      "p",
+      "E5CA281D4FDD2244",
+      "00001300000001FF"
+    ],
+    [
+      "p",
+      "EF816C15798B652D",
+      "00005100000000FF"
+    ],
+    [
+      "p",
+      "F745674382D678CB",
+      "000009000000000F"
+    ],
+    [
+      "v",
+      "03CD6906D473459D",
+      "000000000000003F"
+    ],
+    [
+      "v",
+      "6779911BAF7DC3C7",
+      "0000000000000000"
+    ],
+    [
+      "v",
+      "A2225CC1761583A3",
+      "0000000000000001"
+    ],
+    [
+      "v",
+      "A2225CC1761583A3",
+      "0000000004000001"
+    ],
+    [
+      "v",
+      "A2FDFDE6BEAE14B3",
+      "00000000000000FF"
+    ],
+    [
+      "v",
+      "AAD478399CE42F4C",
+      "00000000000000FF"
+    ],
+    [
+      "v",
+      "C5FB67497206BF53",
+      "00000000000000FF"
+    ],
+    [
+      "v",
+      "C96F57E5FB162D56",
+      "0000000000000000"
+    ],
+    [
+      "v",
+      "CD9F15112BE4E6A7",
+      "0000000000000001"
+    ],
+    [
+      "v",
+      "CD9F15112BE4E6A7",
+      "0000000004000001"
+    ],
+    [
+      "v",
+      "F131ECC7011477E8",
+      "000000000000000F"
+    ]
+  ],
+  "unique_backend_errors": [
+    "missing shader p 03FD9AE4A40314CC mod 00000D000000003F",
+    "missing shader p 19609576E95E3209 mod 00005100000000FF",
+    "missing shader p 1E75454E4D5E68C5 mod 00004000000000FF",
+    "missing shader p 21D3ED7D0EA2C33C mod 00004000000000FF",
+    "missing shader p 329813125A505A2E mod 00005100000000FF",
+    "missing shader p 37D6C3165A564E5C mod 00005100000000FF",
+    "missing shader p 639B0D2FA5BE0E04 mod 00005100000000FF",
+    "missing shader p 7F3850BBDD3618E1 mod 00005500000003FF",
+    "missing shader p 9D03455FD4F570B6 mod 00005500000003FF",
+    "missing shader p A68D275A4A9CE153 mod 00005100000000FF",
+    "missing shader p BC4FC6A0CFD98F88 mod 000040000000003F",
+    "missing shader p CFDF3D187A823E0A mod 0000410000000000",
+    "missing shader p E5CA281D4FDD2244 mod 00001300000001FF",
+    "missing shader p EF816C15798B652D mod 00005100000000FF",
+    "missing shader p F745674382D678CB mod 000009000000000F",
+    "missing shader v 03CD6906D473459D mod 000000000000003F",
+    "missing shader v 6779911BAF7DC3C7 mod 0000000000000000",
+    "missing shader v A2225CC1761583A3 mod 0000000000000001",
+    "missing shader v A2225CC1761583A3 mod 0000000004000001",
+    "missing shader v A2FDFDE6BEAE14B3 mod 00000000000000FF",
+    "missing shader v AAD478399CE42F4C mod 00000000000000FF",
+    "missing shader v C5FB67497206BF53 mod 00000000000000FF",
+    "missing shader v C96F57E5FB162D56 mod 0000000000000000",
+    "missing shader v CD9F15112BE4E6A7 mod 0000000000000001",
+    "missing shader v CD9F15112BE4E6A7 mod 0000000004000001",
+    "missing shader v F131ECC7011477E8 mod 000000000000000F",
+    "resolve destination allocation failed",
+    "sized resolve allocation failed",
+    "target allocation failed",
+    "texture upload/budget failed",
+    "unsupported texture layout fetch=0 dimension=0 format=0 base=00000000"
+  ],
+  "boot": [
+    "[2026-10-29 18:52:16.369] [info] [core] [t15890428496752172884] [deko-game-v9] growable targets; coalesced EDRAM; GPFIFO <=64; stable completion boundaries with quiet logging",
+    "[2026-10-29 18:52:16.819] [info] [core] [t15890428496752172884] [deko-game-v9] ready: 122 shader variants; per_draw_diagnostics=false batch_ops=1; vertex=160 MiB upload=3x32 MiB image budget=384 MiB"
+  ],
+  "fatal_driver_errors": []
+}

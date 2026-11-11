@@ -1,0 +1,6 @@
+Compiling native_renderer
+Compiling native_system
+Compiling native_geometry_shaders
+Compiling native_textures
+Compiling green_lantern_switch_main
+{"file": "<WORKSPACE>\\outputs\\internal-scale\\green_lantern_escala_interna.nro", "size": 54671557, "sha256": "07c73357cdc956d85312d5a2ab00a7ba5df1c427e6b16d8e7b881729dbde2fc0"}

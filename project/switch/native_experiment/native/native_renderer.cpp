@@ -148,6 +148,8 @@ REXCVAR_DEFINE_BOOL(nx_zero_clear_alias, true, "Graphics",
                     "Propagate proven zero depth/stencil clears to aliased color render targets");
 REXCVAR_DEFINE_BOOL(nx_edram_color_cache, true, "Switch",
                     "Preserve EDRAM words across RGBA8/RG16_SNORM color target aliases (1x)");
+REXCVAR_DEFINE_UINT32(nx_ablation_mode, 0, "Switch",
+    "Diagnostic only: 0 baseline, 1 omit draw commands after preparation, 2 half scissor width, 3 omit resolves including clears");
 REXCVAR_DEFINE_BOOL(nx_gpu_profile, true, "Switch",
                     "Log GPU time by render pass and resolve, measured on one frame in 16");
 REXCVAR_DEFINE_BOOL(nx_frame_timeline, false, "Graphics",
@@ -1503,7 +1505,11 @@ struct Renderer::Impl {
                                 &d.texture_sets[1], 0, nullptr);
     }
     if (d.flags & kDrawViewport) f.vkCmdSetViewport(c, 0, 1, &d.viewport);
-    if (d.flags & kDrawScissor) f.vkCmdSetScissor(c, 0, 1, &d.scissor);
+    if (d.flags & kDrawScissor) {
+      VkRect2D scissor = d.scissor;
+      if (REXCVAR_GET(nx_ablation_mode) == 2) scissor.extent.width /= 2;
+      f.vkCmdSetScissor(c, 0, 1, &scissor);
+    }
     if (d.flags & kDrawDepthBias) f.vkCmdSetDepthBias(c, d.bias_constant, 0.0f, d.bias_slope);
     if (d.flags & kDrawBlend) f.vkCmdSetBlendConstants(c, d.blend);
     if (d.flags & kDrawStencilCompare) {
@@ -1521,6 +1527,7 @@ struct Renderer::Impl {
     if (d.flags & kDrawIndexBuffer) {
       f.vkCmdBindIndexBuffer(c, d.index_buffer, d.index_offset, d.index_type);
     }
+    if (REXCVAR_GET(nx_ablation_mode) == 1) return; // Keep preparation and state recording.
     if (d.flags & kDrawIndexed) {
       f.vkCmdDrawIndexed(c, d.count, 1, 0, 0, 0);
     } else {
@@ -5485,6 +5492,7 @@ void Renderer::Impl::Draw(const uint32_t* immediate_indices, uint32_t immediate_
 // --- Resolves ------------------------------------------------------------------------
 
 void Renderer::Impl::Resolve() {
+  if (REXCVAR_GET(nx_ablation_mode) == 3) return; // Invalid images expected; no resolve or clear side effects.
   SectionTimer section{stats().section_ns, 5};
   PhaseTimer phases{stats().resolve_phase_ns, 0};
   const RegisterFile& r = *regs;

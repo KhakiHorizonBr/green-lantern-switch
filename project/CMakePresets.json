@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mac-arm64",
+      "displayName": "macOS Apple Silicon",
+      "description": "Native Apple Silicon build using Vulkan through MoltenVK",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/out/build/mac-arm64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "GREEN_LANTERN_GAME_DATA_DIR": "${sourceDir}/../game"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mac-arm64-release",
+      "configurePreset": "mac-arm64",
+      "configuration": "Release"
+    },
+    {
+      "name": "mac-arm64-debug",
+      "configurePreset": "mac-arm64",
+      "configuration": "Debug"
+    }
+  ]
+}

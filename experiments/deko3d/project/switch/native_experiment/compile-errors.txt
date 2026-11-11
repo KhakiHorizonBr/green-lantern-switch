@@ -1,0 +1,3 @@
+[1/3] Building CXX object CMakeFiles/green_lantern_switch_game.dir/64504036c5920a6530c2f87ead0cba41/switch/native_experiment/native/native_textures.cpp.obj
+[2/3] Building CXX object CMakeFiles/green_lantern_switch_game.dir/64504036c5920a6530c2f87ead0cba41/switch/native_experiment/native/native_renderer.cpp.obj
+[3/3] Linking CXX executable green_lantern_switch_game; Packaging green_lantern_switch_game.nro

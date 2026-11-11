@@ -1,0 +1,567 @@
+[2026-10-29 17:22:47.250] [info] [core] [t17832891553051744812] [gl-input] input_xbox_layout=true applied=true; Switch A/B/X/Y -> guest B/A/Y/X (position)
+[2026-10-29 17:22:47.259] [info] [core] [t17832891553051744812] [gl-pacing] before_present=false applied=true; vblank cap unchanged
+[2026-10-29 17:22:47.265] [info] [core] [t17832891553051744812] [gl-partial-submit] limit=0 applied=true; 0=baseline
+[2026-10-29 17:22:47.276] [info] [core] [t17832891553051744812] [gl-edram] candidate v2 enabled=true applied=true; heap unchanged; color cache requests10MiB
+[2026-10-29 17:22:47.279] [info] [core] [t17832891553051744812] [gl-stencil] candidate v1 preserve float24 stencil + packed words + known restore pass: enabled=true applied=true; heap unchanged
+[2026-10-29 17:22:47.282] [info] [core] [t17832891553051744812] Green Lantern signed resolve views: enabled=true
+[2026-10-29 17:22:47.285] [info] [core] [t17832891553051744812] Green Lantern resolve atlas assembly: enabled=true
+[2026-10-29 17:22:47.288] [info] [core] [t17832891553051744812] Green Lantern native hot-read tracking: enabled=false, applied=true
+[2026-10-29 17:22:47.291] [info] [core] [t17832891553051744812] Green Lantern adaptive memory: enabled=true, applied=true
+[2026-10-29 17:22:47.295] [info] [core] [t17832891553051744812] Green Lantern native upload stream: 160 MiB, applied=true
+[2026-10-29 17:22:47.301] [info] [core] [t17832891553051744812] Green Lantern async pipelines: enabled=false, applied=true
+[2026-10-29 17:22:47.305] [info] [core] [t17832891553051744812] Green Lantern native read-only mapped: enabled=true
+[2026-10-29 17:22:47.308] [info] [core] [t17832891553051744812] [deko] [dk] creando el dispositivo de deko3d (origen arriba a la izquierda, profundidad 0..1)
+[2026-10-29 17:22:47.315] [info] [core] [t17832891553051744812] [deko] [dk] creando la cola: graficos, ZCULL apagado
+[2026-10-29 17:22:47.332] [info] [core] [t17832891553051744812] [deko-game-v3] startup GPU checkpoints enabled; API validation enabled; Vulkan device creation bypassed
+[2026-10-29 17:22:47.344] [info] [core] [t17832891553051744812] WindowSwitch: handheld mode, display resolution 1280x720
+[2026-10-29 17:22:47.348] [info] [sys] [t17832891553051744812] Guest memory arena mapped: virtual base 0x0000004C106EF000, physical base 0x0000004D106EF000
+[2026-10-29 17:22:47.355] [info] [sys] [t17832891553051744812] Switch guest allocation: heap=physical range=0x00000000-0x00FFFFFF size=16 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-29 17:22:47.359] [info] [core] [t17832891553051744812] Switch guest backing request: window_address=0x0000004D106EF000 window_offset=0x100000000 mapping_offset=0x100000000 size=16 MiB operation=commit
+[2026-10-29 17:22:47.369] [info] [sys] [t17832891553051744812] Switch guest allocation: heap=physical range=0xC0000000-0xC0FFFFFF size=16 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-29 17:22:47.379] [info] [core] [t17832891553051744812] Switch guest backing request: window_address=0x0000004CD06EF000 window_offset=0xC0000000 mapping_offset=0x100000000 size=16 MiB operation=commit
+[2026-10-29 17:22:47.401] [info] [sys] [t17832891553051744812] Switch guest allocation: heap=physical range=0xBFCB0000-0xBFFEFFFF size=3 MiB operation=reserve committed_before=0 MiB reserved_before=0 MiB
+[2026-10-29 17:22:47.440] [warning] [sys] [t17832891553051744812] Too few processor cores - scheduling will be wonky
+[2026-10-29 17:22:47.671] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: memoria de comandos (por ranura), 12288 KiB (flags 0x9)
+[2026-10-29 17:22:47.679] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: anillo de subida (por ranura), 98304 KiB (flags 0x9)
+[2026-10-29 17:22:47.707] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: codigo de shaders, 16384 KiB (flags 0x19)
+[2026-10-29 17:22:47.718] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: descriptores de imagenes y samplers, 2080 KiB (flags 0x9)
+[2026-10-29 17:22:47.722] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: consultas de la GPU, 64 KiB (flags 0x9)
+[2026-10-29 17:22:47.726] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: trozo 0 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:47.734] [info] [core] [t17832891553051744812] [deko] [dk] nucleo listo: 3 ranuras, 32 MiB de subida, 4096 KiB de comandos y 0 KiB de lista previa por ranura, 16 MiB de codigo
+[2026-10-29 17:22:47.737] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: relocated vertex arena, 163840 KiB (flags 0x9)
+[2026-10-29 17:22:47.774] [info] [core] [t17832891553051744812] [deko] [dk] creando un bloque de memoria: EDRAM color words, 10240 KiB (flags 0x9)
+[2026-10-29 17:22:47.787] [info] [core] [t17832891553051744812] [deko-game-v3] ready: 122 shader variants; vertex arena=160 MiB upload=3x32 MiB image budget=384 MiB
+[2026-10-29 17:22:47.793] [info] [core] [t17832891553051744812] Switch native thread: using reserved stack at 0x0000004959C01000, backing=1088 KiB
+[2026-10-29 17:22:47.797] [info] [core] [t17832891553051744812] Switch native thread: created handle=0x3D01D9, usable stack=1086 KiB
+[2026-10-29 17:22:47.800] [info] [core] [t17832891553051744812] Switch native thread: using reserved stack at 0x0000004959D12000, backing=1088 KiB
+[2026-10-29 17:22:47.803] [info] [core] [t17832891553051744812] Switch native thread: created handle=0x3D81D8, usable stack=1086 KiB
+[2026-10-29 17:22:47.811] [info] [core] [t17832891553051744812] [native] Both GPU worker threads created successfully
+[2026-10-29 17:22:47.811] [info] [core] [t10871352600494578384] [native] Ring thread on core 2: result 00000000
+[2026-10-29 17:22:47.815] [info] [sys] [t17832891553051744812] Switch guest allocation: heap=xex range=0x82E00000-0x83A8FFFF size=12 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-29 17:22:47.824] [info] [core] [t17832891553051744812] Switch guest backing request: window_address=0x0000004C934EF000 window_offset=0x82E00000 mapping_offset=0x82E00000 size=12 MiB operation=commit
+[2026-10-29 17:22:47.834] [info] [core] [t17832891553051744812] Function table initialized for module: code=82140000-827758EC, image=82000000-82E00000
+[2026-10-29 17:22:47.974] [info] [sys] [t17832891553051744812] Switch guest allocation: heap=xex range=0x82000000-0x82DFFFFF size=14 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-29 17:22:47.980] [info] [core] [t17832891553051744812] Switch guest backing request: window_address=0x0000004C926EF000 window_offset=0x82000000 mapping_offset=0x82000000 size=14 MiB operation=commit
+[2026-10-29 17:22:48.198] [info] [core] [t17832891553051744812] Switch: in focus
+[2026-10-29 17:22:48.202] [info] [core] [t17832891553051744812] Initializing shader storage for title 575207E9...
+[2026-10-29 17:22:48.220] [warning] [fs] [t17015571174555928902] VFS: '\Device' -> [no device]
+[2026-10-29 17:22:48.226] [error] [fs] [t17015571174555928902] ResolvePath(\Device) failed - device not found
+[2026-10-29 17:22:48.229] [warning] [fs] [t17015571174555928902] Switch VFS open: missing parent '\Device' for '\Device\Image'
+[2026-10-29 17:22:48.232] [warning] [krnl] [t17015571174555928902] [NtCreateFile] FAILED: path='\Device\Image' -> 0xc000000f
+[2026-10-29 17:22:48.235] [warning] [krnl] [t17015571174555928902] Stub XFileFsDeviceInformation!
+[2026-10-29 17:22:48.238] [warning] [krnl] [t17015571174555928902] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-29 17:22:48.242] [warning] [krnl] [t17015571174555928902] Stub XFileFsDeviceInformation!
+[2026-10-29 17:22:48.248] [warning] [krnl] [t17015571174555928902] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-29 17:22:48.251] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C507EF000 window_offset=0x40100000 mapping_offset=0x40100000 size=1 MiB operation=commit
+[2026-10-29 17:22:48.296] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.318] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.340] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C50C0F000 window_offset=0x40520000 mapping_offset=0x40520000 size=2 MiB operation=commit
+[2026-10-29 17:22:48.439] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.451] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.477] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.489] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.501] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C50E7F000 window_offset=0x40790000 mapping_offset=0x40790000 size=2 MiB operation=commit
+[2026-10-29 17:22:48.508] [warning] [fs] [t17015571174555928902] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\x360' has no child 'eGraphicsSettings.cfg' for 'game:\gl\X360\eGraphicsSettings.cfg'
+[2026-10-29 17:22:48.515] [warning] [krnl] [t17015571174555928902] [NtCreateFile] FAILED: path='game:\gl\X360\eGraphicsSettings.cfg' -> 0xc000000f
+[2026-10-29 17:22:48.520] [info] [core] [t17015571174555928902] [native] Interrupt callback 825A08E0 (404C6D80)
+[2026-10-29 17:22:48.524] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x20000404 args_r7=0xFFFFFFFF args_r8=0x00000001
+[2026-10-29 17:22:48.527] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x20000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xA0000000-0xBFFFFFFF
+[2026-10-29 17:22:48.530] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:48.533] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D3017F000 window_offset=0x11FA90000 mapping_offset=0x11FA90000 size=2 MiB operation=commit
+[2026-10-29 17:22:48.537] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xBFA90000-0xBFC8FFFF size=2 MiB operation=commit committed_before=0 MiB reserved_before=3 MiB
+[2026-10-29 17:22:48.540] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004CD017F000 window_offset=0xBFA90000 mapping_offset=0x11FA90000 size=2 MiB operation=commit
+[2026-10-29 17:22:48.543] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xBFA90000 size=2 MiB
+[2026-10-29 17:22:48.546] [info] [core] [t17015571174555928902] [native] Ring at 1FC9B000, 8192 words
+[2026-10-29 17:22:48.556] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:48.556] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=1 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.561] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:48.564] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:48.567] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=2 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.567] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2FDE7000 window_offset=0x11F6F8000 mapping_offset=0x11F6F8000 size=3 MiB operation=commit
+[2026-10-29 17:22:48.571] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=3 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.573] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFF6F7000-0xFFA8EFFF size=3 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-29 17:22:48.577] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0FDE6000 window_offset=0xFF6F7000 mapping_offset=0x11F6F8000 size=3 MiB operation=commit
+[2026-10-29 17:22:48.577] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=4 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.580] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=5 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.580] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFF6F7000 size=3 MiB
+[2026-10-29 17:22:48.589] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=6 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.589] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00730000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:48.599] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=7 MiB adjusted=7 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:48.599] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=7 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.603] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:48.606] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=8 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.606] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2F6B7000 window_offset=0x11EFC8000 mapping_offset=0x11EFC8000 size=7 MiB operation=commit
+[2026-10-29 17:22:48.613] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=9 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.617] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=10 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.617] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFEFC7000-0xFF6F6FFF size=7 MiB operation=commit committed_before=3 MiB reserved_before=3 MiB
+[2026-10-29 17:22:48.624] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=11 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.624] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0F6B6000 window_offset=0xFEFC7000 mapping_offset=0x11EFC8000 size=7 MiB operation=commit
+[2026-10-29 17:22:48.634] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=12 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.634] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEFC7000 size=7 MiB
+[2026-10-29 17:22:48.641] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=13 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.641] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:48.649] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=14 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.649] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:48.655] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:48.655] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=15 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.658] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=16 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.658] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2F31F000 window_offset=0x11EC30000 mapping_offset=0x11EC30000 size=3 MiB operation=commit
+[2026-10-29 17:22:48.667] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=17 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.669] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFEC2F000-0xFEFC6FFF size=3 MiB operation=commit committed_before=10 MiB reserved_before=10 MiB
+[2026-10-29 17:22:48.674] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=18 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.674] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0F31E000 window_offset=0xFEC2F000 mapping_offset=0x11EC30000 size=3 MiB operation=commit
+[2026-10-29 17:22:48.677] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=19 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.677] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEC2F000 size=3 MiB
+[2026-10-29 17:22:48.685] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=20 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.685] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8215E1CC caller_callsite=0x8215E1C8 args_r3=0x00400000 args_r4=0xFFFFFFFF args_r5=0x00000020 args_r6=0x00000404 args_r7=0xFFFFFFFF args_r8=0x00000020
+[2026-10-29 17:22:48.698] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=21 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.698] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=4 MiB adjusted=4 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00000020 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:48.705] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:48.709] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=22 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.709] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2EF0F000 window_offset=0x11E820000 mapping_offset=0x11E820000 size=4 MiB operation=commit
+[2026-10-29 17:22:48.715] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=23 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.718] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFE81F000-0xFEC1EFFF size=4 MiB operation=commit committed_before=14 MiB reserved_before=14 MiB
+[2026-10-29 17:22:48.723] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=24 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.723] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0EF0E000 window_offset=0xFE81F000 mapping_offset=0x11E820000 size=4 MiB operation=commit
+[2026-10-29 17:22:48.726] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFE81F000 size=4 MiB
+[2026-10-29 17:22:48.730] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=25 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.736] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=26 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.740] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=27 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.743] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=28 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.747] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=29 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.750] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=30 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.753] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=31 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.756] [info] [core] [t10871352600494578384] [deko-startup-v3] draw=32 vs=B6C9863F710683EC ps=A4A965C189287B99
+[2026-10-29 17:22:48.761] [info] [core] [t17015571174555928902] [native] Ring at 1EC20000, 16384 words
+[2026-10-29 17:22:48.771] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.780] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:48.793] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C5108F000 window_offset=0x409A0000 mapping_offset=0x409A0000 size=5 MiB operation=commit
+[2026-10-29 17:22:50.012] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.035] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.051] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.064] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.083] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.096] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.108] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.120] [error] [krnl] [t17015571174555928902] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:50.146] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x41635848 args_r8=0x00000001
+[2026-10-29 17:22:50.152] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.156] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.160] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2E49E000 window_offset=0x11DDAF000 mapping_offset=0x11DDAF000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.165] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFDDAE000-0xFDF8DFFF size=1 MiB operation=commit committed_before=29 MiB reserved_before=29 MiB
+[2026-10-29 17:22:50.169] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0E49D000 window_offset=0xFDDAE000 mapping_offset=0x11DDAF000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.173] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDDAE000 size=1 MiB
+[2026-10-29 17:22:50.180] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416358A8 args_r8=0x00000001
+[2026-10-29 17:22:50.184] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.188] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.192] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2E2A0000 window_offset=0x11DBB1000 mapping_offset=0x11DBB1000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.197] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFDBB0000-0xFDD8FFFF size=1 MiB operation=commit committed_before=31 MiB reserved_before=31 MiB
+[2026-10-29 17:22:50.204] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0E29F000 window_offset=0xFDBB0000 mapping_offset=0x11DBB1000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.208] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDBB0000 size=1 MiB
+[2026-10-29 17:22:50.211] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416359E8 args_r8=0x00000001
+[2026-10-29 17:22:50.214] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.218] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.221] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2E0A2000 window_offset=0x11D9B3000 mapping_offset=0x11D9B3000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.230] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFD9B2000-0xFDB91FFF size=1 MiB operation=commit committed_before=33 MiB reserved_before=33 MiB
+[2026-10-29 17:22:50.234] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0E0A1000 window_offset=0xFD9B2000 mapping_offset=0x11D9B3000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.238] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD9B2000 size=1 MiB
+[2026-10-29 17:22:50.242] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C5108F000 window_offset=0x409A0000 mapping_offset=0x409A0000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.310] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:50.315] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.321] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.325] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2DE31000 window_offset=0x11D742000 mapping_offset=0x11D742000 size=2 MiB operation=commit
+[2026-10-29 17:22:50.330] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFD741000-0xFD940FFF size=2 MiB operation=commit committed_before=35 MiB reserved_before=35 MiB
+[2026-10-29 17:22:50.334] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0DE30000 window_offset=0xFD741000 mapping_offset=0x11D742000 size=2 MiB operation=commit
+[2026-10-29 17:22:50.337] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD741000 size=2 MiB
+[2026-10-29 17:22:50.342] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x01590000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:50.345] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=21 MiB adjusted=21 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.349] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.353] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2C61F000 window_offset=0x11BF30000 mapping_offset=0x11BF30000 size=21 MiB operation=commit
+[2026-10-29 17:22:50.366] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFBF2F000-0xFD4BEFFF size=21 MiB operation=commit committed_before=39 MiB reserved_before=39 MiB
+[2026-10-29 17:22:50.379] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0C61E000 window_offset=0xFBF2F000 mapping_offset=0x11BF30000 size=21 MiB operation=commit
+[2026-10-29 17:22:50.384] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBF2F000 size=21 MiB
+[2026-10-29 17:22:50.391] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD878 args_r8=0x00000001
+[2026-10-29 17:22:50.395] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.399] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.408] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2C51F000 window_offset=0x11BE30000 mapping_offset=0x11BE30000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.413] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFBE2F000-0xFBF2EFFF size=1 MiB operation=commit committed_before=61 MiB reserved_before=61 MiB
+[2026-10-29 17:22:50.417] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0C51E000 window_offset=0xFBE2F000 mapping_offset=0x11BE30000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.423] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBE2F000 size=1 MiB
+[2026-10-29 17:22:50.427] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD8A8 args_r8=0x00000001
+[2026-10-29 17:22:50.431] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.436] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.439] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2C41F000 window_offset=0x11BD30000 mapping_offset=0x11BD30000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.455] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 1 de imagenes, 20544 KiB (flags 0x28)
+[2026-10-29 17:22:50.456] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFBD2F000-0xFBE2EFFF size=1 MiB operation=commit committed_before=62 MiB reserved_before=62 MiB
+[2026-10-29 17:22:50.464] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0C41E000 window_offset=0xFBD2F000 mapping_offset=0x11BD30000 size=1 MiB operation=commit
+[2026-10-29 17:22:50.469] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=1 frame=0 draws=1 resolves=0 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:50.469] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBD2F000 size=1 MiB
+[2026-10-29 17:22:50.476] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=1 draws=1 resolves=0
+[2026-10-29 17:22:50.480] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00C00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:50.481] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=1 resolves=0
+[2026-10-29 17:22:50.485] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=12 MiB adjusted=12 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.488] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.496] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=2 frame=0 draws=1 resolves=1 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:50.496] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D2B81F000 window_offset=0x11B130000 mapping_offset=0x11B130000 size=12 MiB operation=commit
+[2026-10-29 17:22:50.506] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=2 draws=1 resolves=1
+[2026-10-29 17:22:50.513] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xFB12F000-0xFBD2EFFF size=12 MiB operation=commit committed_before=63 MiB reserved_before=63 MiB
+[2026-10-29 17:22:50.513] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=1 resolves=1
+[2026-10-29 17:22:50.517] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D0B81E000 window_offset=0xFB12F000 mapping_offset=0x11B130000 size=12 MiB operation=commit
+[2026-10-29 17:22:50.526] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFB12F000 size=12 MiB
+[2026-10-29 17:22:50.544] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: memoria de comandos (por ranura), 1536 KiB (flags 0x9)
+[2026-10-29 17:22:50.549] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: anillo de subida (por ranura), 3072 KiB (flags 0x9)
+[2026-10-29 17:22:50.557] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: codigo de shaders, 1024 KiB (flags 0x19)
+[2026-10-29 17:22:50.562] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: descriptores de imagenes y samplers, 4 KiB (flags 0x9)
+[2026-10-29 17:22:50.566] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: consultas de la GPU, 64 KiB (flags 0x9)
+[2026-10-29 17:22:50.570] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 0 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:50.578] [info] [core] [t10871352600494578384] [deko] [dk] nucleo listo: 3 ranuras, 1 MiB de subida, 512 KiB de comandos y 0 KiB de lista previa por ranura, 1 MiB de codigo
+[2026-10-29 17:22:50.582] [info] [core] [t10871352600494578384] [deko] [dk] creando la cadena de presentacion: 3 imagenes RGBA8 de 1280x720
+[2026-10-29 17:22:50.584] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: imagenes de la cadena de presentacion, 11520 KiB (flags 0x28)
+[2026-10-29 17:22:50.594] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=3 draws=1 resolves=1
+[2026-10-29 17:22:50.600] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=4 draws=1 resolves=1
+[2026-10-29 17:22:50.612] [info] [core] [t17015571174555928902] Green Lantern pool-size query: function=0x8247B930 object=0x40002B40 vtable=0x82005720 slot=196 target=0x8228ED40
+[2026-10-29 17:22:50.617] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8247B978 caller_callsite=0x8247B974 args_r3=0x02000000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x00000001 args_r8=0x82020000
+[2026-10-29 17:22:50.621] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=32 MiB adjusted=32 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.625] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.629] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D29666000 window_offset=0x118F77000 mapping_offset=0x118F77000 size=32 MiB operation=commit
+[2026-10-29 17:22:50.650] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xF8F76000-0xFAF75FFF size=32 MiB operation=commit committed_before=77 MiB reserved_before=77 MiB
+[2026-10-29 17:22:50.650] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=5 draws=1 resolves=1
+[2026-10-29 17:22:50.659] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D09665000 window_offset=0xF8F76000 mapping_offset=0x118F77000 size=32 MiB operation=commit
+[2026-10-29 17:22:50.665] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF8F76000 size=32 MiB
+[2026-10-29 17:22:50.669] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C521EF000 window_offset=0x41B00000 mapping_offset=0x41B00000 size=6 MiB operation=commit
+[2026-10-29 17:22:50.680] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00D00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x8228EDB0 args_r8=0x00000001
+[2026-10-29 17:22:50.684] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=13 MiB adjusted=13 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:50.688] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:50.700] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=6 draws=1 resolves=1
+[2026-10-29 17:22:50.822] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D28966000 window_offset=0x118277000 mapping_offset=0x118277000 size=13 MiB operation=commit
+[2026-10-29 17:22:51.493] [info] [core] [t10871352600494578384] [native] slow frame 834 ms: ring idle 40.7 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:51.499] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xF8276000-0xF8F75FFF size=13 MiB operation=commit committed_before=109 MiB reserved_before=109 MiB
+[2026-10-29 17:22:51.761] [info] [core] [t10871352600494578384] [native] slow frame 834 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:52.027] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D08965000 window_offset=0xF8276000 mapping_offset=0x118277000 size=13 MiB operation=commit
+[2026-10-29 17:22:52.033] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=7 draws=1 resolves=1
+[2026-10-29 17:22:52.429] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF8276000 size=13 MiB
+[2026-10-29 17:22:52.963] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x02300000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x82030000 args_r8=0x00000001
+[2026-10-29 17:22:52.963] [info] [core] [t10871352600494578384] [native] slow frame 1470 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:53.241] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=35 MiB adjusted=35 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:53.509] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:53.509] [info] [core] [t10871352600494578384] [native] slow frame 1470 ms: waited for the game 6.6 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:53.782] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D26666000 window_offset=0x115F77000 mapping_offset=0x115F77000 size=35 MiB operation=commit
+[2026-10-29 17:22:53.783] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=8 draws=1 resolves=1
+[2026-10-29 17:22:54.068] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xF5F76000-0xF8275FFF size=35 MiB operation=commit committed_before=122 MiB reserved_before=122 MiB
+[2026-10-29 17:22:54.587] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D06665000 window_offset=0xF5F76000 mapping_offset=0x115F77000 size=35 MiB operation=commit
+[2026-10-29 17:22:54.588] [info] [core] [t10871352600494578384] [native] slow frame 1625 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:54.858] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF5F76000 size=35 MiB
+[2026-10-29 17:22:55.125] [info] [core] [t10871352600494578384] [native] slow frame 1625 ms: waited for the game 1.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:55.393] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C527FF000 window_offset=0x42110000 mapping_offset=0x42110000 size=22 MiB operation=commit
+[2026-10-29 17:22:55.400] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=9 draws=1 resolves=1
+[2026-10-29 17:22:55.682] [info] [core] [t17015571174555928902] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0200F000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-29 17:22:56.196] [info] [krnl] [t17015571174555928902] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=32 MiB adjusted=32 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-29 17:22:56.196] [info] [core] [t10871352600494578384] [native] slow frame 1608 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:56.460] [info] [krnl] [t17015571174555928902] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-29 17:22:56.726] [info] [core] [t10871352600494578384] [native] slow frame 1608 ms: waited for the game 7.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:56.727] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D24657000 window_offset=0x113F68000 mapping_offset=0x113F68000 size=32 MiB operation=commit
+[2026-10-29 17:22:57.000] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=10 draws=1 resolves=1
+[2026-10-29 17:22:57.276] [info] [sys] [t17015571174555928902] Switch guest allocation: heap=physical range=0xF3F67000-0xF5F75FFF size=32 MiB operation=commit committed_before=157 MiB reserved_before=157 MiB
+[2026-10-29 17:22:57.598] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004D04656000 window_offset=0xF3F67000 mapping_offset=0x113F68000 size=32 MiB operation=commit
+[2026-10-29 17:22:57.598] [info] [core] [t10871352600494578384] [native] slow frame 1402 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:57.616] [info] [krnl] [t17015571174555928902] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF3F67000 size=32 MiB
+[2026-10-29 17:22:57.629] [info] [core] [t10871352600494578384] [native] slow frame 1402 ms: waited for the game 2.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:57.650] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=11 draws=1 resolves=1
+[2026-10-29 17:22:57.679] [info] [core] [t10871352600494578384] [native] slow frame 81 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:57.698] [info] [core] [t10871352600494578384] [native] slow frame 81 ms: waited for the game 4.1 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:57.717] [info] [core] [t10871352600494578384] [deko-startup-v3] submit work=12 draws=1 resolves=1
+[2026-10-29 17:22:57.745] [info] [core] [t10871352600494578384] [native] slow frame 66 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:57.760] [info] [core] [t10871352600494578384] [native] slow frame 66 ms: waited for the game 3.2 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:57.775] [info] [core] [t17015571174555928902] Switch guest backing request: window_address=0x0000004C511AF000 window_offset=0x40AC0000 mapping_offset=0x40AC0000 size=3 MiB operation=commit
+[2026-10-29 17:22:57.821] [info] [core] [t10871352600494578384] [gl-frame-distribution] swap-completion interval (not display scanout): n=11 p50=80.593 p95=1624.850 p99=1624.850 max=1624.850 ms; over33.33ms=8 over25ms=10 dropped=0
+[2026-10-29 17:22:57.864] [info] [core] [t10871352600494578384] [gl-frame-distribution] renderer wall per frame (includes tracked waits): n=11 p50=0.094 p95=0.140 p99=0.140 max=0.140 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:22:57.882] [info] [core] [t10871352600494578384] [gl-frame-distribution] allocation wall per frame (includes fences): n=11 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:22:57.897] [info] [core] [t10871352600494578384] [gl-frame-distribution] allocation fence wait per frame: n=11 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:22:57.898] [error] [krnl] [t10148325971917659752] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-29 17:22:57.917] [info] [core] [t10871352600494578384] [gl-frame-distribution] all renderer fence waits per frame: n=11 p50=0.000 p95=0.000 p99=0.000 max=0.000 ms; over33.33ms=0 over25ms=0 dropped=0
+[2026-10-29 17:22:57.932] [info] [core] [t10871352600494578384] [native] last 10 s: 19955 packets, 625 draws, 1 copies, 12 swaps, 0 waits cut short
+[2026-10-29 17:22:58.077] [info] [core] [t10871352600494578384] [native] renderer: 1 drawn, 624 skipped, 1 resolves, 0 passes, 14 submissions, 2 shaders, 0 pipelines, 0 textures (0 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 0 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-29 17:22:58.367] [info] [core] [t10871352600494578384] [native] ring thread ms per frame: state 0.00, indices 0.00, vertices 0.00, constants+textures 0.00, recording 0.00, resolves 0.00, swap 0.00
+[2026-10-29 17:22:58.641] [info] [core] [t10871352600494578384] [native] indices CPU ms per frame: begin-recording 0.000, decode 0.000, hash+lookup 0.000, allocation 0.000, conversion 0.000
+[2026-10-29 17:22:58.911] [info] [core] [t10871352600494578384] [native] resolve CPU ms each (1 resolves): decode/setup 0.000, source/import 0.000, pre-destination 0.000, destination lookup 0.000, copy/convert 0.000, clear/tail 0.000
+[2026-10-29 17:22:58.936] [info] [core] [t10871352600494578384] [native] swap CPU ms per frame: frontbuffer lookup 0.000, presenter refresh 0.000, final submit 0.000, frame bookkeeping 0.000
+[2026-10-29 17:22:58.939] [info] [core] [t10871352600494578384] [gl-allocation] ms/frame wall=0.000 fence=0.000 wall-excluding-fence=0.000; calls=0 forced_submits=0
+[2026-10-29 17:22:58.942] [info] [core] [t10871352600494578384] [gl-draw-cost] ring calls=625 us/call wall=0.000 wall-excluding-tracked-waits=0.000; recorder us/draw=0.000 (wall, not CPU scheduler time)
+[2026-10-29 17:22:58.945] [info] [core] [t10871352600494578384] [gl-descriptors] update calls=0 writes=0 ms/frame=0.000 updates/draw-call=0.000
+[2026-10-29 17:22:58.949] [info] [core] [t10871352600494578384] [native] presentation CPU ms per frame: native callback 0.000, outside callback 0.000
+[2026-10-29 17:22:58.953] [info] [core] [t10871352600494578384] [gl-vertex-window] CPU ms per frame: hash 0.000, auxiliary upload 0.000, fallback copy 0.000; bytes: cpu=0 gpu_zero=0 reused=0; shadow hash hits=0 uncached_sparse_bytes=0
+[2026-10-29 17:22:58.956] [info] [core] [t10871352600494578384] [gl-vertex-window] fallback bytes: off=0 size=0 dynamic=0 budget=0 allocation=0 changed=0 dense=0
+[2026-10-29 17:22:58.963] [info] [core] [t10871352600494578384] [native] textures: 0 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-29 17:22:58.967] [info] [core] [t10871352600494578384] [native] per frame: renderer CPU 19.6 ms, GPU 0.0 ms over 0.0 submissions (GPU time as the driver reports it)
+[2026-10-29 17:22:58.970] [info] [core] [t10871352600494578384] [native] per frame: 0 draws, 0 state rebuilds, 0 texture binding rebuilds
+[2026-10-29 17:22:58.973] [info] [core] [t10871352600494578384] [native] per frame: 0.7 waits for the game, 2.1 ms waiting
+[2026-10-29 17:22:59.005] [info] [core] [t10871352600494578384] [native] slow frames: 0 over 50 ms, 0 over 100 ms; in them 0 pipelines, 0 shaders, 0 texture uploads, 0 render targets
+[2026-10-29 17:22:59.009] [info] [core] [t10871352600494578384] [native] state changes by register (10 s): 1922:257 1924:256 2082:55 0D00:52 2208:5 2206:5 2205:5 2204:5 2180:5 2200:4 2104:4 2202:3
+[2026-10-29 17:22:59.012] [info] [core] [t10871352600494578384] [native] skipped by reason: 3:48 7:576
+[2026-10-29 17:22:59.028] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 2 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:59.053] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=15 frame=12 draws=2 resolves=1 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.056] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=2 resolves=1
+[2026-10-29 17:22:59.064] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=16 frame=12 draws=3 resolves=1 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.069] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=3 resolves=1
+[2026-10-29 17:22:59.073] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=17 frame=12 draws=3 resolves=2 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.078] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=3 resolves=2
+[2026-10-29 17:22:59.082] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=18 frame=12 draws=3 resolves=3 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.086] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=3 resolves=3
+[2026-10-29 17:22:59.091] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 3 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:59.102] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=19 frame=12 draws=3 resolves=4 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.110] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=3 resolves=4
+[2026-10-29 17:22:59.114] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=20 frame=12 draws=3 resolves=5 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.119] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=3 resolves=5
+[2026-10-29 17:22:59.123] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=21 frame=12 draws=3 resolves=6 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.132] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=3 resolves=6
+[2026-10-29 17:22:59.140] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=22 frame=12 draws=3 resolves=7 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.144] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=3 resolves=7
+[2026-10-29 17:22:59.148] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 4 de imagenes, 20544 KiB (flags 0x28)
+[2026-10-29 17:22:59.157] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=23 frame=12 draws=4 resolves=7 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.163] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=4 resolves=7
+[2026-10-29 17:22:59.167] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 5 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:59.178] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=24 frame=12 draws=5 resolves=7 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.183] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=5 resolves=7
+[2026-10-29 17:22:59.187] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=25 frame=12 draws=5 resolves=8 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.194] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=5 resolves=8
+[2026-10-29 17:22:59.197] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=26 frame=12 draws=5 resolves=9 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.202] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=5 resolves=9
+[2026-10-29 17:22:59.223] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 6 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:59.231] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 7 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:59.268] [error] [core] [t10871352600494578384] [deko-game] unsupported texture layout fetch=0 dimension=0 format=0 base=00000000
+[2026-10-29 17:22:59.276] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=27 frame=12 draws=6 resolves=9 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.282] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=6 resolves=9
+[2026-10-29 17:22:59.285] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=28 frame=12 draws=7 resolves=9 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.289] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=7 resolves=9
+[2026-10-29 17:22:59.292] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=29 frame=12 draws=7 resolves=10 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.298] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=7 resolves=10
+[2026-10-29 17:22:59.301] [info] [core] [t10871352600494578384] [deko] [dk] creando un bloque de memoria: trozo 8 de imagenes, 16384 KiB (flags 0x28)
+[2026-10-29 17:22:59.309] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=30 frame=12 draws=8 resolves=10 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.313] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=8 resolves=10
+[2026-10-29 17:22:59.316] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=31 frame=12 draws=8 resolves=11 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.321] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=8 resolves=11
+[2026-10-29 17:22:59.331] [info] [core] [t10871352600494578384] [native] slow frame 1530 ms: ring idle 20.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.334] [info] [core] [t10871352600494578384] [native] slow frame 1530 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 2 texture uploads (2 made now), 4 shaders, 0 pipelines
+[2026-10-29 17:22:59.338] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=33 frame=13 draws=9 resolves=11 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.341] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=9 resolves=11
+[2026-10-29 17:22:59.346] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=34 frame=13 draws=10 resolves=11 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.349] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=10 resolves=11
+[2026-10-29 17:22:59.356] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=35 frame=13 draws=10 resolves=12 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.363] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=10 resolves=12
+[2026-10-29 17:22:59.366] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=36 frame=13 draws=10 resolves=13 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.369] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=10 resolves=13
+[2026-10-29 17:22:59.376] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=37 frame=13 draws=11 resolves=13 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.382] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=11 resolves=13
+[2026-10-29 17:22:59.384] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=38 frame=13 draws=12 resolves=13 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.388] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=12 resolves=13
+[2026-10-29 17:22:59.390] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=39 frame=13 draws=12 resolves=14 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.393] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=12 resolves=14
+[2026-10-29 17:22:59.400] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=40 frame=13 draws=13 resolves=14 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.404] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=13 resolves=14
+[2026-10-29 17:22:59.409] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=41 frame=13 draws=13 resolves=15 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.415] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=13 resolves=15
+[2026-10-29 17:22:59.419] [info] [core] [t10871352600494578384] [native] slow frame 88 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.423] [info] [core] [t10871352600494578384] [native] slow frame 88 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:59.427] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=43 frame=14 draws=14 resolves=15 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.431] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=14 resolves=15
+[2026-10-29 17:22:59.435] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=44 frame=14 draws=15 resolves=15 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.439] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=15 resolves=15
+[2026-10-29 17:22:59.446] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=45 frame=14 draws=15 resolves=16 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.455] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=15 resolves=16
+[2026-10-29 17:22:59.459] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=46 frame=14 draws=15 resolves=17 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.463] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=15 resolves=17
+[2026-10-29 17:22:59.470] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=47 frame=14 draws=16 resolves=17 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.477] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=16 resolves=17
+[2026-10-29 17:22:59.481] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=48 frame=14 draws=17 resolves=17 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.484] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=17 resolves=17
+[2026-10-29 17:22:59.488] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=49 frame=14 draws=17 resolves=18 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.505] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=17 resolves=18
+[2026-10-29 17:22:59.510] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=50 frame=14 draws=18 resolves=18 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.514] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=18 resolves=18
+[2026-10-29 17:22:59.518] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=51 frame=14 draws=18 resolves=19 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.524] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=18 resolves=19
+[2026-10-29 17:22:59.528] [info] [core] [t10871352600494578384] [native] slow frame 109 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.536] [info] [core] [t10871352600494578384] [native] slow frame 109 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:59.539] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=53 frame=15 draws=19 resolves=19 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.543] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=19 resolves=19
+[2026-10-29 17:22:59.547] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=54 frame=15 draws=20 resolves=19 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.551] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=20 resolves=19
+[2026-10-29 17:22:59.557] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=55 frame=15 draws=20 resolves=20 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.563] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=20 resolves=20
+[2026-10-29 17:22:59.567] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=56 frame=15 draws=20 resolves=21 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.574] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=20 resolves=21
+[2026-10-29 17:22:59.580] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=57 frame=15 draws=21 resolves=21 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.586] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=21 resolves=21
+[2026-10-29 17:22:59.593] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=58 frame=15 draws=22 resolves=21 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.597] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=22 resolves=21
+[2026-10-29 17:22:59.600] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=59 frame=15 draws=22 resolves=22 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.604] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=22 resolves=22
+[2026-10-29 17:22:59.608] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=60 frame=15 draws=23 resolves=22 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.615] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=23 resolves=22
+[2026-10-29 17:22:59.618] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=61 frame=15 draws=23 resolves=23 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.624] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=23 resolves=23
+[2026-10-29 17:22:59.629] [info] [core] [t10871352600494578384] [native] slow frame 101 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.634] [info] [core] [t10871352600494578384] [native] slow frame 101 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:59.637] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=63 frame=16 draws=24 resolves=23 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.641] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=24 resolves=23
+[2026-10-29 17:22:59.649] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=64 frame=16 draws=25 resolves=23 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.653] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=25 resolves=23
+[2026-10-29 17:22:59.656] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=65 frame=16 draws=25 resolves=24 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.663] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=25 resolves=24
+[2026-10-29 17:22:59.667] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=66 frame=16 draws=25 resolves=25 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.672] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=25 resolves=25
+[2026-10-29 17:22:59.679] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=67 frame=16 draws=26 resolves=25 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.690] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=26 resolves=25
+[2026-10-29 17:22:59.695] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=68 frame=16 draws=27 resolves=25 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.702] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=27 resolves=25
+[2026-10-29 17:22:59.709] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=69 frame=16 draws=27 resolves=26 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.714] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=27 resolves=26
+[2026-10-29 17:22:59.718] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=70 frame=16 draws=28 resolves=26 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.723] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=28 resolves=26
+[2026-10-29 17:22:59.730] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=71 frame=16 draws=28 resolves=27 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.744] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=28 resolves=27
+[2026-10-29 17:22:59.750] [info] [core] [t10871352600494578384] [native] slow frame 121 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.755] [info] [core] [t10871352600494578384] [native] slow frame 121 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:59.759] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=73 frame=17 draws=29 resolves=27 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.764] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=29 resolves=27
+[2026-10-29 17:22:59.768] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=74 frame=17 draws=30 resolves=27 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.776] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=30 resolves=27
+[2026-10-29 17:22:59.781] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=75 frame=17 draws=30 resolves=28 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.795] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=30 resolves=28
+[2026-10-29 17:22:59.799] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=76 frame=17 draws=30 resolves=29 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.804] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=30 resolves=29
+[2026-10-29 17:22:59.811] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=77 frame=17 draws=31 resolves=29 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.820] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=31 resolves=29
+[2026-10-29 17:22:59.824] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=78 frame=17 draws=32 resolves=29 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.827] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=32 resolves=29
+[2026-10-29 17:22:59.831] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=79 frame=17 draws=32 resolves=30 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.836] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=32 resolves=30
+[2026-10-29 17:22:59.839] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=80 frame=17 draws=33 resolves=30 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.843] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=33 resolves=30
+[2026-10-29 17:22:59.850] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=81 frame=17 draws=33 resolves=31 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.855] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=33 resolves=31
+[2026-10-29 17:22:59.859] [info] [core] [t10871352600494578384] [native] slow frame 109 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.862] [info] [core] [t10871352600494578384] [native] slow frame 109 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:59.866] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=83 frame=18 draws=34 resolves=31 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.869] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=34 resolves=31
+[2026-10-29 17:22:59.876] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=84 frame=18 draws=35 resolves=31 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.879] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=35 resolves=31
+[2026-10-29 17:22:59.883] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=85 frame=18 draws=35 resolves=32 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.893] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=35 resolves=32
+[2026-10-29 17:22:59.898] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=86 frame=18 draws=35 resolves=33 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.901] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=35 resolves=33
+[2026-10-29 17:22:59.910] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=87 frame=18 draws=36 resolves=33 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.917] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=36 resolves=33
+[2026-10-29 17:22:59.920] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=88 frame=18 draws=37 resolves=33 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.923] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=37 resolves=33
+[2026-10-29 17:22:59.927] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=89 frame=18 draws=37 resolves=34 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:22:59.930] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=37 resolves=34
+[2026-10-29 17:22:59.934] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=90 frame=18 draws=38 resolves=34 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.937] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=38 resolves=34
+[2026-10-29 17:22:59.941] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=91 frame=18 draws=38 resolves=35 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.947] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=38 resolves=35
+[2026-10-29 17:22:59.953] [info] [core] [t10871352600494578384] [native] slow frame 93 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:22:59.955] [info] [core] [t10871352600494578384] [native] slow frame 93 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:22:59.959] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=93 frame=19 draws=39 resolves=35 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.963] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=39 resolves=35
+[2026-10-29 17:22:59.967] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=94 frame=19 draws=40 resolves=35 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:22:59.971] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=40 resolves=35
+[2026-10-29 17:22:59.976] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=95 frame=19 draws=40 resolves=36 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.982] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=40 resolves=36
+[2026-10-29 17:22:59.986] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=96 frame=19 draws=40 resolves=37 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:22:59.991] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=40 resolves=37
+[2026-10-29 17:23:00.004] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=97 frame=19 draws=41 resolves=37 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.011] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=41 resolves=37
+[2026-10-29 17:23:00.015] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=98 frame=19 draws=42 resolves=37 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.019] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=42 resolves=37
+[2026-10-29 17:23:00.023] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=99 frame=19 draws=42 resolves=38 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.034] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=42 resolves=38
+[2026-10-29 17:23:00.040] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=100 frame=19 draws=43 resolves=38 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.044] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=43 resolves=38
+[2026-10-29 17:23:00.052] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=101 frame=19 draws=43 resolves=39 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.061] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=43 resolves=39
+[2026-10-29 17:23:00.066] [info] [core] [t10871352600494578384] [native] slow frame 113 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:23:00.072] [info] [core] [t10871352600494578384] [native] slow frame 113 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:23:00.077] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=103 frame=20 draws=44 resolves=39 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.081] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=44 resolves=39
+[2026-10-29 17:23:00.088] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=104 frame=20 draws=45 resolves=39 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.093] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=45 resolves=39
+[2026-10-29 17:23:00.100] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=105 frame=20 draws=45 resolves=40 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.106] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=45 resolves=40
+[2026-10-29 17:23:00.110] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=106 frame=20 draws=45 resolves=41 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.114] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=45 resolves=41
+[2026-10-29 17:23:00.121] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=107 frame=20 draws=46 resolves=41 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.128] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=46 resolves=41
+[2026-10-29 17:23:00.132] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=108 frame=20 draws=47 resolves=41 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.135] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=47 resolves=41
+[2026-10-29 17:23:00.142] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=109 frame=20 draws=47 resolves=42 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.146] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=47 resolves=42
+[2026-10-29 17:23:00.150] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=110 frame=20 draws=48 resolves=42 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.154] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=48 resolves=42
+[2026-10-29 17:23:00.157] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=111 frame=20 draws=48 resolves=43 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.164] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=48 resolves=43
+[2026-10-29 17:23:00.172] [info] [core] [t10871352600494578384] [native] slow frame 106 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:23:00.177] [info] [core] [t10871352600494578384] [native] slow frame 106 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:23:00.183] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=113 frame=21 draws=49 resolves=43 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.188] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=49 resolves=43
+[2026-10-29 17:23:00.192] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=114 frame=21 draws=50 resolves=43 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.196] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=50 resolves=43
+[2026-10-29 17:23:00.199] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=115 frame=21 draws=50 resolves=44 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.206] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=50 resolves=44
+[2026-10-29 17:23:00.210] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=116 frame=21 draws=50 resolves=45 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.218] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=50 resolves=45
+[2026-10-29 17:23:00.229] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=117 frame=21 draws=51 resolves=45 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.235] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=51 resolves=45
+[2026-10-29 17:23:00.239] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=118 frame=21 draws=52 resolves=45 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.242] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=52 resolves=45
+[2026-10-29 17:23:00.289] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=119 frame=21 draws=52 resolves=46 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.295] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=52 resolves=46
+[2026-10-29 17:23:00.301] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=120 frame=21 draws=53 resolves=46 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.305] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=53 resolves=46
+[2026-10-29 17:23:00.309] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=121 frame=21 draws=53 resolves=47 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.315] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=53 resolves=47
+[2026-10-29 17:23:00.319] [info] [core] [t10871352600494578384] [native] slow frame 147 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:23:00.323] [info] [core] [t10871352600494578384] [native] slow frame 147 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:23:00.327] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=123 frame=22 draws=54 resolves=47 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.334] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=54 resolves=47
+[2026-10-29 17:23:00.339] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=124 frame=22 draws=55 resolves=47 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.343] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=55 resolves=47
+[2026-10-29 17:23:00.346] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=125 frame=22 draws=55 resolves=48 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.353] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=55 resolves=48
+[2026-10-29 17:23:00.359] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=126 frame=22 draws=55 resolves=49 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.363] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=55 resolves=49
+[2026-10-29 17:23:00.370] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=127 frame=22 draws=56 resolves=49 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.377] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=56 resolves=49
+[2026-10-29 17:23:00.381] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=128 frame=22 draws=57 resolves=49 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.384] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=57 resolves=49
+[2026-10-29 17:23:00.388] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=129 frame=22 draws=57 resolves=50 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.392] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=57 resolves=50
+[2026-10-29 17:23:00.400] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=130 frame=22 draws=58 resolves=50 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.405] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=58 resolves=50
+[2026-10-29 17:23:00.408] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=131 frame=22 draws=58 resolves=51 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.413] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=58 resolves=51
+[2026-10-29 17:23:00.417] [info] [core] [t10871352600494578384] [native] slow frame 97 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:23:00.422] [info] [core] [t10871352600494578384] [native] slow frame 97 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:23:00.429] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=133 frame=23 draws=59 resolves=51 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.433] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=59 resolves=51
+[2026-10-29 17:23:00.439] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=134 frame=23 draws=60 resolves=51 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.443] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=60 resolves=51
+[2026-10-29 17:23:00.446] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=135 frame=23 draws=60 resolves=52 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.452] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=60 resolves=52
+[2026-10-29 17:23:00.455] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=136 frame=23 draws=60 resolves=53 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.459] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=60 resolves=53
+[2026-10-29 17:23:00.462] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=137 frame=23 draws=61 resolves=53 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.468] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=61 resolves=53
+[2026-10-29 17:23:00.471] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=138 frame=23 draws=62 resolves=53 vs=101E86A7F525A236 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.476] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=62 resolves=53
+[2026-10-29 17:23:00.481] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=139 frame=23 draws=62 resolves=54 vs=AB1E86137A0240E8 ps=F57B6BC95EB4EC9B
+[2026-10-29 17:23:00.487] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=62 resolves=54
+[2026-10-29 17:23:00.493] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=140 frame=23 draws=63 resolves=54 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.497] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=63 resolves=54
+[2026-10-29 17:23:00.501] [info] [core] [t10871352600494578384] [deko-check-v3] before resolve work=141 frame=23 draws=63 resolves=55 vs=AB1E86137A0240E8 ps=A4A965C189287B99
+[2026-10-29 17:23:00.506] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed resolve draws=63 resolves=55
+[2026-10-29 17:23:00.510] [info] [core] [t10871352600494578384] [native] slow frame 93 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-29 17:23:00.514] [info] [core] [t10871352600494578384] [native] slow frame 93 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-29 17:23:00.516] [info] [core] [t10871352600494578384] [deko-check-v3] before draw work=143 frame=24 draws=64 resolves=55 vs=1E6883FCCDE1F688 ps=A4A965C189287B99
+[2026-10-29 17:23:00.520] [info] [core] [t10871352600494578384] [deko-check-v3] GPU completed draw draws=64 resolves=55
+[2026-10-29 17:23:00.534] [info] [core] [t10871352600494578384] [deko] [dk] error de deko3d en dkQueueSubmitCommands: resultado 1: gpfifo entry append failed, but no error was reported

@@ -1,0 +1,491 @@
+{
+  "sha256": "0ca8070072386cb4ecb6a53a34ae01c513b9a3c2c4d4994883b8691764e02747",
+  "windows": [
+    {
+      "timestamp": "2026-10-30 00:58:25.182",
+      "seconds": 10.003083,
+      "swaps": 294,
+      "fps": 29.391
+    },
+    {
+      "timestamp": "2026-10-30 00:58:35.205",
+      "seconds": 10.022993,
+      "swaps": 299,
+      "fps": 29.831
+    },
+    {
+      "timestamp": "2026-10-30 00:58:45.247",
+      "seconds": 10.041556,
+      "swaps": 124,
+      "fps": 12.349
+    },
+    {
+      "timestamp": "2026-10-30 00:58:55.311",
+      "seconds": 10.064432,
+      "swaps": 127,
+      "fps": 12.619
+    },
+    {
+      "timestamp": "2026-10-30 00:59:05.378",
+      "seconds": 10.066899,
+      "swaps": 127,
+      "fps": 12.616
+    },
+    {
+      "timestamp": "2026-10-30 00:59:15.404",
+      "seconds": 10.025673,
+      "swaps": 122,
+      "fps": 12.169
+    },
+    {
+      "timestamp": "2026-10-30 00:59:25.438",
+      "seconds": 10.033995,
+      "swaps": 160,
+      "fps": 15.946
+    },
+    {
+      "timestamp": "2026-10-30 00:59:35.445",
+      "seconds": 10.007214,
+      "swaps": 245,
+      "fps": 24.482
+    },
+    {
+      "timestamp": "2026-10-30 00:59:45.464",
+      "seconds": 10.019514,
+      "swaps": 245,
+      "fps": 24.452
+    },
+    {
+      "timestamp": "2026-10-30 00:59:55.494",
+      "seconds": 10.029593,
+      "swaps": 192,
+      "fps": 19.143
+    },
+    {
+      "timestamp": "2026-10-30 01:00:05.577",
+      "seconds": 10.083191,
+      "swaps": 85,
+      "fps": 8.43
+    },
+    {
+      "timestamp": "2026-10-30 01:00:15.673",
+      "seconds": 10.096098,
+      "swaps": 86,
+      "fps": 8.518
+    },
+    {
+      "timestamp": "2026-10-30 01:00:25.748",
+      "seconds": 10.074466,
+      "swaps": 79,
+      "fps": 7.842
+    },
+    {
+      "timestamp": "2026-10-30 01:00:35.833",
+      "seconds": 10.08537,
+      "swaps": 78,
+      "fps": 7.734
+    },
+    {
+      "timestamp": "2026-10-30 01:00:45.892",
+      "seconds": 10.059226,
+      "swaps": 77,
+      "fps": 7.655
+    },
+    {
+      "timestamp": "2026-10-30 01:00:56.054",
+      "seconds": 10.161672,
+      "swaps": 73,
+      "fps": 7.184
+    },
+    {
+      "timestamp": "2026-10-30 01:01:06.073",
+      "seconds": 10.019502,
+      "swaps": 81,
+      "fps": 8.084
+    },
+    {
+      "timestamp": "2026-10-30 01:01:16.192",
+      "seconds": 10.118481,
+      "swaps": 85,
+      "fps": 8.4
+    },
+    {
+      "timestamp": "2026-10-30 01:01:26.253",
+      "seconds": 10.061327,
+      "swaps": 84,
+      "fps": 8.349
+    },
+    {
+      "timestamp": "2026-10-30 01:01:36.284",
+      "seconds": 10.031131,
+      "swaps": 85,
+      "fps": 8.474
+    },
+    {
+      "timestamp": "2026-10-30 01:01:46.287",
+      "seconds": 10.002994,
+      "swaps": 85,
+      "fps": 8.497
+    },
+    {
+      "timestamp": "2026-10-30 01:01:56.331",
+      "seconds": 10.043591,
+      "swaps": 82,
+      "fps": 8.164
+    },
+    {
+      "timestamp": "2026-10-30 01:02:06.344",
+      "seconds": 10.013295,
+      "swaps": 79,
+      "fps": 7.89
+    },
+    {
+      "timestamp": "2026-10-30 01:02:16.379",
+      "seconds": 10.034938,
+      "swaps": 64,
+      "fps": 6.378
+    },
+    {
+      "timestamp": "2026-10-30 01:02:27.287",
+      "seconds": 10.907733,
+      "swaps": 32,
+      "fps": 2.934
+    },
+    {
+      "timestamp": "2026-10-30 01:02:37.356",
+      "seconds": 10.069454,
+      "swaps": 71,
+      "fps": 7.051
+    },
+    {
+      "timestamp": "2026-10-30 01:02:47.393",
+      "seconds": 10.036617,
+      "swaps": 102,
+      "fps": 10.163
+    }
+  ],
+  "clocks": [
+    {
+      "timestamp": "2026-10-30 00:58:07.861",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 307200000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:58:15.168",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:58:25.179",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:58:35.202",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:58:45.239",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:58:55.303",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:59:05.370",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:59:15.393",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:59:25.433",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:59:35.437",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:59:45.452",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 00:59:55.486",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:00:05.569",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:00:15.669",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:00:25.742",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:00:35.825",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:00:45.884",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:00:56.046",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:01:06.069",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:01:16.186",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:01:26.248",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:01:36.276",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:01:46.283",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:01:56.323",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:02:06.337",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:02:16.374",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:02:27.280",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:02:37.350",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    },
+    {
+      "timestamp": "2026-10-30 01:02:47.387",
+      "operation_mode": 0,
+      "performance_mode": 0,
+      "cpu_hz": 1020000000,
+      "cpu_rc": "00000000",
+      "gpu_hz": 460800000,
+      "gpu_rc": "00000000",
+      "ram_hz": 1331200000,
+      "ram_rc": "00000000"
+    }
+  ],
+  "ablation_mode": 0,
+  "partial_submit_draws": 0,
+  "warning": "Log timestamps only; scene identity is not recorded. Counts observe host swap completion, not panel scanout. No shutdown marker in supplied tail."
+}

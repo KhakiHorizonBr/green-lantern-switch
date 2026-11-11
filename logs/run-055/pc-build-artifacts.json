@@ -1,0 +1,32 @@
+[
+  {
+    "path": "<WORKSPACE>\\work\\green-lantern-360\\project\\out\\build\\win-amd64-vulkan\\green_lantern_vulkan.exe",
+    "bytes": 40286720,
+    "sha256": "BA6428278B078A8316F103E3EA98B02CBCB2049CEAB0B0F73B1AEB6CC98436CA"
+  },
+  {
+    "path": "<WORKSPACE>\\work\\green-lantern-360\\project\\out\\build\\win-amd64-vulkan\\rexgpu-xenos.dll",
+    "bytes": 4338176,
+    "sha256": "76B6A30E19CE9CFBFFD35EEFECD567682AD292A1AD49ADF09C181289C727B1B0"
+  },
+  {
+    "path": "<WORKSPACE>\\work\\green-lantern-360\\project\\out\\build\\win-amd64-vulkan\\rexruntime.dll",
+    "bytes": 10550784,
+    "sha256": "778C8DC0D5911DF6E0F36DC95B87F53BBCE642DA5AB07ABCEBCB8632AB7ABE19"
+  },
+  {
+    "path": "<WORKSPACE>\\work\\green-lantern-360\\project\\out\\build\\win-amd64-d3d12-compare\\green_lantern_d3d12_compare.exe",
+    "bytes": 40286720,
+    "sha256": "C2331ABC51DB5E0ACBBB103444191FA88E02BD01860FA231FF6774F92018794F"
+  },
+  {
+    "path": "<WORKSPACE>\\work\\green-lantern-360\\project\\out\\build\\win-amd64-d3d12-compare\\rexgpu-xenos.dll",
+    "bytes": 2548224,
+    "sha256": "9E983B295F5A443E5D3306DD8C97CE472B36BD907F2A61B10E129F21F5E40C40"
+  },
+  {
+    "path": "<WORKSPACE>\\work\\green-lantern-360\\project\\out\\build\\win-amd64-d3d12-compare\\rexruntime.dll",
+    "bytes": 9888768,
+    "sha256": "426D86BFE80C6F7F072D2F267B689493DD6CF82593721F3718397BBF460E7172"
+  }
+]

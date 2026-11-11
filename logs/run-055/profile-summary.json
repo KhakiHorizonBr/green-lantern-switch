@@ -1,0 +1,2332 @@
+{
+  "atlas_logged_layouts": {
+    "1B130000 2048x3072 pitch=2048 vk=70 fragments=3": 16
+  },
+  "rejected_descriptor_examples": [
+    {
+      "type": 0,
+      "words": "00000000 00000000 00000000 01000000 00000000 00000018"
+    },
+    {
+      "type": 0,
+      "words": "810048FC 18EC6052 0003E01F 06A80D10 00000D43 18EC8A18"
+    },
+    {
+      "type": 0,
+      "words": "840000FC 13EDC054 003FE1FF 07280D10 00000C03 00000218"
+    },
+    {
+      "type": 0,
+      "words": "8A004800 1EC30036 0059E4FF 01000C14 00000000 00000218"
+    },
+    {
+      "type": 0,
+      "words": "880000FC 11A2E054 003FE3FF 06A80D10 00000E83 11AAEA18"
+    }
+  ],
+  "last_fetch_counters": [
+    "invalid_texture=1984 invalid_vertex=0 vertex=0 unsupported_format=0 pending=236"
+  ],
+  "sampling_active": true,
+  "intervals": [
+    {
+      "header": "0.0 s | modo: arranque | juego 0.0 fps | CPU total 0% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 0 | invitado 308/235 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 0 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": []
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 29.6 fps | CPU total 212% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 10 | invitado 328/274 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9587 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 51.4,
+          "top_pc_samples": [
+            {
+              "sample_percent": 44.2,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 5.0,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.7,
+              "offset": "0x813680",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x813660",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1b6b5dc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0xfa3b30",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0xfa3afc",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7712,
+          "name": "RndMoviePlayerT",
+          "cpu_percent": 47.3,
+          "top_pc_samples": [
+            {
+              "sample_percent": 39.2,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 8.8,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 5.8,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1ea4004",
+              "function": "svcArbitrateUnlock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:167"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea4014",
+              "function": "svcSignalProcessWideKey",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:177"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x906a84",
+              "function": "sub_8263D000",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0xe4da4",
+              "function": "rex::thread::atomic_dec(int volatile*)",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x110da1c",
+              "function": "sub_82639458",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7706,
+          "name": "XThread4D20ADC0",
+          "cpu_percent": 38.4,
+          "top_pc_samples": [
+            {
+              "sample_percent": 54.2,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 5.8,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea4014",
+              "function": "svcSignalProcessWideKey",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:177"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea4004",
+              "function": "svcArbitrateUnlock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:167"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x13e9978",
+              "function": "sub_827729E8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x109d0fc",
+              "function": "__imp__sub_82772318",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1339cfc",
+              "function": "__imp__sub_827737D8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x13394f4",
+              "function": "__imp__sub_827737D8",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7707,
+          "name": "XThread4D1F91A0",
+          "cpu_percent": 37.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 53.7,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 8.5,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 2.7,
+              "offset": "0x1ea4004",
+              "function": "svcArbitrateUnlock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:167"
+            },
+            {
+              "sample_percent": 1.2,
+              "offset": "0x1ea4014",
+              "function": "svcSignalProcessWideKey",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:177"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x683078",
+              "function": "__imp__sub_82774548",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x109c4e0",
+              "function": "__imp__sub_82772318",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x110e99c",
+              "function": "sub_82639458",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x120abfc",
+              "function": "__imp__sub_827742A0",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 10.1,
+          "top_pc_samples": [
+            {
+              "sample_percent": 88.1,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 5.0,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1d84ba4",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1d84a9c",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x18c8c98",
+              "function": "sub_821775B8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1ea40c8",
+              "function": "svcMapProcessMemory",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:720"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1d84b54",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7702,
+          "name": "XThread4CDB3880",
+          "cpu_percent": 6.5,
+          "top_pc_samples": [
+            {
+              "sample_percent": 91.5,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 2.7,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x12b17d0",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x636c80",
+              "function": "__imp__sub_8259F010",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1720",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b172c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b174c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b182c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 5.5,
+          "top_pc_samples": [
+            {
+              "sample_percent": 84.2,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 6.5,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 3.5,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1f00ebc",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x25cbf50",
+              "function": "memcpy",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1787e0",
+              "function": "rex::ui::vulkan::VulkanSubmissionTracker::AcquireFenceToAdvanceSubmission()",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1f0106c",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1f0104c",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 13.0 fps | CPU total 164% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 8 | invitado 328/323 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9345 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 99.1,
+          "top_pc_samples": [
+            {
+              "sample_percent": 6.4,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 5.2,
+              "offset": "0x1b6b5dc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.9,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.5,
+              "offset": "0x813680",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.1,
+              "offset": "0x1a79ec8",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0xfa3a60",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0xfa3aa8",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0xfa3984",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 19.9,
+          "top_pc_samples": [
+            {
+              "sample_percent": 61.4,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 15.0,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x25d7204",
+              "function": "memset",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea3e84",
+              "function": "armDCacheClean_L0",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/arm/cache.s:58"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x25fcce0",
+              "function": "__libc_lock_acquire_recursive",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x25e2f2c",
+              "function": "_free_r",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 14.0,
+          "top_pc_samples": [
+            {
+              "sample_percent": 85.3,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0xe3ae00",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0xe3ae08",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0xe3ae14",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1db0c6c",
+              "function": "sub_823C5F40",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1da0ae8",
+              "function": "sub_82221C30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1790ff4",
+              "function": "sub_823A8728",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7717,
+          "name": "XThread4D89FAA0",
+          "cpu_percent": 9.3,
+          "top_pc_samples": [
+            {
+              "sample_percent": 91.4,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1ea3f24",
+              "function": "svcQueryMemory",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:44"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8a37c",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8e0c4",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8d288",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8c438",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8c198",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8b0f8",
+              "function": "sub_82731878",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 18.3 fps | CPU total 168% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 0 | invitado 329/324 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9312 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 95.7,
+          "top_pc_samples": [
+            {
+              "sample_percent": 6.4,
+              "offset": "0x1a79ec8",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.5,
+              "offset": "0x8136a4",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.1,
+              "offset": "0x1b6b5dc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x813680",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x813660",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7702,
+          "name": "XThread4CDB3880",
+          "cpu_percent": 15.7,
+          "top_pc_samples": [
+            {
+              "sample_percent": 80.5,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 5.3,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x12b1ac8",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x12b17ec",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b2224",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1ab8",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1c10",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1c84",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 15.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 80.8,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 2.3,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0xe3ae14",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x11e6cc0",
+              "function": "__imp__sub_823849B8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0xe3ae20",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0xe3ae00",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1d8417c",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x140a154",
+              "function": "__imp__sub_8247F420",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 14.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 63.5,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 14.3,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 8.6,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x25cbf9c",
+              "function": "memcpy",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1e21138",
+              "function": "__wrap_svcSleepThread",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0xe6fe0",
+              "function": "rex::bit_scan_forward(unsigned int, unsigned int*)",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7717,
+          "name": "XThread4D89FAA0",
+          "cpu_percent": 6.9,
+          "top_pc_samples": [
+            {
+              "sample_percent": 92.1,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea3f24",
+              "function": "svcQueryMemory",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:44"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8b068",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1e25d40",
+              "function": "GreenLanternTraceVector",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1ce6870",
+              "function": "sub_8271C1F8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1caa638",
+              "function": "__imp__sub_82719B80",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1ca9f5c",
+              "function": "__imp__sub_82719B80",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1ca9d58",
+              "function": "__imp__sub_82719B80",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 28.9 fps | CPU total 190% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 3 | invitado 333/328 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9340 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 96.8,
+          "top_pc_samples": [
+            {
+              "sample_percent": 6.0,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 5.6,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.1,
+              "offset": "0x8136a4",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.7,
+              "offset": "0x813660",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0xfa39d0",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0xfa3a60",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x813680",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7702,
+          "name": "XThread4CDB3880",
+          "cpu_percent": 46.4,
+          "top_pc_samples": [
+            {
+              "sample_percent": 38.6,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 14.6,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 3.7,
+              "offset": "0x12b1ac8",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x12b1b1c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x12b16a0",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x12b16ac",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x12b1c10",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x12b172c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 18.8,
+          "top_pc_samples": [
+            {
+              "sample_percent": 72.3,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1db0c6c",
+              "function": "sub_823C5F40",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1db0c3c",
+              "function": "sub_823C5F40",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0xeac71c",
+              "function": "__imp__sub_82384F50",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1d77edc",
+              "function": "__imp__sub_8242EB40",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x10b50d0",
+              "function": "__imp__sub_823C5FF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x19be6c8",
+              "function": "sub_824F3878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1aa19b0",
+              "function": "sub_8236E6B8",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 9.1,
+          "top_pc_samples": [
+            {
+              "sample_percent": 68.5,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 13.9,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 5.6,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea4014",
+              "function": "svcSignalProcessWideKey",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:177"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x2183984",
+              "function": "nvk_descriptor_state_fini",
+              "source": ":?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x211c774",
+              "function": "vkCmdEndRendering",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 28.7 fps | CPU total 198% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 17 | invitado 404/400 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9335 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 92.8,
+          "top_pc_samples": [
+            {
+              "sample_percent": 6.0,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.9,
+              "offset": "0x1a79ec8",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.9,
+              "offset": "0x1b6b5dc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 4.9,
+              "offset": "0x8136a4",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.8,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 3.8,
+              "offset": "0x813680",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.3,
+              "offset": "0x813660",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7702,
+          "name": "XThread4CDB3880",
+          "cpu_percent": 55.7,
+          "top_pc_samples": [
+            {
+              "sample_percent": 30.0,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 18.4,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0x12b16ac",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0x12b177c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0x12b172c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0x12b1c10",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x12b1cd8",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x12b1718",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 17.1,
+          "top_pc_samples": [
+            {
+              "sample_percent": 74.9,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 2.2,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x11e6cc0",
+              "function": "__imp__sub_823849B8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea4004",
+              "function": "svcArbitrateUnlock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:167"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x12618d8",
+              "function": "__imp__sub_823C05B0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1db0c70",
+              "function": "sub_823C5F40",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x15ce408",
+              "function": "sub_826AAB78",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0xeae774",
+              "function": "__imp__sub_82384F50",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 8.9,
+          "top_pc_samples": [
+            {
+              "sample_percent": 60.7,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 22.1,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 5.2,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x25ee240",
+              "function": "__malloc_update_mallinfo",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea4014",
+              "function": "svcSignalProcessWideKey",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:177"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1e30bac",
+              "function": "green_lantern::native::(anonymous namespace)::NativeGraphicsSystem::RingLoop() [clone .isra.0]",
+              "source": "native_system.cpp:?"
+            }
+          ]
+        },
+        {
+          "tid": 7703,
+          "name": "XThread4CFB8000",
+          "cpu_percent": 6.4,
+          "top_pc_samples": [
+            {
+              "sample_percent": 91.0,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1d84ec8",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1d84f54",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1d84ebc",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1d84f3c",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1d84f44",
+              "function": "__imp__sub_82574600",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0xe7720",
+              "function": "rex::thread::PosixEvent::Reset()",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 17.2 fps | CPU total 236% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 19 | invitado 419/541 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9289 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 89.3,
+          "top_pc_samples": [
+            {
+              "sample_percent": 5.6,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 5.3,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 4.9,
+              "offset": "0x1a79ec8",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x1b6b5dc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0x1b6b5cc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.3,
+              "offset": "0xfa3a60",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.3,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0xfa3a04",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 31.7,
+          "top_pc_samples": [
+            {
+              "sample_percent": 51.7,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 9.4,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 6.0,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x25cbf9c",
+              "function": "memcpy",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0x1f00ebc",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1e30524",
+              "function": "green_lantern::native::(anonymous namespace)::NativeGraphicsSystem::Type3Packet(green_lantern::native::(anonymous namespace)::Reader&, unsigned int, unsigned int, int)",
+              "source": "native_system.cpp:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1f00e88",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            }
+          ]
+        },
+        {
+          "tid": 7718,
+          "name": "XThread4D85E8C0",
+          "cpu_percent": 23.1,
+          "top_pc_samples": [
+            {
+              "sample_percent": 54.0,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 12.8,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 9.1,
+              "offset": "0x1ea3f24",
+              "function": "svcQueryMemory",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:44"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8c544",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8a3f4",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8c2fc",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8bdc8",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8bc94",
+              "function": "sub_82731878",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7717,
+          "name": "XThread4D89FAA0",
+          "cpu_percent": 23.0,
+          "top_pc_samples": [
+            {
+              "sample_percent": 63.0,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 13.7,
+              "offset": "0x1ea3f24",
+              "function": "svcQueryMemory",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:44"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1a8a1e0",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1a8a184",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1a8a338",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1ce5db4",
+              "function": "sub_8271C1F8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8ce04",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8cfbc",
+              "function": "sub_82731878",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 21.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 70.6,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0xe3ae14",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0xf7a3d0",
+              "function": "__imp__sub_826FAEA8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0xe3ae08",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x15bd8e0",
+              "function": "__imp__sub_82500370",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1089d20",
+              "function": "__imp__sub_82579EE8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1312ab0",
+              "function": "sub_8235F210",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7716,
+          "name": "XThread555A05C0",
+          "cpu_percent": 20.5,
+          "top_pc_samples": [
+            {
+              "sample_percent": 73.3,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1594508",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x15945c4",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1594e28",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x15952dc",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1594504",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1e14564",
+              "function": "__imp__sub_826ABB68",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7702,
+          "name": "XThread4CDB3880",
+          "cpu_percent": 8.5,
+          "top_pc_samples": [
+            {
+              "sample_percent": 90.9,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b17ec",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1e7c",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1cd8",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1c10",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1b30",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x12b1b14",
+              "function": "sub_8259EAC0",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 9.4 fps | CPU total 212% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 1 | invitado 419/543 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9326 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 92.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 6.0,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.8,
+              "offset": "0x1a79ec8",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x813660",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0xfa3a08",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.3,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 2.3,
+              "offset": "0xfa3a60",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1b6b5dc",
+              "function": "__imp____savegprlr_29",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7716,
+          "name": "XThread555A05C0",
+          "cpu_percent": 29.8,
+          "top_pc_samples": [
+            {
+              "sample_percent": 66.5,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x15951b8",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x15950c0",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x15942ec",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1594f4c",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x15954b8",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x159563c",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 29.8,
+          "top_pc_samples": [
+            {
+              "sample_percent": 68.9,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1f00e9c",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1f00e88",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x25cbf9c",
+              "function": "memcpy",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1f00f0c",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 25.0,
+          "top_pc_samples": [
+            {
+              "sample_percent": 69.3,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 4.5,
+              "offset": "0xe3ae14",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0xe3ae08",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0xe3ae40",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x12c3f6c",
+              "function": "sub_8215DDE0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0xe3ae20",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0xf7a418",
+              "function": "__imp__sub_826FAEA8",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7717,
+          "name": "XThread4D89FAA0",
+          "cpu_percent": 21.3,
+          "top_pc_samples": [
+            {
+              "sample_percent": 78.0,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 5.7,
+              "offset": "0x1ea3f24",
+              "function": "svcQueryMemory",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:44"
+            },
+            {
+              "sample_percent": 0.8,
+              "offset": "0x1a8a528",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8aa50",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8a590",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8b23c",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8b354",
+              "function": "sub_82731878",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1a8b6b0",
+              "function": "sub_82731878",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "10.0 s | modo: normal | juego 8.9 fps | CPU total 177% (400% = 4 nucleos) | fallos/s: lectura emulada 0, paginas calientes liberadas 0, no liberadas 0, manejador SDK 0, reintento emulado 0, SEH 0, fisica confirmada 0, vistas 0 | invitado 419/543 MB (respaldo/mapeado) | limite de mapeo 0/0 MB, proceso 2001/3189 MB | muestras 9340 | vigilancia: desmapeo (cada lectura falla) | samplers: 0 nuevos/s, 0 parones/s",
+      "threads": [
+        {
+          "tid": 7711,
+          "name": "eGraphicsRender",
+          "cpu_percent": 96.7,
+          "top_pc_samples": [
+            {
+              "sample_percent": 5.2,
+              "offset": "0x1a79edc",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.7,
+              "offset": "0x1a79ec8",
+              "function": "sub_825863D0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x8136a4",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x813680",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.4,
+              "offset": "0x1bdcdfc",
+              "function": "__imp____restgprlr_29",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 3.0,
+              "offset": "0x813660",
+              "function": "__imp__sub_825A0D08",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0xfa3a60",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0xfa3afc",
+              "function": "sub_8259FC30",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7698,
+          "name": "GPU ring native",
+          "cpu_percent": 23.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 73.4,
+              "offset": "0x1ea3fe4",
+              "function": "svcWaitSynchronization",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:150"
+            },
+            {
+              "sample_percent": 3.7,
+              "offset": "0x1ea4030",
+              "function": "svcSendSyncRequest",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:200"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x1f00e9c",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 1.5,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1f0106c",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1f00ee4",
+              "function": "XXH3_hashLong_64b_default.constprop.0",
+              "source": "xxhash.c:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1e7a99c",
+              "function": "green_lantern::native::TextureCache::GetViewUncached(rex::graphics::xenos::xe_gpu_texture_fetch_t const&, rex::graphics::xenos::FetchOpDimension, bool, green_lantern::native::UploadTarget&, VkImageView_T*)",
+              "source": "??:?"
+            }
+          ]
+        },
+        {
+          "tid": 7716,
+          "name": "XThread555A05C0",
+          "cpu_percent": 22.3,
+          "top_pc_samples": [
+            {
+              "sample_percent": 77.5,
+              "offset": "0x1ea3f60",
+              "function": "svcSleepThread",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:74"
+            },
+            {
+              "sample_percent": 2.6,
+              "offset": "0x15950c0",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0x15951b8",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0x1594fc8",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1593fb8",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x15950c4",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x159532c",
+              "function": "sub_82712CF8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.4,
+              "offset": "0x1ea40f4",
+              "function": "__aarch64_read_tp",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/runtime/readtp.s:8"
+            }
+          ]
+        },
+        {
+          "tid": 7700,
+          "name": "Main Thread (F8",
+          "cpu_percent": 21.6,
+          "top_pc_samples": [
+            {
+              "sample_percent": 73.0,
+              "offset": "0x1ea400c",
+              "function": "svcWaitProcessWideKeyAtomic",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:172"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0xe3ae08",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.9,
+              "offset": "0xe3ae14",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 1.1,
+              "offset": "0xe3ae00",
+              "function": "sub_82402E38",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x1ea3ffc",
+              "function": "svcArbitrateLock",
+              "source": "/home/davem/projects/devkitpro/pacman-packages/libnx/src/libnx-4.12.0/nx/source/kernel/svc.s:162"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x11e6cc0",
+              "function": "__imp__sub_823849B8",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x12618d8",
+              "function": "__imp__sub_823C05B0",
+              "source": "??:?"
+            },
+            {
+              "sample_percent": 0.7,
+              "offset": "0x12c3f60",
+              "function": "sub_8215DDE0",
+              "source": "??:?"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

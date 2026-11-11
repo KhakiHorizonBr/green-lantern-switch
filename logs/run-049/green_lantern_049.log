@@ -1,0 +1,884 @@
+[2026-10-15 17:04:17.229] [info] [core] [t5526974429679110087] Green Lantern native hot-read tracking: enabled=false, applied=true
+[2026-10-15 17:04:17.234] [info] [core] [t5526974429679110087] Green Lantern native upload stream: 96 MiB, applied=true
+[2026-10-15 17:04:17.237] [info] [core] [t5526974429679110087] Green Lantern async pipelines: enabled=false, applied=true
+[2026-10-15 17:04:17.239] [info] [core] [t5526974429679110087] Green Lantern native read-only mapped: enabled=true
+[2026-10-15 17:04:17.244] [info] [core] [t5526974429679110087] Vulkan instance API version 1.4.354. Enabled layers and extensions:
+[2026-10-15 17:04:17.248] [info] [core] [t5526974429679110087] * VK_KHR_surface
+[2026-10-15 17:04:17.250] [info] [core] [t5526974429679110087] * VK_EXT_debug_utils
+[2026-10-15 17:04:17.252] [info] [core] [t5526974429679110087] * VK_NN_vi_surface
+[2026-10-15 17:04:17.269] [warning] [core] [t5526974429679110087] Available Vulkan physical devices (use the 'vulkan_device' configuration variable to force a specific device):
+[2026-10-15 17:04:17.271] [warning] [core] [t5526974429679110087] * 0: NVIDIA Tegra X1 (GM20B) (NVK GM20B)
+[2026-10-15 17:04:17.274] [info] [core] [t5526974429679110087] Vulkan device 'NVIDIA Tegra X1 (GM20B) (NVK GM20B)': API 1.4.354, vendor 0x10DE, device 0x0FE0, driver version 0x6802003
+[2026-10-15 17:04:17.277] [info] [core] [t5526974429679110087] Enabled Vulkan device extensions:
+[2026-10-15 17:04:17.281] [info] [core] [t5526974429679110087] * VK_KHR_swapchain
+[2026-10-15 17:04:17.283] [info] [core] [t5526974429679110087] * VK_EXT_custom_border_color
+[2026-10-15 17:04:17.286] [info] [core] [t5526974429679110087] * VK_EXT_fragment_shader_interlock
+[2026-10-15 17:04:17.289] [info] [core] [t5526974429679110087] * VK_EXT_memory_budget
+[2026-10-15 17:04:17.297] [info] [core] [t5526974429679110087] * VK_EXT_non_seamless_cube_map
+[2026-10-15 17:04:17.300] [info] [core] [t5526974429679110087] * VK_EXT_robustness2
+[2026-10-15 17:04:17.303] [info] [core] [t5526974429679110087] Vulkan device properties and enabled features:
+[2026-10-15 17:04:17.306] [info] [core] [t5526974429679110087] * driverID: MesaNvk
+[2026-10-15 17:04:17.309] [info] [core] [t5526974429679110087] * driverName: NVK
+[2026-10-15 17:04:17.312] [info] [core] [t5526974429679110087] * driverInfo: Mesa 26.2.3 (git-d4a00ea0ab)
+[2026-10-15 17:04:17.315] [info] [core] [t5526974429679110087] * conformanceVersion: 0.0.0.0
+[2026-10-15 17:04:17.318] [info] [core] [t5526974429679110087] * timestampPeriod: 1
+[2026-10-15 17:04:17.321] [info] [core] [t5526974429679110087] * maxImageDimension2D: 16384
+[2026-10-15 17:04:17.324] [info] [core] [t5526974429679110087] * maxImageDimension3D: 16384
+[2026-10-15 17:04:17.327] [info] [core] [t5526974429679110087] * maxImageDimensionCube: 32768
+[2026-10-15 17:04:17.330] [info] [core] [t5526974429679110087] * maxImageArrayLayers: 2048
+[2026-10-15 17:04:17.333] [info] [core] [t5526974429679110087] * maxStorageBufferRange: 4294967295
+[2026-10-15 17:04:17.336] [info] [core] [t5526974429679110087] * maxSamplerAllocationCount: 4000
+[2026-10-15 17:04:17.339] [info] [core] [t5526974429679110087] * maxPerStageDescriptorSamplers: 1048576
+[2026-10-15 17:04:17.342] [info] [core] [t5526974429679110087] * maxPerStageDescriptorStorageBuffers: 1048576
+[2026-10-15 17:04:17.345] [info] [core] [t5526974429679110087] * maxPerStageDescriptorSampledImages: 1048576
+[2026-10-15 17:04:17.348] [info] [core] [t5526974429679110087] * maxPerStageResources: 4294967295
+[2026-10-15 17:04:17.351] [info] [core] [t5526974429679110087] * maxVertexOutputComponents: 128
+[2026-10-15 17:04:17.354] [info] [core] [t5526974429679110087] * maxTessellationEvaluationOutputComponents: 128
+[2026-10-15 17:04:17.357] [info] [core] [t5526974429679110087] * maxGeometryInputComponents: 128
+[2026-10-15 17:04:17.360] [info] [core] [t5526974429679110087] * maxGeometryOutputComponents: 128
+[2026-10-15 17:04:17.363] [info] [core] [t5526974429679110087] * maxFragmentInputComponents: 128
+[2026-10-15 17:04:17.366] [info] [core] [t5526974429679110087] * maxFragmentCombinedOutputResources: 1048584
+[2026-10-15 17:04:17.369] [info] [core] [t5526974429679110087] * maxSamplerAnisotropy: 16
+[2026-10-15 17:04:17.372] [info] [core] [t5526974429679110087] * maxViewportDimensions[0]: 32768
+[2026-10-15 17:04:17.382] [info] [core] [t5526974429679110087] * maxViewportDimensions[1]: 32768
+[2026-10-15 17:04:17.385] [info] [core] [t5526974429679110087] * minUniformBufferOffsetAlignment: 256
+[2026-10-15 17:04:17.388] [info] [core] [t5526974429679110087] * minStorageBufferOffsetAlignment: 16
+[2026-10-15 17:04:17.391] [info] [core] [t5526974429679110087] * maxFramebufferWidth: 16384
+[2026-10-15 17:04:17.393] [info] [core] [t5526974429679110087] * maxFramebufferHeight: 16384
+[2026-10-15 17:04:17.396] [info] [core] [t5526974429679110087] * framebufferColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.398] [info] [core] [t5526974429679110087] * framebufferDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.400] [info] [core] [t5526974429679110087] * framebufferStencilSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.403] [info] [core] [t5526974429679110087] * framebufferNoAttachmentsSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.406] [info] [core] [t5526974429679110087] * sampledImageColorSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.408] [info] [core] [t5526974429679110087] * sampledImageIntegerSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.411] [info] [core] [t5526974429679110087] * sampledImageDepthSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.415] [info] [core] [t5526974429679110087] * sampledImageStencilSampleCounts: { 1 | 2 | 4 | 8 }
+[2026-10-15 17:04:17.417] [info] [core] [t5526974429679110087] * standardSampleLocations: 1
+[2026-10-15 17:04:17.420] [info] [core] [t5526974429679110087] * optimalBufferCopyOffsetAlignment: 1
+[2026-10-15 17:04:17.423] [info] [core] [t5526974429679110087] * optimalBufferCopyRowPitchAlignment: 1
+[2026-10-15 17:04:17.426] [info] [core] [t5526974429679110087] * nonCoherentAtomSize: 128
+[2026-10-15 17:04:17.429] [info] [core] [t5526974429679110087] * robustBufferAccess
+[2026-10-15 17:04:17.432] [info] [core] [t5526974429679110087] * fullDrawIndexUint32
+[2026-10-15 17:04:17.435] [info] [core] [t5526974429679110087] * independentBlend
+[2026-10-15 17:04:17.438] [info] [core] [t5526974429679110087] * geometryShader
+[2026-10-15 17:04:17.441] [info] [core] [t5526974429679110087] * tessellationShader
+[2026-10-15 17:04:17.444] [info] [core] [t5526974429679110087] * sampleRateShading
+[2026-10-15 17:04:17.447] [info] [core] [t5526974429679110087] * depthClamp
+[2026-10-15 17:04:17.450] [info] [core] [t5526974429679110087] * fillModeNonSolid
+[2026-10-15 17:04:17.459] [info] [core] [t5526974429679110087] * samplerAnisotropy
+[2026-10-15 17:04:17.462] [info] [core] [t5526974429679110087] * occlusionQueryPrecise
+[2026-10-15 17:04:17.465] [info] [core] [t5526974429679110087] * vertexPipelineStoresAndAtomics
+[2026-10-15 17:04:17.471] [info] [core] [t5526974429679110087] * fragmentStoresAndAtomics
+[2026-10-15 17:04:17.474] [info] [core] [t5526974429679110087] * shaderClipDistance
+[2026-10-15 17:04:17.478] [info] [core] [t5526974429679110087] * shaderCullDistance
+[2026-10-15 17:04:17.480] [info] [core] [t5526974429679110087] * samplerMirrorClampToEdge
+[2026-10-15 17:04:17.483] [info] [core] [t5526974429679110087] * uniformBufferStandardLayout
+[2026-10-15 17:04:17.486] [info] [core] [t5526974429679110087] * scalarBlockLayout
+[2026-10-15 17:04:17.533] [info] [core] [t5526974429679110087] * shaderDemoteToHelperInvocation
+[2026-10-15 17:04:17.540] [info] [core] [t5526974429679110087] * dynamicRendering
+[2026-10-15 17:04:17.543] [info] [core] [t5526974429679110087] * constantAlphaColorBlendFactors
+[2026-10-15 17:04:17.546] [info] [core] [t5526974429679110087] * imageViewFormatReinterpretation
+[2026-10-15 17:04:17.549] [info] [core] [t5526974429679110087] * imageViewFormatSwizzle
+[2026-10-15 17:04:17.552] [info] [core] [t5526974429679110087] * pointPolygons
+[2026-10-15 17:04:17.555] [info] [core] [t5526974429679110087] * separateStencilMaskRef
+[2026-10-15 17:04:17.558] [info] [core] [t5526974429679110087] * shaderSampleRateInterpolationFunctions
+[2026-10-15 17:04:17.564] [info] [core] [t5526974429679110087] * shaderSignedZeroInfNanPreserveFloat32: 1
+[2026-10-15 17:04:17.566] [info] [core] [t5526974429679110087] * shaderDenormFlushToZeroFloat32: 1
+[2026-10-15 17:04:17.569] [info] [core] [t5526974429679110087] * shaderRoundingModeRTEFloat32: 1
+[2026-10-15 17:04:17.572] [info] [core] [t5526974429679110087] * fragmentShaderSampleInterlock
+[2026-10-15 17:04:17.576] [info] [core] [t5526974429679110087] * fragmentShaderPixelInterlock
+[2026-10-15 17:04:17.578] [info] [core] [t5526974429679110087] * nonSeamlessCubeMap
+[2026-10-15 17:04:17.580] [info] [core] [t5526974429679110087] * customBorderColors
+[2026-10-15 17:04:17.585] [info] [core] [t5526974429679110087] * customBorderColorWithoutFormat
+[2026-10-15 17:04:17.590] [info] [core] [t5526974429679110087] * maxCustomBorderColorSamplers: 4000
+[2026-10-15 17:04:17.592] [info] [core] [t5526974429679110087] * nullDescriptor
+[2026-10-15 17:04:17.605] [info] [core] [t5526974429679110087] [native] Native graphics system (stage A): SDK presenter, no Xenos emulation
+[2026-10-15 17:04:17.610] [info] [core] [t5526974429679110087] WindowSwitch: handheld mode, display resolution 1280x720
+[2026-10-15 17:04:17.627] [info] [core] [t5526974429679110087] VulkanPresenter: Created 1280x720 swapchain with format 37, color space 0, presentation mode 0
+[2026-10-15 17:04:17.636] [info] [sys] [t5526974429679110087] Guest memory arena mapped: virtual base 0x0000007CCAA6F000, physical base 0x0000007DCAA6F000
+[2026-10-15 17:04:17.644] [info] [sys] [t5526974429679110087] Switch guest allocation: heap=physical range=0x00000000-0x00FFFFFF size=16 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-15 17:04:17.646] [info] [core] [t5526974429679110087] Switch guest backing request: window_address=0x0000007DCAA6F000 window_offset=0x100000000 mapping_offset=0x100000000 size=16 MiB operation=commit
+[2026-10-15 17:04:17.655] [info] [sys] [t5526974429679110087] Switch guest allocation: heap=physical range=0xC0000000-0xC0FFFFFF size=16 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-15 17:04:17.658] [info] [core] [t5526974429679110087] Switch guest backing request: window_address=0x0000007D8AA6F000 window_offset=0xC0000000 mapping_offset=0x100000000 size=16 MiB operation=commit
+[2026-10-15 17:04:17.669] [info] [sys] [t5526974429679110087] Switch guest allocation: heap=physical range=0xBFCB0000-0xBFFEFFFF size=3 MiB operation=reserve committed_before=0 MiB reserved_before=0 MiB
+[2026-10-15 17:04:17.708] [warning] [sys] [t5526974429679110087] Too few processor cores - scheduling will be wonky
+[2026-10-15 17:04:18.012] [info] [core] [t5526974429679110087] [native] Renderer ready: 96 MB stream, 1 shared memory binding(s)
+[2026-10-15 17:04:18.019] [info] [core] [t5526974429679110087] Switch native thread: using reserved stack at 0x0000001388201000, backing=1088 KiB
+[2026-10-15 17:04:18.023] [info] [core] [t5526974429679110087] Switch native thread: created handle=0x4281C9, usable stack=1086 KiB
+[2026-10-15 17:04:18.026] [info] [core] [t5526974429679110087] Switch native thread: using reserved stack at 0x0000001388312000, backing=1088 KiB
+[2026-10-15 17:04:18.032] [info] [core] [t5526974429679110087] Switch native thread: created handle=0x4301C7, usable stack=1086 KiB
+[2026-10-15 17:04:18.034] [info] [core] [t5526974429679110087] [native] Both GPU worker threads created successfully
+[2026-10-15 17:04:18.034] [info] [core] [t2626040452003951750] [native] Ring thread on core 2: result 00000000
+[2026-10-15 17:04:18.037] [info] [sys] [t5526974429679110087] Switch guest allocation: heap=xex range=0x82E00000-0x83A8FFFF size=12 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-15 17:04:18.043] [info] [core] [t5526974429679110087] Switch guest backing request: window_address=0x0000007D4D86F000 window_offset=0x82E00000 mapping_offset=0x82E00000 size=12 MiB operation=commit
+[2026-10-15 17:04:18.056] [info] [core] [t5526974429679110087] Function table initialized for module: code=82140000-827758EC, image=82000000-82E00000
+[2026-10-15 17:04:18.202] [info] [sys] [t5526974429679110087] Switch guest allocation: heap=xex range=0x82000000-0x82DFFFFF size=14 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-15 17:04:18.206] [info] [core] [t5526974429679110087] Switch guest backing request: window_address=0x0000007D4CA6F000 window_offset=0x82000000 mapping_offset=0x82000000 size=14 MiB operation=commit
+[2026-10-15 17:04:18.424] [info] [core] [t5526974429679110087] Switch: in focus
+[2026-10-15 17:04:18.426] [info] [core] [t5526974429679110087] Initializing shader storage for title 575207E9...
+[2026-10-15 17:04:18.456] [info] [core] [t5526974429679110087] [native] Driver pipeline cache: 1469 KB loaded from /switch/green_lantern/user/cache/shaders/driver/native-575207E9-000010DE-00000FE0-06802003.cache
+[2026-10-15 17:04:18.472] [warning] [fs] [t11984291145657781857] VFS: '\Device' -> [no device]
+[2026-10-15 17:04:18.477] [error] [fs] [t11984291145657781857] ResolvePath(\Device) failed - device not found
+[2026-10-15 17:04:18.479] [warning] [fs] [t11984291145657781857] Switch VFS open: missing parent '\Device' for '\Device\Image'
+[2026-10-15 17:04:18.483] [warning] [krnl] [t11984291145657781857] [NtCreateFile] FAILED: path='\Device\Image' -> 0xc000000f
+[2026-10-15 17:04:18.486] [warning] [krnl] [t11984291145657781857] Stub XFileFsDeviceInformation!
+[2026-10-15 17:04:18.489] [warning] [krnl] [t11984291145657781857] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-15 17:04:18.492] [warning] [krnl] [t11984291145657781857] Stub XFileFsDeviceInformation!
+[2026-10-15 17:04:18.495] [warning] [krnl] [t11984291145657781857] IoDismountVolumeByFileHandle(0xf8000030) - stub
+[2026-10-15 17:04:18.498] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0AB6F000 window_offset=0x40100000 mapping_offset=0x40100000 size=1 MiB operation=commit
+[2026-10-15 17:04:18.544] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.565] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.586] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0AF8F000 window_offset=0x40520000 mapping_offset=0x40520000 size=2 MiB operation=commit
+[2026-10-15 17:04:18.682] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.696] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.707] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.727] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.735] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0B1FF000 window_offset=0x40790000 mapping_offset=0x40790000 size=2 MiB operation=commit
+[2026-10-15 17:04:18.741] [warning] [fs] [t11984291145657781857] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\x360' has no child 'eGraphicsSettings.cfg' for 'game:\gl\X360\eGraphicsSettings.cfg'
+[2026-10-15 17:04:18.750] [warning] [krnl] [t11984291145657781857] [NtCreateFile] FAILED: path='game:\gl\X360\eGraphicsSettings.cfg' -> 0xc000000f
+[2026-10-15 17:04:18.755] [info] [core] [t11984291145657781857] [native] Interrupt callback 825A08E0 (404C6D80)
+[2026-10-15 17:04:18.758] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x20000404 args_r7=0xFFFFFFFF args_r8=0x00000001
+[2026-10-15 17:04:18.761] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x20000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xA0000000-0xBFFFFFFF
+[2026-10-15 17:04:18.767] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:18.771] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DEA4FF000 window_offset=0x11FA90000 mapping_offset=0x11FA90000 size=2 MiB operation=commit
+[2026-10-15 17:04:18.775] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xBFA90000-0xBFC8FFFF size=2 MiB operation=commit committed_before=0 MiB reserved_before=3 MiB
+[2026-10-15 17:04:18.777] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D8A4FF000 window_offset=0xBFA90000 mapping_offset=0x11FA90000 size=2 MiB operation=commit
+[2026-10-15 17:04:18.779] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xBFA90000 size=2 MiB
+[2026-10-15 17:04:18.782] [info] [core] [t11984291145657781857] [native] Ring at 1FC9B000, 8192 words
+[2026-10-15 17:04:18.788] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:18.791] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:18.794] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:18.801] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DEA167000 window_offset=0x11F6F8000 mapping_offset=0x11F6F8000 size=3 MiB operation=commit
+[2026-10-15 17:04:18.807] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFF6F7000-0xFFA8EFFF size=3 MiB operation=commit committed_before=0 MiB reserved_before=0 MiB
+[2026-10-15 17:04:18.810] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DCA166000 window_offset=0xFF6F7000 mapping_offset=0x11F6F8000 size=3 MiB operation=commit
+[2026-10-15 17:04:18.814] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFF6F7000 size=3 MiB
+[2026-10-15 17:04:18.817] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00730000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:18.820] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=7 MiB adjusted=7 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:18.823] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:18.826] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE9A37000 window_offset=0x11EFC8000 mapping_offset=0x11EFC8000 size=7 MiB operation=commit
+[2026-10-15 17:04:18.833] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFEFC7000-0xFF6F6FFF size=7 MiB operation=commit committed_before=3 MiB reserved_before=3 MiB
+[2026-10-15 17:04:18.839] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC9A36000 window_offset=0xFEFC7000 mapping_offset=0x11EFC8000 size=7 MiB operation=commit
+[2026-10-15 17:04:18.842] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEFC7000 size=7 MiB
+[2026-10-15 17:04:18.846] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00398000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:18.849] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=3 MiB adjusted=3 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:18.852] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:18.859] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE969F000 window_offset=0x11EC30000 mapping_offset=0x11EC30000 size=3 MiB operation=commit
+[2026-10-15 17:04:18.864] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFEC2F000-0xFEFC6FFF size=3 MiB operation=commit committed_before=10 MiB reserved_before=10 MiB
+[2026-10-15 17:04:18.868] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC969E000 window_offset=0xFEC2F000 mapping_offset=0x11EC30000 size=3 MiB operation=commit
+[2026-10-15 17:04:18.874] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFEC2F000 size=3 MiB
+[2026-10-15 17:04:18.877] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8215E1CC caller_callsite=0x8215E1C8 args_r3=0x00400000 args_r4=0xFFFFFFFF args_r5=0x00000020 args_r6=0x00000404 args_r7=0xFFFFFFFF args_r8=0x00000020
+[2026-10-15 17:04:18.881] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=4 MiB adjusted=4 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00000020 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:18.884] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:18.887] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE928F000 window_offset=0x11E820000 mapping_offset=0x11E820000 size=4 MiB operation=commit
+[2026-10-15 17:04:18.893] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFE81F000-0xFEC1EFFF size=4 MiB operation=commit committed_before=14 MiB reserved_before=14 MiB
+[2026-10-15 17:04:18.897] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC928E000 window_offset=0xFE81F000 mapping_offset=0x11E820000 size=4 MiB operation=commit
+[2026-10-15 17:04:18.900] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFE81F000 size=4 MiB
+[2026-10-15 17:04:18.906] [info] [core] [t11984291145657781857] [native] Ring at 1EC20000, 16384 words
+[2026-10-15 17:04:18.922] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.930] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:18.939] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0B40F000 window_offset=0x409A0000 mapping_offset=0x409A0000 size=5 MiB operation=commit
+[2026-10-15 17:04:20.155] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.172] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.193] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.203] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.218] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.230] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.250] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.260] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:20.286] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x41635848 args_r8=0x00000001
+[2026-10-15 17:04:20.294] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.303] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.306] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE881E000 window_offset=0x11DDAF000 mapping_offset=0x11DDAF000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.311] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFDDAE000-0xFDF8DFFF size=1 MiB operation=commit committed_before=29 MiB reserved_before=29 MiB
+[2026-10-15 17:04:20.314] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC881D000 window_offset=0xFDDAE000 mapping_offset=0x11DDAF000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.317] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDDAE000 size=1 MiB
+[2026-10-15 17:04:20.320] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416358A8 args_r8=0x00000001
+[2026-10-15 17:04:20.324] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.327] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.329] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE8620000 window_offset=0x11DBB1000 mapping_offset=0x11DBB1000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.333] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFDBB0000-0xFDD8FFFF size=1 MiB operation=commit committed_before=31 MiB reserved_before=31 MiB
+[2026-10-15 17:04:20.339] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC861F000 window_offset=0xFDBB0000 mapping_offset=0x11DBB1000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.342] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFDBB0000 size=1 MiB
+[2026-10-15 17:04:20.345] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x001E0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x416359E8 args_r8=0x00000001
+[2026-10-15 17:04:20.348] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.351] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.353] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE8422000 window_offset=0x11D9B3000 mapping_offset=0x11D9B3000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.358] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFD9B2000-0xFDB91FFF size=1 MiB operation=commit committed_before=33 MiB reserved_before=33 MiB
+[2026-10-15 17:04:20.361] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC8421000 window_offset=0xFD9B2000 mapping_offset=0x11D9B3000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.363] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD9B2000 size=1 MiB
+[2026-10-15 17:04:20.368] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0B40F000 window_offset=0x409A0000 mapping_offset=0x409A0000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.436] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00200000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:20.442] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.448] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.451] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE81B1000 window_offset=0x11D742000 mapping_offset=0x11D742000 size=2 MiB operation=commit
+[2026-10-15 17:04:20.456] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFD741000-0xFD940FFF size=2 MiB operation=commit committed_before=35 MiB reserved_before=35 MiB
+[2026-10-15 17:04:20.459] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC81B0000 window_offset=0xFD741000 mapping_offset=0x11D742000 size=2 MiB operation=commit
+[2026-10-15 17:04:20.462] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFD741000 size=2 MiB
+[2026-10-15 17:04:20.474] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x01590000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:20.477] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=21 MiB adjusted=21 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.479] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.482] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE699F000 window_offset=0x11BF30000 mapping_offset=0x11BF30000 size=21 MiB operation=commit
+[2026-10-15 17:04:20.495] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFBF2F000-0xFD4BEFFF size=21 MiB operation=commit committed_before=39 MiB reserved_before=39 MiB
+[2026-10-15 17:04:20.503] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC699E000 window_offset=0xFBF2F000 mapping_offset=0x11BF30000 size=21 MiB operation=commit
+[2026-10-15 17:04:20.511] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBF2F000 size=21 MiB
+[2026-10-15 17:04:20.518] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD878 args_r8=0x00000001
+[2026-10-15 17:04:20.521] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.524] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.526] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE689F000 window_offset=0x11BE30000 mapping_offset=0x11BE30000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.531] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFBE2F000-0xFBF2EFFF size=1 MiB operation=commit committed_before=61 MiB reserved_before=61 MiB
+[2026-10-15 17:04:20.534] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC689E000 window_offset=0xFBE2F000 mapping_offset=0x11BE30000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.537] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBE2F000 size=1 MiB
+[2026-10-15 17:04:20.541] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x417AD8A8 args_r8=0x00000001
+[2026-10-15 17:04:20.552] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.555] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.558] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE679F000 window_offset=0x11BD30000 mapping_offset=0x11BD30000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.562] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFBD2F000-0xFBE2EFFF size=1 MiB operation=commit committed_before=62 MiB reserved_before=62 MiB
+[2026-10-15 17:04:20.565] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC679E000 window_offset=0xFBD2F000 mapping_offset=0x11BD30000 size=1 MiB operation=commit
+[2026-10-15 17:04:20.569] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFBD2F000 size=1 MiB
+[2026-10-15 17:04:20.575] [info] [core] [t2626040452003951750] [native] Render target 1280x2048 depth format 0 at tile 0, 1x MSAA
+[2026-10-15 17:04:20.576] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00C00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:20.588] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=12 MiB adjusted=12 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.591] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.599] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE5B9F000 window_offset=0x11B130000 mapping_offset=0x11B130000 size=12 MiB operation=commit
+[2026-10-15 17:04:20.607] [info] [core] [t2626040452003951750] [native] Render target 1280x720 color format 3 at tile 0, 1x MSAA
+[2026-10-15 17:04:20.610] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xFB12F000-0xFBD2EFFF size=12 MiB operation=commit committed_before=63 MiB reserved_before=63 MiB
+[2026-10-15 17:04:20.614] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC5B9E000 window_offset=0xFB12F000 mapping_offset=0x11B130000 size=12 MiB operation=commit
+[2026-10-15 17:04:20.617] [info] [core] [t2626040452003951750] [native] Frontbuffer 1EC30000 1280x720, swizzle A0A
+[2026-10-15 17:04:20.618] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xFB12F000 size=12 MiB
+[2026-10-15 17:04:20.693] [info] [core] [t11984291145657781857] Green Lantern pool-size query: function=0x8247B930 object=0x40002B40 vtable=0x82005720 slot=196 target=0x8228ED40
+[2026-10-15 17:04:20.701] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x8247B978 caller_callsite=0x8247B974 args_r3=0x02000000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x00000001 args_r8=0x82020000
+[2026-10-15 17:04:20.705] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=32 MiB adjusted=32 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.708] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.711] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE39E6000 window_offset=0x118F77000 mapping_offset=0x118F77000 size=32 MiB operation=commit
+[2026-10-15 17:04:20.729] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xF8F76000-0xFAF75FFF size=32 MiB operation=commit committed_before=77 MiB reserved_before=77 MiB
+[2026-10-15 17:04:20.735] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC39E5000 window_offset=0xF8F76000 mapping_offset=0x118F77000 size=32 MiB operation=commit
+[2026-10-15 17:04:20.746] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF8F76000 size=32 MiB
+[2026-10-15 17:04:20.749] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0C56F000 window_offset=0x41B00000 mapping_offset=0x41B00000 size=6 MiB operation=commit
+[2026-10-15 17:04:20.758] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00D00000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x8228EDB0 args_r8=0x00000001
+[2026-10-15 17:04:20.762] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=13 MiB adjusted=13 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.765] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.768] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE2CE6000 window_offset=0x118277000 mapping_offset=0x118277000 size=13 MiB operation=commit
+[2026-10-15 17:04:20.778] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xF8276000-0xF8F75FFF size=13 MiB operation=commit committed_before=109 MiB reserved_before=109 MiB
+[2026-10-15 17:04:20.783] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC2CE5000 window_offset=0xF8276000 mapping_offset=0x118277000 size=13 MiB operation=commit
+[2026-10-15 17:04:20.788] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF8276000 size=13 MiB
+[2026-10-15 17:04:20.791] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x02300000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000004 args_r7=0x82030000 args_r8=0x00000001
+[2026-10-15 17:04:20.793] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=35 MiB adjusted=35 MiB flags=0x00000000 protect=0x00000004 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.796] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.800] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DE09E6000 window_offset=0x115F77000 mapping_offset=0x115F77000 size=35 MiB operation=commit
+[2026-10-15 17:04:20.819] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xF5F76000-0xF8275FFF size=35 MiB operation=commit committed_before=122 MiB reserved_before=122 MiB
+[2026-10-15 17:04:20.829] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DC09E5000 window_offset=0xF5F76000 mapping_offset=0x115F77000 size=35 MiB operation=commit
+[2026-10-15 17:04:20.835] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF5F76000 size=35 MiB
+[2026-10-15 17:04:20.843] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 44.2 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:20.844] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0CB7F000 window_offset=0x42110000 mapping_offset=0x42110000 size=22 MiB operation=commit
+[2026-10-15 17:04:20.848] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 5.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:20.874] [info] [core] [t11984291145657781857] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0200F000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:20.879] [info] [krnl] [t11984291145657781857] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=32 MiB adjusted=32 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:20.882] [info] [krnl] [t11984291145657781857] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:20.885] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DDE9D7000 window_offset=0x113F68000 mapping_offset=0x113F68000 size=32 MiB operation=commit
+[2026-10-15 17:04:20.893] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 36.6 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:20.899] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 4.7 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:20.903] [info] [sys] [t11984291145657781857] Switch guest allocation: heap=physical range=0xF3F67000-0xF5F75FFF size=32 MiB operation=commit committed_before=157 MiB reserved_before=157 MiB
+[2026-10-15 17:04:20.906] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007DBE9D6000 window_offset=0xF3F67000 mapping_offset=0x113F68000 size=32 MiB operation=commit
+[2026-10-15 17:04:20.911] [info] [krnl] [t11984291145657781857] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF3F67000 size=32 MiB
+[2026-10-15 17:04:20.943] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 36.3 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:20.949] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 4.3 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:21.026] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0B52F000 window_offset=0x40AC0000 mapping_offset=0x40AC0000 size=3 MiB operation=commit
+[2026-10-15 17:04:21.065] [info] [core] [t2626040452003951750] [native] Render target 1040x1024 color format 4 at tile 1216, 1x MSAA
+[2026-10-15 17:04:21.075] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:21.090] [info] [core] [t2626040452003951750] [native] Render target 1040x1024 depth format 0 at tile 1216, 1x MSAA
+[2026-10-15 17:04:21.106] [info] [core] [t2626040452003951750] [native] Render target 1280x2048 depth format 1 at tile 0, 1x MSAA
+[2026-10-15 17:04:21.115] [info] [core] [t2626040452003951750] [native] Render target 1280x976 depth format 0 at tile 1072, 1x MSAA
+[2026-10-15 17:04:21.119] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 1072, 1x MSAA
+[2026-10-15 17:04:21.129] [info] [core] [t2626040452003951750] [native] Render target 1280x208 color format 0 at tile 720, 1x MSAA
+[2026-10-15 17:04:21.133] [info] [core] [t2626040452003951750] [native] Render target 1280x208 depth format 1 at tile 720, 1x MSAA
+[2026-10-15 17:04:21.166] [info] [core] [t2626040452003951750] [native] Render target 1280x720 depth format 0 at tile 1328, 1x MSAA
+[2026-10-15 17:04:21.179] [info] [core] [t2626040452003951750] [native] Render target 1280x720 color format 3 at tile 1328, 1x MSAA
+[2026-10-15 17:04:21.185] [info] [core] [t2626040452003951750] [native] slow frame 125 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:21.190] [info] [core] [t2626040452003951750] [native] slow frame 125 ms: waited for the game 6.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.1 ms; textures 3.1 ms; 8 draws, 1 texture uploads (0 made now), 4 shaders, 5 pipelines
+[2026-10-15 17:04:22.397] [info] [core] [t11984291145657781857] SwitchAudioSystem: bomba de 187,5 Hz activa, 10 tramas en cola
+[2026-10-15 17:04:22.403] [info] [core] [t11984291145657781857] SwitchAudioSystem: audout 48000 Hz, 2 channels, PCM format 2
+[2026-10-15 17:04:22.427] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:22.444] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:22.458] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0B83F000 window_offset=0x40DD0000 mapping_offset=0x40DD0000 size=1 MiB operation=commit
+[2026-10-15 17:04:22.472] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:22.593] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 34.2 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:22.599] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 14.9 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:22.693] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 34.8 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:22.701] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 14.4 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:22.758] [warning] [fs] [t1058917104328557783] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\common\bin' has no child 'pickupparticlesandsounds_1.bin_be' for 'game:\gl\common\bin\pickupparticlesandsounds_1.bin_be'
+[2026-10-15 17:04:22.762] [warning] [krnl] [t1058917104328557783] [NtCreateFile] FAILED: path='game:\gl\common\bin\pickupparticlesandsounds_1.bin_be' -> 0xc000000f
+[2026-10-15 17:04:22.767] [warning] [fs] [t1058917104328557783] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\common\bin' has no child 'materialeffects_2.bin_be' for 'game:\gl\common\bin\materialeffects_2.bin_be'
+[2026-10-15 17:04:22.770] [warning] [krnl] [t1058917104328557783] [NtCreateFile] FAILED: path='game:\gl\common\bin\materialeffects_2.bin_be' -> 0xc000000f
+[2026-10-15 17:04:22.776] [warning] [fs] [t1058917104328557783] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\common\bin' has no child 'preconfigactortemplate_2.bin_be' for 'game:\gl\common\bin\preconfigactortemplate_2.bin_be'
+[2026-10-15 17:04:22.779] [warning] [krnl] [t1058917104328557783] [NtCreateFile] FAILED: path='game:\gl\common\bin\preconfigactortemplate_2.bin_be' -> 0xc000000f
+[2026-10-15 17:04:22.784] [warning] [fs] [t1058917104328557783] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\common\bin' has no child 'vehicleproperties_14.bin_be' for 'game:\gl\common\bin\vehicleproperties_14.bin_be'
+[2026-10-15 17:04:22.788] [warning] [krnl] [t1058917104328557783] [NtCreateFile] FAILED: path='game:\gl\common\bin\vehicleproperties_14.bin_be' -> 0xc000000f
+[2026-10-15 17:04:22.793] [warning] [fs] [t1058917104328557783] Switch VFS open: parent '\Device\Harddisk0\Partition1\gl\common\bin' has no child 'wheelproperties_2.bin_be' for 'game:\gl\common\bin\wheelproperties_2.bin_be'
+[2026-10-15 17:04:22.797] [warning] [krnl] [t1058917104328557783] [NtCreateFile] FAILED: path='game:\gl\common\bin\wheelproperties_2.bin_be' -> 0xc000000f
+[2026-10-15 17:04:22.843] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 35.5 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:22.849] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 13.7 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:22.893] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 27.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:22.899] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 13.4 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:25.831] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:25.860] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 46.9 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:25.867] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:25.867] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.2 ms; textures 1.6 ms; 15 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:26.133] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:26.138] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:26.141] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:26.144] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDE62D000 window_offset=0x113BBE000 mapping_offset=0x113BBE000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.150] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF3BBD000-0xF3D1CFFF size=1 MiB operation=commit committed_before=191 MiB reserved_before=191 MiB
+[2026-10-15 17:04:26.155] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBE62C000 window_offset=0xF3BBD000 mapping_offset=0x113BBE000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.157] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF3BBD000 size=1 MiB
+[2026-10-15 17:04:26.171] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007D0AF8F000 window_offset=0x40520000 mapping_offset=0x40520000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.801] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:26.805] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:26.808] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:26.811] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDE08B000 window_offset=0x11361C000 mapping_offset=0x11361C000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.816] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF361B000-0xF377AFFF size=1 MiB operation=commit committed_before=197 MiB reserved_before=197 MiB
+[2026-10-15 17:04:26.819] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBE08A000 window_offset=0xF361B000 mapping_offset=0x11361C000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.827] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF361B000 size=1 MiB
+[2026-10-15 17:04:26.837] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:26.842] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:26.845] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:26.849] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDF1B000 window_offset=0x1134AC000 mapping_offset=0x1134AC000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.853] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF34AB000-0xF360AFFF size=1 MiB operation=commit committed_before=198 MiB reserved_before=198 MiB
+[2026-10-15 17:04:26.858] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDF1A000 window_offset=0xF34AB000 mapping_offset=0x1134AC000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.863] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF34AB000 size=1 MiB
+[2026-10-15 17:04:26.870] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:26.873] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:26.879] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:26.882] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDDBB000 window_offset=0x11334C000 mapping_offset=0x11334C000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.886] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF334B000-0xF34AAFFF size=1 MiB operation=commit committed_before=200 MiB reserved_before=200 MiB
+[2026-10-15 17:04:26.889] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDDBA000 window_offset=0xF334B000 mapping_offset=0x11334C000 size=1 MiB operation=commit
+[2026-10-15 17:04:26.891] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF334B000 size=1 MiB
+[2026-10-15 17:04:27.294] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:27.303] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:27.306] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:27.309] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDC04000 window_offset=0x113195000 mapping_offset=0x113195000 size=1 MiB operation=commit
+[2026-10-15 17:04:27.314] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF3194000-0xF32F3FFF size=1 MiB operation=commit committed_before=201 MiB reserved_before=201 MiB
+[2026-10-15 17:04:27.317] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDC03000 window_offset=0xF3194000 mapping_offset=0x113195000 size=1 MiB operation=commit
+[2026-10-15 17:04:27.319] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF3194000 size=1 MiB
+[2026-10-15 17:04:27.322] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:27.325] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:27.328] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:27.332] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDAA4000 window_offset=0x113035000 mapping_offset=0x113035000 size=1 MiB operation=commit
+[2026-10-15 17:04:27.336] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF3034000-0xF3193FFF size=1 MiB operation=commit committed_before=203 MiB reserved_before=203 MiB
+[2026-10-15 17:04:27.339] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDAA3000 window_offset=0xF3034000 mapping_offset=0x113035000 size=1 MiB operation=commit
+[2026-10-15 17:04:27.346] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF3034000 size=1 MiB
+[2026-10-15 17:04:27.355] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:27.357] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:27.361] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:27.364] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDD944000 window_offset=0x112ED5000 mapping_offset=0x112ED5000 size=1 MiB operation=commit
+[2026-10-15 17:04:27.370] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF2ED4000-0xF3033FFF size=1 MiB operation=commit committed_before=204 MiB reserved_before=204 MiB
+[2026-10-15 17:04:27.373] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBD943000 window_offset=0xF2ED4000 mapping_offset=0x112ED5000 size=1 MiB operation=commit
+[2026-10-15 17:04:27.376] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF2ED4000 size=1 MiB
+[2026-10-15 17:04:27.946] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.043] [info] [core] [t2626040452003951750] [native] last 10 s: 187121 packets, 13430 draws, 767 copies, 215 swaps, 0 waits cut short
+[2026-10-15 17:04:28.047] [info] [core] [t2626040452003951750] [native] renderer: 3062 drawn, 10368 skipped, 767 resolves, 1736 passes, 215 submissions, 10 shaders, 9 pipelines, 5 textures (3 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 3 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-15 17:04:28.051] [info] [core] [t2626040452003951750] [native] ring thread ms per frame: state 0.76, indices 0.03, vertices 0.08, constants+textures 0.29, recording 0.15, resolves 0.37, swap 0.96
+[2026-10-15 17:04:28.055] [info] [core] [t2626040452003951750] [native] textures: 3 made now, 2 streamed in, 0 replaced after use, 2 lookups answered empty (streaming or not handled)
+[2026-10-15 17:04:28.058] [info] [core] [t2626040452003951750] [native] most uploaded textures: 18593000 fmt 20 128x128: 1 (21 KB, last 7177) | 13F40000 fmt 20 32x32: 1 (1 KB, last 5E77) | 13EDC000 fmt 20 512x512: 1 (256 KB, last 67AB) | 18EC6000 fmt 18 32x32: 1 (0 KB, last 7C84) | 1F6F8000 fmt 6 1280x720: 1 (3600 KB, last E8DD)
+[2026-10-15 17:04:28.072] [info] [core] [t2626040452003951750] [native] per frame: renderer CPU 2.7 ms, GPU 4.1 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-15 17:04:28.076] [info] [core] [t2626040452003951750] [native] per frame: 14 draws, 0 state rebuilds, 2 texture binding rebuilds
+[2026-10-15 17:04:28.086] [info] [core] [t2626040452003951750] [native] per frame: 0.1 waits for the game, 0.8 ms waiting
+[2026-10-15 17:04:28.107] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.108] [info] [core] [t2626040452003951750] [native] slow frames: 1 over 50 ms, 1 over 100 ms; in them 5 pipelines, 4 shaders, 1 texture uploads, 9 render targets
+[2026-10-15 17:04:28.110] [info] [core] [t2626040452003951750] [native] state changes by register (10 s): 2200:3960 2203:3782 2082:3271 2205:2993 2206:2989 2204:2989 2180:2699 2208:2555 2104:2032 210D:1835 2001:1645 2000:1457
+[2026-10-15 17:04:28.120] [info] [core] [t2626040452003951750] [native] skipped by reason: 0:48 7:10320
+[2026-10-15 17:04:28.127] [info] [core] [t2626040452003951750] [native] slow frame 100 ms: ring idle 16.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:28.130] [info] [core] [t2626040452003951750] [native] slow frame 100 ms: waited for the game 0.8 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:28.202] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.243] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 43.3 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:28.247] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 5.8 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:28.287] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.293] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 34.5 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:28.301] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 5.5 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:28.393] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: ring idle 44.1 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:28.397] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.398] [info] [core] [t2626040452003951750] [native] slow frame 50 ms: waited for the game 5.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.0 ms; textures 0.0 ms; 0 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:28.433] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.888] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.916] [error] [krnl] [t2426586918186596652] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:28.942] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F22F000 window_offset=0x447C0000 mapping_offset=0x447C0000 size=1 MiB operation=commit
+[2026-10-15 17:04:28.952] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F3AF000 window_offset=0x44940000 mapping_offset=0x44940000 size=1 MiB operation=commit
+[2026-10-15 17:04:28.957] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F50F000 window_offset=0x44AA0000 mapping_offset=0x44AA0000 size=1 MiB operation=commit
+[2026-10-15 17:04:28.967] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F66F000 window_offset=0x44C00000 mapping_offset=0x44C00000 size=1 MiB operation=commit
+[2026-10-15 17:04:31.476] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:31.512] [info] [core] [t2626040452003951750] [native] Render target 1040x512 color format 0 at tile 1632, 1x MSAA
+[2026-10-15 17:04:31.529] [info] [core] [t2626040452003951750] [native] Render target 1040x512 depth format 0 at tile 1632, 1x MSAA
+[2026-10-15 17:04:31.556] [info] [core] [t2626040452003951750] [native] Render target 1280x256 depth format 0 at tile 1792, 1x MSAA
+[2026-10-15 17:04:31.560] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 0, 1x MSAA
+[2026-10-15 17:04:31.562] [info] [core] [t2626040452003951750] [native] Depth resolve at 1F6F8000 sampled as texture format 6
+[2026-10-15 17:04:31.566] [info] [core] [t2626040452003951750] [native] Depth resolve at 1F6F8000 sampled as texture format 23
+[2026-10-15 17:04:31.573] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 1792, 1x MSAA
+[2026-10-15 17:04:31.589] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 1536, 1x MSAA
+[2026-10-15 17:04:31.593] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 1280, 1x MSAA
+[2026-10-15 17:04:31.606] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 1024, 1x MSAA
+[2026-10-15 17:04:31.677] [info] [core] [t2626040452003951750] [native] slow frame 167 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:31.682] [info] [core] [t2626040452003951750] [native] slow frame 167 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.3 ms; textures 13.3 ms; 66 draws, 9 texture uploads (2 made now), 10 shaders, 12 pipelines
+[2026-10-15 17:04:31.780] [info] [core] [t2626040452003951750] [native] Render target 640x368 color format 3 at tile 1144, 1x MSAA
+[2026-10-15 17:04:31.797] [info] [core] [t2626040452003951750] [native] Render target 320x192 color format 3 at tile 1280, 1x MSAA
+[2026-10-15 17:04:31.822] [info] [core] [t2626040452003951750] [native] Resolve at 1C840000 (320x184) sampled as 320x180: exact-size copy
+[2026-10-15 17:04:31.827] [info] [core] [t2626040452003951750] [native] Resolve at 1C8B8000 (320x184) sampled as 320x180: exact-size copy
+[2026-10-15 17:04:31.838] [info] [core] [t2626040452003951750] [native] Render target 160x96 color format 3 at tile 1316, 1x MSAA
+[2026-10-15 17:04:31.848] [info] [core] [t2626040452003951750] [native] Resolve at 1C930000 (160x96) sampled as 160x90: exact-size copy
+[2026-10-15 17:04:31.852] [info] [core] [t2626040452003951750] [native] Resolve at 1C94E000 (160x96) sampled as 160x90: exact-size copy
+[2026-10-15 17:04:31.857] [info] [core] [t2626040452003951750] [native] Render target 80x48 color format 3 at tile 1325, 1x MSAA
+[2026-10-15 17:04:31.861] [info] [core] [t2626040452003951750] [native] Resolve at 1C96C000 (80x48) sampled as 80x45: exact-size copy
+[2026-10-15 17:04:31.865] [info] [core] [t2626040452003951750] [native] Resolve at 1C978000 (80x48) sampled as 80x45: exact-size copy
+[2026-10-15 17:04:31.869] [info] [core] [t2626040452003951750] [native] Render target 80x32 color format 3 at tile 1326, 1x MSAA
+[2026-10-15 17:04:31.877] [info] [core] [t2626040452003951750] [native] Resolve at 1C984000 (40x24) sampled as 40x22: exact-size copy
+[2026-10-15 17:04:31.881] [info] [core] [t2626040452003951750] [native] Resolve at 1C988000 (40x24) sampled as 40x22: exact-size copy
+[2026-10-15 17:04:31.884] [info] [core] [t2626040452003951750] [native] Render target 80x16 color format 3 at tile 1327, 1x MSAA
+[2026-10-15 17:04:31.889] [info] [core] [t2626040452003951750] [native] Resolve at 1C98C000 (24x16) sampled as 20x11: exact-size copy
+[2026-10-15 17:04:31.899] [info] [core] [t2626040452003951750] [native] Resolve at 1C98E000 (24x16) sampled as 20x11: exact-size copy
+[2026-10-15 17:04:31.927] [info] [core] [t2626040452003951750] [native] slow frame 250 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:31.929] [info] [core] [t2626040452003951750] [native] slow frame 250 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 2.0 ms; textures 53.8 ms; 123 draws, 14 texture uploads (2 made now), 11 shaders, 12 pipelines
+[2026-10-15 17:04:32.149] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: ring idle 0.0 ms, pacing hold 5.1 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:32.156] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.3 ms; textures 5.5 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:32.221] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:32.227] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: waited for the game 7.3 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.2 ms; textures 5.3 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:32.294] [info] [core] [t2626040452003951750] [native] slow frame 73 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:32.299] [info] [core] [t2626040452003951750] [native] slow frame 73 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.5 ms; textures 5.6 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:32.366] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:32.371] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.5 ms; textures 3.0 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:32.438] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:32.443] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.3 ms; textures 0.6 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:32.511] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:32.515] [info] [core] [t2626040452003951750] [native] slow frame 72 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.6 ms; textures 1.8 ms; 122 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:33.361] [info] [core] [t2626040452003951750] [native] Resolve at 1B130000 (1024x1024) sampled as 2048x3072: exact-size copy
+[2026-10-15 17:04:33.489] [info] [core] [t2626040452003951750] [native] Render target 1280x720 color format 0 at tile 1328, 1x MSAA
+[2026-10-15 17:04:33.600] [info] [core] [t2626040452003951750] [native] Render target 1280x256 color format 0 at tile 768, 1x MSAA
+[2026-10-15 17:04:33.630] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.658] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.682] [info] [core] [t2626040452003951750] [native] Render target 1040x2048 depth format 1 at tile 0, 1x MSAA
+[2026-10-15 17:04:33.767] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.798] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.831] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.865] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.897] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:33.968] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.040] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.111] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.183] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.256] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.326] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.400] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.471] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.545] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.617] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.690] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.765] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.839] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.911] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:34.985] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.057] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.131] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.205] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.280] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.352] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.428] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.501] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.582] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.656] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.727] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.802] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:35.836] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:35.956] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.032] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.107] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.129] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.186] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.263] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.340] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.417] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.491] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.566] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.640] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.715] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.790] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.866] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:36.942] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.018] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.094] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.169] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.245] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.320] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.397] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.472] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.549] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.624] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.699] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.774] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.851] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:37.928] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.000] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.065] [info] [core] [t2626040452003951750] [native] last 10 s: 479184 packets, 20231 draws, 4369 copies, 189 swaps, 0 waits cut short
+[2026-10-15 17:04:38.071] [info] [core] [t2626040452003951750] [native] renderer: 11183 drawn, 9048 skipped, 4369 resolves, 5849 passes, 189 submissions, 55 shaders, 54 pipelines, 213 textures (86 MB), 131 MB vertices (0 MB of them aged out of the stream, 1 MB partial, whole: 0 small 129 index 0 range 0 room), 214 MB stream, 510 fetch ranges interpreted in 39 ms
+[2026-10-15 17:04:38.076] [info] [core] [t2626040452003951750] [native] ring thread ms per frame: state 3.74, indices 0.13, vertices 1.52, constants+textures 4.30, recording 0.47, resolves 2.41, swap 21.73
+[2026-10-15 17:04:38.080] [info] [core] [t2626040452003951750] [native] textures: 12 made now, 36 streamed in, 0 replaced after use, 42 lookups answered empty (streaming or not handled)
+[2026-10-15 17:04:38.083] [info] [core] [t2626040452003951750] [native] most uploaded textures: 12D79000 fmt 2 640x360: 56 (12600 KB, last AE90) | 12D35000 fmt 2 640x360: 56 (12600 KB, last 664F) | 12DBD000 fmt 2 1280x720: 56 (50400 KB, last 2675) | 186AE000 fmt 20 128x128: 1 (21 KB, last E3A5) | 1D640000 fmt 38 7x1024: 1 (112 KB, last CC1C) | 13924000 fmt 20 512x512: 1 (341 KB, last 99B9)
+[2026-10-15 17:04:38.086] [info] [core] [t2626040452003951750] [native] per frame: renderer CPU 34.3 ms, GPU 22.1 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-15 17:04:38.090] [info] [core] [t2626040452003951750] [native] per frame: 59 draws, 2 state rebuilds, 29 texture binding rebuilds
+[2026-10-15 17:04:38.092] [info] [core] [t2626040452003951750] [native] per frame: 0.1 waits for the game, 0.4 ms waiting
+[2026-10-15 17:04:38.095] [info] [core] [t2626040452003951750] [native] slow frames: 78 over 50 ms, 4 over 100 ms; in them 41 pipelines, 40 shaders, 39 texture uploads, 16 render targets
+[2026-10-15 17:04:38.102] [info] [core] [t2626040452003951750] [native] state changes by register (10 s): 2200:14099 2180:13616 2203:12891 2208:11059 2082:10362 2205:10293 2206:9996 2204:9996 2181:9261 2001:5485 210D:4613 2104:4059
+[2026-10-15 17:04:38.105] [info] [core] [t2626040452003951750] [native] skipped by reason: 7:9048
+[2026-10-15 17:04:38.117] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.141] [info] [core] [t2626040452003951750] [native] slow frame 76 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.148] [info] [core] [t2626040452003951750] [native] slow frame 76 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.7 ms; textures 7.0 ms; 131 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.163] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.217] [info] [core] [t2626040452003951750] [native] slow frame 76 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.224] [info] [core] [t2626040452003951750] [native] slow frame 76 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.9 ms; textures 7.3 ms; 131 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.245] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.291] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.297] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.5 ms; textures 8.5 ms; 131 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.312] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.366] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.372] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.9 ms; textures 7.0 ms; 125 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.389] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.440] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.446] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 2.0 ms; textures 6.9 ms; 121 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.462] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.515] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.520] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 2.0 ms; textures 7.1 ms; 129 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.534] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.588] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.595] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.8 ms; textures 7.8 ms; 129 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.608] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.663] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.672] [info] [core] [t2626040452003951750] [native] slow frame 74 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.9 ms; textures 6.5 ms; 129 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.686] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.737] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.744] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.7 ms; textures 7.1 ms; 129 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.756] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.813] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.819] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.8 ms; textures 6.7 ms; 129 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.836] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.888] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.900] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 2.2 ms; textures 6.0 ms; 129 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.912] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:38.963] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:38.971] [info] [core] [t2626040452003951750] [native] slow frame 75 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 1.8 ms; textures 10.3 ms; 131 draws, 1 texture uploads (1 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:38.989] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.048] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.123] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.197] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.271] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.346] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.420] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.496] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.571] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.646] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.719] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.795] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.870] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:39.945] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.020] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.096] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.171] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.241] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.318] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.392] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.467] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.541] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.616] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.691] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.767] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.842] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.916] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:40.990] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:41.065] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:41.139] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:41.215] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:41.290] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:41.364] [info] [core] [t2626040452003951750] [native] Resolve at 1C660000 (1280x360) sampled as 640x360: exact-size copy
+[2026-10-15 17:04:43.328] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:48.098] [info] [core] [t2626040452003951750] [native] last 10 s: 596476 packets, 27161 draws, 4955 copies, 227 swaps, 0 waits cut short
+[2026-10-15 17:04:48.103] [info] [core] [t2626040452003951750] [native] renderer: 16265 drawn, 10896 skipped, 4955 resolves, 6609 passes, 227 submissions, 55 shaders, 57 pipelines, 7 textures (0 MB), 91 MB vertices (0 MB of them aged out of the stream, 1 MB partial, whole: 0 small 89 index 0 range 0 room), 106 MB stream, 360 fetch ranges interpreted in 27 ms
+[2026-10-15 17:04:48.109] [info] [core] [t2626040452003951750] [native] ring thread ms per frame: state 0.18, indices 0.14, vertices 0.77, constants+textures 2.09, recording 0.47, resolves 1.89, swap 30.85
+[2026-10-15 17:04:48.113] [info] [core] [t2626040452003951750] [native] textures: 3 made now, 4 streamed in, 0 replaced after use, 4 lookups answered empty (streaming or not handled)
+[2026-10-15 17:04:48.115] [info] [core] [t2626040452003951750] [native] most uploaded textures: 18792000 fmt 20 256x32: 1 (10 KB, last 4AA4) | 18606000 fmt 20 256x256: 1 (85 KB, last 97D8) | 18626000 fmt 20 256x256: 1 (85 KB, last D159) | 1854B000 fmt 20 256x512: 1 (170 KB, last 9EB4) | 1844F000 fmt 20 512x512: 1 (341 KB, last 6B90) | 18EEE000 fmt 18 32x32: 1 (0 KB, last 63E1)
+[2026-10-15 17:04:48.118] [info] [core] [t2626040452003951750] [native] per frame: renderer CPU 36.4 ms, GPU 26.4 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-15 17:04:48.122] [info] [core] [t2626040452003951750] [native] per frame: 72 draws, 0 state rebuilds, 24 texture binding rebuilds
+[2026-10-15 17:04:48.125] [info] [core] [t2626040452003951750] [native] per frame: 0.0 waits for the game, 0.0 ms waiting
+[2026-10-15 17:04:48.130] [info] [core] [t2626040452003951750] [native] slow frames: 50 over 50 ms, 0 over 100 ms; in them 3 pipelines, 0 shaders, 7 texture uploads, 0 render targets
+[2026-10-15 17:04:48.134] [info] [core] [t2626040452003951750] [native] state changes by register (10 s): 2200:15333 2203:14346 2180:13820 2208:12372 2082:12243 2205:12054 2206:11874 2204:11874 2181:10137 2001:5322 210D:4210 2104:4118
+[2026-10-15 17:04:48.136] [info] [core] [t2626040452003951750] [native] skipped by reason: 7:10896
+[2026-10-15 17:04:49.497] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:50.326] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:51.126] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:04:51.290] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0AF8F000 window_offset=0x40520000 mapping_offset=0x40520000 size=2 MiB operation=commit
+[2026-10-15 17:04:51.452] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0B83F000 window_offset=0x40DD0000 mapping_offset=0x40DD0000 size=1 MiB operation=commit
+[2026-10-15 17:04:51.711] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F22F000 window_offset=0x447C0000 mapping_offset=0x447C0000 size=1 MiB operation=commit
+[2026-10-15 17:04:54.976] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x006C2000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x006C1544 args_r8=0x00000001
+[2026-10-15 17:04:54.982] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=6 MiB adjusted=6 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:54.985] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:54.991] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDE19A000 window_offset=0x11372B000 mapping_offset=0x11372B000 size=6 MiB operation=commit
+[2026-10-15 17:04:55.002] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF372A000-0xF3DEBFFF size=6 MiB operation=commit committed_before=190 MiB reserved_before=190 MiB
+[2026-10-15 17:04:55.008] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBE199000 window_offset=0xF372A000 mapping_offset=0x11372B000 size=6 MiB operation=commit
+[2026-10-15 17:04:55.012] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF372A000 size=6 MiB
+[2026-10-15 17:04:55.021] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:55.027] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:55.030] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:55.034] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDF76000 window_offset=0x113507000 mapping_offset=0x113507000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.042] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF3506000-0xF3605FFF size=1 MiB operation=commit committed_before=198 MiB reserved_before=198 MiB
+[2026-10-15 17:04:55.046] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDF75000 window_offset=0xF3506000 mapping_offset=0x113507000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.050] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF3506000 size=1 MiB
+[2026-10-15 17:04:55.053] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:55.057] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:55.062] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:55.067] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDD62000 window_offset=0x1132F3000 mapping_offset=0x1132F3000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.078] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF32F2000-0xF3451FFF size=1 MiB operation=commit committed_before=200 MiB reserved_before=200 MiB
+[2026-10-15 17:04:55.081] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDD61000 window_offset=0xF32F2000 mapping_offset=0x1132F3000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.084] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF32F2000 size=1 MiB
+[2026-10-15 17:04:55.089] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:55.092] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:55.095] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:55.098] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDB8A000 window_offset=0x11311B000 mapping_offset=0x11311B000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.102] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF311A000-0xF3279FFF size=1 MiB operation=commit committed_before=202 MiB reserved_before=202 MiB
+[2026-10-15 17:04:55.105] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDB89000 window_offset=0xF311A000 mapping_offset=0x11311B000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.107] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF311A000 size=1 MiB
+[2026-10-15 17:04:55.110] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:55.113] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:55.116] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:55.126] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDDA2A000 window_offset=0x112FBB000 mapping_offset=0x112FBB000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.132] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF2FBA000-0xF3119FFF size=1 MiB operation=commit committed_before=203 MiB reserved_before=203 MiB
+[2026-10-15 17:04:55.135] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBDA29000 window_offset=0xF2FBA000 mapping_offset=0x112FBB000 size=1 MiB operation=commit
+[2026-10-15 17:04:55.138] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF2FBA000 size=1 MiB
+[2026-10-15 17:04:57.196] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0022F000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x0022E85C args_r8=0x00000001
+[2026-10-15 17:04:57.200] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:57.204] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:57.207] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDD3DC000 window_offset=0x11296D000 mapping_offset=0x11296D000 size=2 MiB operation=commit
+[2026-10-15 17:04:57.212] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF296C000-0xF2B9AFFF size=2 MiB operation=commit committed_before=209 MiB reserved_before=209 MiB
+[2026-10-15 17:04:57.215] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBD3DB000 window_offset=0xF296C000 mapping_offset=0x11296D000 size=2 MiB operation=commit
+[2026-10-15 17:04:57.219] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF296C000 size=2 MiB
+[2026-10-15 17:04:58.101] [info] [core] [t2626040452003951750] [native] last 10 s: 544651 packets, 29244 draws, 4125 copies, 277 swaps, 0 waits cut short
+[2026-10-15 17:04:58.112] [info] [core] [t2626040452003951750] [native] renderer: 15948 drawn, 13296 skipped, 4125 resolves, 5500 passes, 277 submissions, 55 shaders, 57 pipelines, 0 textures (0 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 15 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-15 17:04:58.115] [info] [core] [t2626040452003951750] [native] ring thread ms per frame: state 0.05, indices 0.11, vertices 0.20, constants+textures 0.29, recording 0.33, resolves 0.98, swap 31.03
+[2026-10-15 17:04:58.117] [info] [core] [t2626040452003951750] [native] textures: 0 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-15 17:04:58.127] [info] [core] [t2626040452003951750] [native] per frame: renderer CPU 33.0 ms, GPU 21.7 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-15 17:04:58.130] [info] [core] [t2626040452003951750] [native] per frame: 58 draws, 0 state rebuilds, 12 texture binding rebuilds
+[2026-10-15 17:04:58.133] [info] [core] [t2626040452003951750] [native] per frame: 0.0 waits for the game, 0.0 ms waiting
+[2026-10-15 17:04:58.137] [info] [core] [t2626040452003951750] [native] slow frames: 0 over 50 ms, 0 over 100 ms; in them 0 pipelines, 0 shaders, 0 texture uploads, 0 render targets
+[2026-10-15 17:04:58.145] [info] [core] [t2626040452003951750] [native] state changes by register (10 s): 2200:12375 2203:11825 2082:11008 2206:10450 2205:10450 2204:10450 2208:10175 2180:10175 2181:8250 2001:3850 2000:3575 2104:3300
+[2026-10-15 17:04:58.150] [info] [core] [t2626040452003951750] [native] skipped by reason: 7:13296
+[2026-10-15 17:04:58.158] [info] [core] [t2626040452003951750] [native] slow frame 57 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:04:58.161] [info] [core] [t2626040452003951750] [native] slow frame 57 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.4 ms; textures 0.1 ms; 58 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:04:58.364] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00162000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x0016125C args_r8=0x00000001
+[2026-10-15 17:04:58.369] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:58.373] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:58.377] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDCA0C000 window_offset=0x111F9D000 mapping_offset=0x111F9D000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.382] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF1F9C000-0xF20FDFFF size=1 MiB operation=commit committed_before=219 MiB reserved_before=219 MiB
+[2026-10-15 17:04:58.385] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBCA0B000 window_offset=0xF1F9C000 mapping_offset=0x111F9D000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.389] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF1F9C000 size=1 MiB
+[2026-10-15 17:04:58.869] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0026D000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x0026C18C args_r8=0x00000001
+[2026-10-15 17:04:58.877] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:58.880] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:58.884] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDC611000 window_offset=0x111BA2000 mapping_offset=0x111BA2000 size=2 MiB operation=commit
+[2026-10-15 17:04:58.889] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF1BA1000-0xF1E0DFFF size=2 MiB operation=commit committed_before=222 MiB reserved_before=222 MiB
+[2026-10-15 17:04:58.893] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBC610000 window_offset=0xF1BA1000 mapping_offset=0x111BA2000 size=2 MiB operation=commit
+[2026-10-15 17:04:58.896] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF1BA1000 size=2 MiB
+[2026-10-15 17:04:58.914] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:58.920] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:58.923] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:58.933] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDC1D7000 window_offset=0x111768000 mapping_offset=0x111768000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.938] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF1767000-0xF1866FFF size=1 MiB operation=commit committed_before=228 MiB reserved_before=228 MiB
+[2026-10-15 17:04:58.942] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBC1D6000 window_offset=0xF1767000 mapping_offset=0x111768000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.945] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF1767000 size=1 MiB
+[2026-10-15 17:04:58.949] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:04:58.957] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:58.960] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:58.964] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDC017000 window_offset=0x1115A8000 mapping_offset=0x1115A8000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.968] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF15A7000-0xF1706FFF size=1 MiB operation=commit committed_before=229 MiB reserved_before=229 MiB
+[2026-10-15 17:04:58.972] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBC016000 window_offset=0xF15A7000 mapping_offset=0x1115A8000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.975] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF15A7000 size=1 MiB
+[2026-10-15 17:04:58.978] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:04:58.982] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:58.988] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:58.992] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDBF17000 window_offset=0x1114A8000 mapping_offset=0x1114A8000 size=1 MiB operation=commit
+[2026-10-15 17:04:58.996] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF14A7000-0xF15A6FFF size=1 MiB operation=commit committed_before=231 MiB reserved_before=231 MiB
+[2026-10-15 17:04:59.000] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBBF16000 window_offset=0xF14A7000 mapping_offset=0x1114A8000 size=1 MiB operation=commit
+[2026-10-15 17:04:59.003] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF14A7000 size=1 MiB
+[2026-10-15 17:04:59.931] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x002F8000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x002F7D58 args_r8=0x00000001
+[2026-10-15 17:04:59.938] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:59.940] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:59.943] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDBBB8000 window_offset=0x111149000 mapping_offset=0x111149000 size=2 MiB operation=commit
+[2026-10-15 17:04:59.950] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF1148000-0xF143FFFF size=2 MiB operation=commit committed_before=232 MiB reserved_before=232 MiB
+[2026-10-15 17:04:59.952] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBBBB7000 window_offset=0xF1148000 mapping_offset=0x111149000 size=2 MiB operation=commit
+[2026-10-15 17:04:59.956] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF1148000 size=2 MiB
+[2026-10-15 17:04:59.975] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x002B4000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x000002C0 args_r8=0x00000001
+[2026-10-15 17:04:59.980] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:04:59.983] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:04:59.989] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDB8FE000 window_offset=0x110E8F000 mapping_offset=0x110E8F000 size=2 MiB operation=commit
+[2026-10-15 17:04:59.996] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF0E8E000-0xF1141FFF size=2 MiB operation=commit committed_before=235 MiB reserved_before=235 MiB
+[2026-10-15 17:05:00.002] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBB8FD000 window_offset=0xF0E8E000 mapping_offset=0x110E8F000 size=2 MiB operation=commit
+[2026-10-15 17:05:00.005] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF0E8E000 size=2 MiB
+[2026-10-15 17:05:00.020] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:00.027] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:00.033] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:00.036] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDB30C000 window_offset=0x11089D000 mapping_offset=0x11089D000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.041] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF089C000-0xF09FBFFF size=1 MiB operation=commit committed_before=242 MiB reserved_before=242 MiB
+[2026-10-15 17:05:00.043] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBB30B000 window_offset=0xF089C000 mapping_offset=0x11089D000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.046] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF089C000 size=1 MiB
+[2026-10-15 17:05:00.048] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:00.051] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:00.063] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:00.067] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDB1AC000 window_offset=0x11073D000 mapping_offset=0x11073D000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.072] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF073C000-0xF089BFFF size=1 MiB operation=commit committed_before=244 MiB reserved_before=244 MiB
+[2026-10-15 17:05:00.075] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBB1AB000 window_offset=0xF073C000 mapping_offset=0x11073D000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.079] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF073C000 size=1 MiB
+[2026-10-15 17:05:00.097] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:00.105] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:00.108] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:00.112] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDAA74000 window_offset=0x110005000 mapping_offset=0x110005000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.116] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xF0004000-0xF0163FFF size=1 MiB operation=commit committed_before=251 MiB reserved_before=251 MiB
+[2026-10-15 17:05:00.119] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBAA73000 window_offset=0xF0004000 mapping_offset=0x110005000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.125] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xF0004000 size=1 MiB
+[2026-10-15 17:05:00.134] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:00.145] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:00.150] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:00.153] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDA914000 window_offset=0x10FEA5000 mapping_offset=0x10FEA5000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.159] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEFEA4000-0xF0003FFF size=1 MiB operation=commit committed_before=252 MiB reserved_before=252 MiB
+[2026-10-15 17:05:00.163] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBA913000 window_offset=0xEFEA4000 mapping_offset=0x10FEA5000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.165] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEFEA4000 size=1 MiB
+[2026-10-15 17:05:00.171] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:00.177] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:00.181] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:00.185] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDA7B4000 window_offset=0x10FD45000 mapping_offset=0x10FD45000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.190] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEFD44000-0xEFEA3FFF size=1 MiB operation=commit committed_before=254 MiB reserved_before=254 MiB
+[2026-10-15 17:05:00.193] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBA7B3000 window_offset=0xEFD44000 mapping_offset=0x10FD45000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.196] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEFD44000 size=1 MiB
+[2026-10-15 17:05:00.201] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:00.204] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:00.207] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:00.214] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDA5A4000 window_offset=0x10FB35000 mapping_offset=0x10FB35000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.219] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEFB34000-0xEFC93FFF size=1 MiB operation=commit committed_before=256 MiB reserved_before=256 MiB
+[2026-10-15 17:05:00.224] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBA5A3000 window_offset=0xEFB34000 mapping_offset=0x10FB35000 size=1 MiB operation=commit
+[2026-10-15 17:05:00.227] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEFB34000 size=1 MiB
+[2026-10-15 17:05:02.290] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0014A000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x001493FC args_r8=0x00000001
+[2026-10-15 17:05:02.301] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:02.304] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:02.307] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DDA430000 window_offset=0x10F9C1000 mapping_offset=0x10F9C1000 size=1 MiB operation=commit
+[2026-10-15 17:05:02.311] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEF9C0000-0xEFB09FFF size=1 MiB operation=commit committed_before=257 MiB reserved_before=257 MiB
+[2026-10-15 17:05:02.315] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DBA42F000 window_offset=0xEF9C0000 mapping_offset=0x10F9C1000 size=1 MiB operation=commit
+[2026-10-15 17:05:02.318] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEF9C0000 size=1 MiB
+[2026-10-15 17:05:02.836] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x002A9000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x002A8F94 args_r8=0x00000001
+[2026-10-15 17:05:02.842] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=2 MiB adjusted=2 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:02.849] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:02.853] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD9FD8000 window_offset=0x10F569000 mapping_offset=0x10F569000 size=2 MiB operation=commit
+[2026-10-15 17:05:02.859] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEF568000-0xEF810FFF size=2 MiB operation=commit committed_before=260 MiB reserved_before=260 MiB
+[2026-10-15 17:05:02.862] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB9FD7000 window_offset=0xEF568000 mapping_offset=0x10F569000 size=2 MiB operation=commit
+[2026-10-15 17:05:02.866] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEF568000 size=2 MiB
+[2026-10-15 17:05:03.270] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00168000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:05:03.278] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:03.282] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:03.285] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD9E70000 window_offset=0x10F401000 mapping_offset=0x10F401000 size=1 MiB operation=commit
+[2026-10-15 17:05:03.291] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEF400000-0xEF567FFF size=1 MiB operation=commit committed_before=263 MiB reserved_before=263 MiB
+[2026-10-15 17:05:03.294] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB9E6F000 window_offset=0xEF400000 mapping_offset=0x10F401000 size=1 MiB operation=commit
+[2026-10-15 17:05:03.297] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEF400000 size=1 MiB
+[2026-10-15 17:05:03.300] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x005F0000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:05:03.306] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=5 MiB adjusted=5 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:03.310] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:03.313] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD9880000 window_offset=0x10EE11000 mapping_offset=0x10EE11000 size=5 MiB operation=commit
+[2026-10-15 17:05:03.324] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEEE10000-0xEF3FFFFF size=5 MiB operation=commit committed_before=264 MiB reserved_before=264 MiB
+[2026-10-15 17:05:03.328] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB987F000 window_offset=0xEEE10000 mapping_offset=0x10EE11000 size=5 MiB operation=commit
+[2026-10-15 17:05:03.331] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEEE10000 size=5 MiB
+[2026-10-15 17:05:04.525] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:04.655] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F40F000 window_offset=0x449A0000 mapping_offset=0x449A0000 size=2 MiB operation=commit
+[2026-10-15 17:05:05.015] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x0050C000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:05:05.022] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=5 MiB adjusted=5 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:05.024] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:05.027] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD914E000 window_offset=0x10E6DF000 mapping_offset=0x10E6DF000 size=5 MiB operation=commit
+[2026-10-15 17:05:05.033] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEE6DE000-0xEEBE9FFF size=5 MiB operation=commit committed_before=272 MiB reserved_before=272 MiB
+[2026-10-15 17:05:05.036] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB914D000 window_offset=0xEE6DE000 mapping_offset=0x10E6DF000 size=5 MiB operation=commit
+[2026-10-15 17:05:05.038] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEE6DE000 size=5 MiB
+[2026-10-15 17:05:05.487] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00100000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000000 args_r8=0x00000001
+[2026-10-15 17:05:05.496] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:05.498] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:05.504] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD8EE6000 window_offset=0x10E477000 mapping_offset=0x10E477000 size=1 MiB operation=commit
+[2026-10-15 17:05:05.509] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEE476000-0xEE575FFF size=1 MiB operation=commit committed_before=279 MiB reserved_before=279 MiB
+[2026-10-15 17:05:05.512] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB8EE5000 window_offset=0xEE476000 mapping_offset=0x10E477000 size=1 MiB operation=commit
+[2026-10-15 17:05:05.514] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEE476000 size=1 MiB
+[2026-10-15 17:05:05.994] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:06.002] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:06.005] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:06.015] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD8C7A000 window_offset=0x10E20B000 mapping_offset=0x10E20B000 size=1 MiB operation=commit
+[2026-10-15 17:05:06.020] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEE20A000-0xEE369FFF size=1 MiB operation=commit committed_before=281 MiB reserved_before=281 MiB
+[2026-10-15 17:05:06.026] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB8C79000 window_offset=0xEE20A000 mapping_offset=0x10E20B000 size=1 MiB operation=commit
+[2026-10-15 17:05:06.029] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEE20A000 size=1 MiB
+[2026-10-15 17:05:06.032] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:06.036] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:06.040] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:06.043] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD8B1A000 window_offset=0x10E0AB000 mapping_offset=0x10E0AB000 size=1 MiB operation=commit
+[2026-10-15 17:05:06.048] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEE0AA000-0xEE209FFF size=1 MiB operation=commit committed_before=282 MiB reserved_before=282 MiB
+[2026-10-15 17:05:06.051] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB8B19000 window_offset=0xEE0AA000 mapping_offset=0x10E0AB000 size=1 MiB operation=commit
+[2026-10-15 17:05:06.055] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEE0AA000 size=1 MiB
+[2026-10-15 17:05:06.059] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:06.066] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:06.074] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:06.077] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD89BA000 window_offset=0x10DF4B000 mapping_offset=0x10DF4B000 size=1 MiB operation=commit
+[2026-10-15 17:05:06.083] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEDF4A000-0xEE0A9FFF size=1 MiB operation=commit committed_before=284 MiB reserved_before=284 MiB
+[2026-10-15 17:05:06.086] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB89B9000 window_offset=0xEDF4A000 mapping_offset=0x10DF4B000 size=1 MiB operation=commit
+[2026-10-15 17:05:06.090] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEDF4A000 size=1 MiB
+[2026-10-15 17:05:06.521] [error] [krnl] [t1058917104328557783] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:06.620] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F62F000 window_offset=0x44BC0000 mapping_offset=0x44BC0000 size=2 MiB operation=commit
+[2026-10-15 17:05:06.984] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:06.989] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:06.992] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:06.995] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD87C1000 window_offset=0x10DD52000 mapping_offset=0x10DD52000 size=1 MiB operation=commit
+[2026-10-15 17:05:07.000] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEDD51000-0xEDEB0FFF size=1 MiB operation=commit committed_before=285 MiB reserved_before=285 MiB
+[2026-10-15 17:05:07.008] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB87C0000 window_offset=0xEDD51000 mapping_offset=0x10DD52000 size=1 MiB operation=commit
+[2026-10-15 17:05:07.011] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEDD51000 size=1 MiB
+[2026-10-15 17:05:07.017] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:07.020] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:07.027] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:07.031] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD8661000 window_offset=0x10DBF2000 mapping_offset=0x10DBF2000 size=1 MiB operation=commit
+[2026-10-15 17:05:07.036] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEDBF1000-0xEDD50FFF size=1 MiB operation=commit committed_before=287 MiB reserved_before=287 MiB
+[2026-10-15 17:05:07.041] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB8660000 window_offset=0xEDBF1000 mapping_offset=0x10DBF2000 size=1 MiB operation=commit
+[2026-10-15 17:05:07.043] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEDBF1000 size=1 MiB
+[2026-10-15 17:05:07.046] [info] [core] [t1761052133590203008] Guest physical allocator wrapper: function=0x822FC978 caller_lr=0x822FC218 caller_callsite=0x822FC214 args_r3=0x00160000 args_r4=0xFFFFFFFF args_r5=0x00001000 args_r6=0x00000404 args_r7=0x00000280 args_r8=0x00000001
+[2026-10-15 17:05:07.050] [info] [krnl] [t1761052133590203008] Guest physical allocation request: API=MmAllocatePhysicalMemoryEx requested=1 MiB adjusted=1 MiB flags=0x00000000 protect=0x00000404 min=0x00000000 max=0xFFFFFFFF alignment=0x00001000 heap_range=0xE0000000-0xFFCFFFFF
+[2026-10-15 17:05:07.053] [info] [krnl] [t1761052133590203008] Guest physical allocation caller: API=MmAllocatePhysicalMemoryEx guest_callsite=0x822FC9D0 guest_return=0x822FC9D4
+[2026-10-15 17:05:07.061] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DD8501000 window_offset=0x10DA92000 mapping_offset=0x10DA92000 size=1 MiB operation=commit
+[2026-10-15 17:05:07.066] [info] [sys] [t1761052133590203008] Switch guest allocation: heap=physical range=0xEDA91000-0xEDBF0FFF size=1 MiB operation=commit committed_before=288 MiB reserved_before=288 MiB
+[2026-10-15 17:05:07.069] [info] [core] [t1761052133590203008] Switch guest backing request: window_address=0x0000007DB8500000 window_offset=0xEDA91000 mapping_offset=0x10DA92000 size=1 MiB operation=commit
+[2026-10-15 17:05:07.072] [info] [krnl] [t1761052133590203008] Guest physical allocation result: API=MmAllocatePhysicalMemoryEx base=0xEDA91000 size=1 MiB
+[2026-10-15 17:05:07.536] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:07.681] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:07.817] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:07.971] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.102] [info] [core] [t2626040452003951750] [native] last 10 s: 574590 packets, 30222 draws, 4125 copies, 278 swaps, 0 waits cut short
+[2026-10-15 17:05:08.106] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.108] [info] [core] [t2626040452003951750] [native] renderer: 16878 drawn, 13344 skipped, 4125 resolves, 5500 passes, 278 submissions, 55 shaders, 57 pipelines, 2 textures (0 MB), 0 MB vertices (0 MB of them aged out of the stream, 0 MB partial, whole: 0 small 0 index 0 range 0 room), 15 MB stream, 0 fetch ranges interpreted in 0 ms
+[2026-10-15 17:05:08.113] [info] [core] [t2626040452003951750] [native] ring thread ms per frame: state 0.04, indices 0.10, vertices 0.20, constants+textures 0.29, recording 0.32, resolves 0.86, swap 28.99
+[2026-10-15 17:05:08.124] [info] [core] [t2626040452003951750] [native] textures: 2 made now, 0 streamed in, 0 replaced after use, 0 lookups answered empty (streaming or not handled)
+[2026-10-15 17:05:08.126] [info] [core] [t2626040452003951750] [native] most uploaded textures: 13EC8000 fmt 20 32x32: 1 (1 KB, last F5F1) | 13F4C000 fmt 20 32x32: 1 (1 KB, last 8C2F)
+[2026-10-15 17:05:08.129] [info] [core] [t2626040452003951750] [native] per frame: renderer CPU 30.8 ms, GPU 21.7 ms over 1.0 submissions (GPU time as the driver reports it)
+[2026-10-15 17:05:08.132] [info] [core] [t2626040452003951750] [native] per frame: 61 draws, 0 state rebuilds, 12 texture binding rebuilds
+[2026-10-15 17:05:08.138] [info] [core] [t2626040452003951750] [native] per frame: 0.0 waits for the game, 0.0 ms waiting
+[2026-10-15 17:05:08.142] [info] [core] [t2626040452003951750] [native] slow frames: 1 over 50 ms, 0 over 100 ms; in them 0 pipelines, 0 shaders, 0 texture uploads, 0 render targets
+[2026-10-15 17:05:08.144] [info] [core] [t2626040452003951750] [native] state changes by register (10 s): 2200:12375 2203:11825 2082:11012 2206:10450 2205:10450 2204:10450 2208:10175 2180:10175 2181:8250 2001:3850 2000:3575 2104:3300
+[2026-10-15 17:05:08.146] [info] [core] [t2626040452003951750] [native] skipped by reason: 7:13344
+[2026-10-15 17:05:08.153] [info] [core] [t2626040452003951750] [native] slow frame 51 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:05:08.158] [info] [core] [t2626040452003951750] [native] slow frame 51 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.5 ms; textures 0.2 ms; 58 draws, 0 texture uploads (0 made now), 0 shaders, 0 pipelines
+[2026-10-15 17:05:08.257] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.392] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.484] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.564] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.652] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.736] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.816] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:08.947] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:09.589] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:09.781] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:10.740] [error] [krnl] [t11984291145657781857] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:10.761] [error] [krnl] [t15900711846353206659] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented
+[2026-10-15 17:05:10.792] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F82F000 window_offset=0x44DC0000 mapping_offset=0x44DC0000 size=1 MiB operation=commit
+[2026-10-15 17:05:10.801] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0F9BF000 window_offset=0x44F50000 mapping_offset=0x44F50000 size=1 MiB operation=commit
+[2026-10-15 17:05:10.806] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0FB1F000 window_offset=0x450B0000 mapping_offset=0x450B0000 size=1 MiB operation=commit
+[2026-10-15 17:05:10.811] [info] [core] [t11984291145657781857] Switch guest backing request: window_address=0x0000007D0FC7F000 window_offset=0x45210000 mapping_offset=0x45210000 size=1 MiB operation=commit
+[2026-10-15 17:05:17.022] [info] [core] [t2626040452003951750] [native] slow frame 828 ms: ring idle 0.0 ms, pacing hold 0.0 ms, game's vblank wait 0.0 ms, late skips 0
+[2026-10-15 17:05:17.031] [info] [core] [t2626040452003951750] [native] slow frame 828 ms: waited for the game 0.0 ms, the GPU 0.0 ms (0.0 of it for stream space), texture untiling 0.0 ms, the draw thread 0.8 ms; textures 5.1 ms; 50 draws, 19 texture uploads (2 made now), 7 shaders, 5 pipelines
+[2026-10-15 17:05:17.217] [error] [krnl] [t17601137310636820435] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented

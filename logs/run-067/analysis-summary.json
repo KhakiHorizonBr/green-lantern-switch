@@ -1,0 +1,43 @@
+{
+  "input_candidates": {
+    "snapshots_with_identical_render_fetch": 53,
+    "snapshots_total": 93
+  },
+  "native_formats": [
+    {
+      "role": "destination",
+      "vk_format": 37,
+      "count": 12
+    },
+    {
+      "role": "source",
+      "vk_format": 37,
+      "count": 12
+    },
+    {
+      "role": "destination",
+      "vk_format": 70,
+      "count": 1
+    },
+    {
+      "role": "source",
+      "vk_format": 78,
+      "count": 1
+    },
+    {
+      "role": "destination",
+      "vk_format": 100,
+      "count": 1
+    },
+    {
+      "role": "atlas",
+      "vk_format": 70,
+      "count": 1
+    }
+  ],
+  "limits": [
+    "Frames are not synchronized; character framing differs substantially.",
+    "Packed intermediate words are not final colors.",
+    "Some FSI depth/format 7 surfaces remain undecoded."
+  ]
+}

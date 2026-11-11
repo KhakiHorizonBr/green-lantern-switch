@@ -1,0 +1,2155 @@
+=== Building Docker image ===
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Docker.rust
+#1 transferring dockerfile: 1.72kB 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/devkitpro/devkita64:latest
+#2 DONE 2.2s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/5] FROM docker.io/devkitpro/devkita64:latest@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+#4 resolve docker.io/devkitpro/devkita64:latest@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282 0.0s done
+#4 DONE 0.2s
+
+#4 [1/5] FROM docker.io/devkitpro/devkita64:latest@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 0B / 382.98MB 0.2s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 0B / 28.38MB 0.2s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 0B / 265.08MB 0.2s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 0B / 28.23MB 0.2s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 3.15MB / 28.38MB 0.5s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 6.29MB / 28.38MB 0.6s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 8.39MB / 28.38MB 0.8s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 2.10MB / 28.23MB 0.8s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 10.49MB / 28.38MB 0.9s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 4.19MB / 28.23MB 0.9s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 6.29MB / 28.23MB 1.1s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 13.63MB / 28.38MB 1.2s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 8.39MB / 28.23MB 1.2s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 19.92MB / 382.98MB 1.5s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 15.73MB / 28.38MB 1.4s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 17.83MB / 28.38MB 1.5s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 13.63MB / 265.08MB 1.5s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 11.53MB / 28.23MB 1.5s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 19.92MB / 28.38MB 1.7s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 13.63MB / 28.23MB 1.7s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 22.02MB / 28.38MB 1.8s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 15.73MB / 28.23MB 1.8s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 24.12MB / 28.38MB 2.0s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 17.83MB / 28.23MB 2.1s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 26.21MB / 28.38MB 2.3s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 19.92MB / 28.23MB 2.4s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 28.38MB / 28.38MB 2.6s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 22.02MB / 28.23MB 2.6s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 24.12MB / 28.23MB 2.9s
+#4 sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 28.38MB / 28.38MB 3.0s done
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 26.21MB / 28.23MB 3.0s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 27.26MB / 265.08MB 3.3s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 28.23MB / 28.23MB 3.3s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 39.85MB / 382.98MB 3.6s
+#4 sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 28.23MB / 28.23MB 3.8s done
+#4 extracting sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 41.94MB / 265.08MB 4.7s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 59.77MB / 382.98MB 5.0s
+#4 extracting sha256:59e22667830bf04fb35e15ed9c70023e9d121719bb87f0db7f3159ee7c7e0b8d 1.1s done
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 55.57MB / 265.08MB 5.9s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 80.74MB / 382.98MB 6.8s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 69.21MB / 265.08MB 6.8s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 82.84MB / 265.08MB 7.8s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 101.71MB / 382.98MB 8.6s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 97.52MB / 265.08MB 8.9s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 111.15MB / 265.08MB 9.9s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 121.63MB / 382.98MB 10.2s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 125.83MB / 265.08MB 11.1s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 142.61MB / 382.98MB 11.9s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 139.46MB / 265.08MB 12.5s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 162.53MB / 382.98MB 13.2s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 154.14MB / 265.08MB 13.7s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 182.45MB / 382.98MB 14.9s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 167.77MB / 265.08MB 14.7s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 181.40MB / 265.08MB 15.8s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 203.42MB / 382.98MB 16.7s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 195.04MB / 265.08MB 16.7s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 209.72MB / 265.08MB 17.7s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 224.40MB / 382.98MB 18.5s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 223.35MB / 265.08MB 18.8s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 236.98MB / 265.08MB 19.8s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 244.32MB / 382.98MB 20.3s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 251.66MB / 265.08MB 21.0s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 265.29MB / 382.98MB 21.9s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 265.08MB / 265.08MB 22.1s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 285.21MB / 382.98MB 23.4s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 306.18MB / 382.98MB 24.9s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 327.16MB / 382.98MB 26.3s
+#4 sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 265.08MB / 265.08MB 26.6s done
+#4 extracting sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 349.18MB / 382.98MB 27.4s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 369.10MB / 382.98MB 28.4s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 382.98MB / 382.98MB 33.5s
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 382.98MB / 382.98MB 38.6s
+#4 extracting sha256:74701f26999d7854982cfa51dafd83beeaf644031b943c4cbd0a245139a742a4 15.0s done
+#4 sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 382.98MB / 382.98MB 41.7s done
+#4 extracting sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8
+#4 extracting sha256:ea5d3216df1fb580c54c016ee13ff58eb965c0a0b0ef08afd8dfd5a1c03e95a8 0.4s done
+#4 DONE 42.2s
+
+#4 [1/5] FROM docker.io/devkitpro/devkita64:latest@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+#4 extracting sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691
+#4 extracting sha256:da5be4661c9ac4e389f9e5f939e58bff7d32bc60569fa7c14e849d5246881691 19.4s done
+#4 DONE 61.7s
+
+#5 [2/5] RUN apt-get update &&     apt-get install -y         python3-pip python3-setuptools python3-wheel         ninja-build pkg-config flex bison curl         libclang-dev clang cmake git         llvm-15-dev libllvmspirvlib-15-dev libclc-15-dev libclang-15-dev     && apt-get clean
+#5 0.527 Get:1 http://deb.debian.org/debian bookworm-backports InRelease [59.4 kB]
+#5 0.542 Get:2 http://deb.debian.org/debian bookworm InRelease [151 kB]
+#5 0.560 Get:3 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+#5 0.574 Get:4 http://deb.debian.org/debian-security bookworm-security InRelease [34.8 kB]
+#5 0.649 Get:5 http://deb.debian.org/debian bookworm-backports/main amd64 Packages.diff/Index [63.3 kB]
+#5 0.651 Ign:5 http://deb.debian.org/debian bookworm-backports/main amd64 Packages.diff/Index
+#5 0.659 Get:6 http://deb.debian.org/debian bookworm-backports/main amd64 Packages [300 kB]
+#5 0.702 Hit:7 https://apt.devkitpro.org stable InRelease
+#5 0.714 Get:8 http://deb.debian.org/debian bookworm/main amd64 Packages [8,790 kB]
+#5 1.035 Get:9 http://deb.debian.org/debian bookworm-updates/main amd64 Packages.diff/Index [21.8 kB]
+#5 1.036 Ign:9 http://deb.debian.org/debian bookworm-updates/main amd64 Packages.diff/Index
+#5 1.042 Get:10 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [349 kB]
+#5 1.066 Get:11 http://deb.debian.org/debian bookworm-updates/main amd64 Packages [6,924 B]
+#5 1.726 Fetched 9,833 kB in 1s (7,694 kB/s)
+#5 1.726 Reading package lists...
+#5 2.265 Reading package lists...
+#5 2.759 Building dependency tree...
+#5 2.929 Reading state information...
+#5 3.153 ninja-build is already the newest version (1.11.1-2~deb12u1).
+#5 3.153 pkg-config is already the newest version (1.8.1-1).
+#5 3.153 cmake is already the newest version (3.31.6-2~bpo12+1).
+#5 3.153 The following additional packages will be installed:
+#5 3.153   binfmt-support clang-14 git-man icu-devtools javascript-common lib32gcc-s1
+#5 3.153   lib32stdc++6 libc-bin libc-dev-bin libc-l10n libc6 libc6-dev libc6-i386
+#5 3.153   libclang-14-dev libclang-common-14-dev libclang-common-15-dev libclang-cpp15
+#5 3.153   libclang-rt-14-dev libclang1-15 libcurl3-gnutls libcurl3-nss libcurl4
+#5 3.153   libexpat1 libexpat1-dev libffi-dev libfl-dev libfl2 libgc1 libgpm2
+#5 3.153   libicu-dev libjs-jquery libjs-sphinxdoc libjs-underscore libllvm15
+#5 3.154   libllvmspirvlib15 libncurses-dev libncurses6 libnspr4 libnss3 libobjc-12-dev
+#5 3.154   libobjc4 libpfm4 libpipeline1 libpython3-dev libpython3.11 libpython3.11-dev
+#5 3.154   libpython3.11-minimal libpython3.11-stdlib libtinfo-dev libxml2 libxml2-dev
+#5 3.154   libyaml-0-2 libz3-dev llvm-14 llvm-14-dev llvm-14-linker-tools
+#5 3.154   llvm-14-runtime llvm-14-tools llvm-15 llvm-15-linker-tools llvm-15-runtime
+#5 3.155   llvm-15-tools locales m4 nss-plugin-pem python3-dev python3-distutils
+#5 3.155   python3-lib2to3 python3-pkg-resources python3-yaml python3.11 python3.11-dev
+#5 3.155   python3.11-minimal zlib1g-dev
+#5 3.157 Suggested packages:
+#5 3.157   bison-doc clang-14-doc wasi-libc flex-doc git-daemon-run
+#5 3.157   | git-daemon-sysvinit git-doc git-email git-gui gitk gitweb git-cvs
+#5 3.157   git-mediawiki git-svn apache2 | lighttpd | httpd glibc-doc libnss-nis
+#5 3.157   libnss-nisplus manpages-dev gpm icu-doc ncurses-doc llvm-14-doc llvm-15-doc
+#5 3.157   m4-doc python-setuptools-doc python3.11-venv python3.11-doc
+#5 3.157 Recommended packages:
+#5 3.157   less ssh-client manpages manpages-dev libc-devtools
+#5 3.542 The following NEW packages will be installed:
+#5 3.542   binfmt-support bison clang clang-14 flex icu-devtools javascript-common
+#5 3.543   lib32gcc-s1 lib32stdc++6 libc6-i386 libclang-14-dev libclang-15-dev
+#5 3.543   libclang-common-14-dev libclang-common-15-dev libclang-cpp15 libclang-dev
+#5 3.543   libclang-rt-14-dev libclang1-15 libclc-15-dev libcurl3-nss libexpat1-dev
+#5 3.543   libffi-dev libfl-dev libfl2 libgc1 libgpm2 libicu-dev libjs-jquery
+#5 3.543   libjs-sphinxdoc libjs-underscore libllvm15 libllvmspirvlib-15-dev
+#5 3.543   libllvmspirvlib15 libncurses-dev libncurses6 libnspr4 libnss3 libobjc-12-dev
+#5 3.544   libobjc4 libpfm4 libpipeline1 libpython3-dev libpython3.11 libpython3.11-dev
+#5 3.544   libtinfo-dev libxml2-dev libyaml-0-2 libz3-dev llvm-14 llvm-14-dev
+#5 3.544   llvm-14-linker-tools llvm-14-runtime llvm-14-tools llvm-15 llvm-15-dev
+#5 3.544   llvm-15-linker-tools llvm-15-runtime llvm-15-tools m4 nss-plugin-pem
+#5 3.544   python3-dev python3-distutils python3-lib2to3 python3-pip python3-setuptools
+#5 3.544   python3-wheel python3-yaml python3.11-dev zlib1g-dev
+#5 3.545 The following packages will be upgraded:
+#5 3.546   curl git git-man libc-bin libc-dev-bin libc-l10n libc6 libc6-dev
+#5 3.547   libcurl3-gnutls libcurl4 libexpat1 libpython3.11-minimal
+#5 3.547   libpython3.11-stdlib libxml2 locales python3-pkg-resources python3.11
+#5 3.548   python3.11-minimal
+#5 3.687 18 upgraded, 69 newly installed, 0 to remove and 59 not upgraded.
+#5 3.687 Need to get 256 MB of archives.
+#5 3.687 After this operation, 1,691 MB of additional disk space will be used.
+#5 3.687 Get:1 http://deb.debian.org/debian bookworm/main amd64 libc6-dev amd64 2.36-9+deb12u14 [1,904 kB]
+#5 3.841 Get:2 http://deb.debian.org/debian bookworm/main amd64 libc-dev-bin amd64 2.36-9+deb12u14 [48.1 kB]
+#5 3.850 Get:3 http://deb.debian.org/debian bookworm/main amd64 libc6 amd64 2.36-9+deb12u14 [2,759 kB]
+#5 3.965 Get:4 http://deb.debian.org/debian bookworm/main amd64 libc-bin amd64 2.36-9+deb12u14 [609 kB]
+#5 3.981 Get:5 http://deb.debian.org/debian bookworm/main amd64 libpipeline1 amd64 1.5.7-1 [38.5 kB]
+#5 3.981 Get:6 http://deb.debian.org/debian bookworm/main amd64 binfmt-support amd64 2.2.2-2 [64.0 kB]
+#5 3.983 Get:7 http://deb.debian.org/debian bookworm/main amd64 m4 amd64 1.4.19-3 [287 kB]
+#5 3.989 Get:8 http://deb.debian.org/debian bookworm/main amd64 flex amd64 2.6.4-8.2 [422 kB]
+#5 3.997 Get:9 http://deb.debian.org/debian-security bookworm-security/main amd64 python3.11 amd64 3.11.2-6+deb12u9 [575 kB]
+#5 4.028 Get:10 http://deb.debian.org/debian-security bookworm-security/main amd64 libpython3.11-stdlib amd64 3.11.2-6+deb12u9 [1,798 kB]
+#5 4.080 Get:11 http://deb.debian.org/debian-security bookworm-security/main amd64 python3.11-minimal amd64 3.11.2-6+deb12u9 [2,055 kB]
+#5 4.156 Get:12 http://deb.debian.org/debian-security bookworm-security/main amd64 libpython3.11-minimal amd64 3.11.2-6+deb12u9 [821 kB]
+#5 4.214 Get:13 http://deb.debian.org/debian-security bookworm-security/main amd64 libexpat1 amd64 2.5.0-1+deb12u4 [106 kB]
+#5 4.216 Get:14 http://deb.debian.org/debian bookworm/main amd64 libc-l10n all 2.36-9+deb12u14 [676 kB]
+#5 4.243 Get:15 http://deb.debian.org/debian bookworm/main amd64 locales all 2.36-9+deb12u14 [3,906 kB]
+#5 4.450 Get:16 http://deb.debian.org/debian bookworm/main amd64 bison amd64 2:3.8.2+dfsg-1+b1 [1,175 kB]
+#5 4.541 Get:17 http://deb.debian.org/debian bookworm/main amd64 libgc1 amd64 1:8.2.2-3 [245 kB]
+#5 4.559 Get:18 http://deb.debian.org/debian bookworm/main amd64 libobjc4 amd64 12.2.0-14+deb12u1 [43.2 kB]
+#5 4.561 Get:19 http://deb.debian.org/debian bookworm/main amd64 libobjc-12-dev amd64 12.2.0-14+deb12u1 [170 kB]
+#5 4.573 Get:20 http://deb.debian.org/debian bookworm/main amd64 libclang-common-14-dev all 1:14.0.6-12 [890 kB]
+#5 4.641 Get:21 http://deb.debian.org/debian bookworm/main amd64 llvm-14-linker-tools amd64 1:14.0.6-12 [1,288 kB]
+#5 4.687 Get:22 http://deb.debian.org/debian bookworm/main amd64 clang-14 amd64 1:14.0.6-12 [102 kB]
+#5 4.689 Get:23 http://deb.debian.org/debian bookworm/main amd64 clang amd64 1:14.0-55.7~deb12u1 [5,144 B]
+#5 4.689 Get:24 http://deb.debian.org/debian bookworm/main amd64 curl amd64 7.88.1-10+deb12u15 [316 kB]
+#5 4.695 Get:25 http://deb.debian.org/debian bookworm/main amd64 libcurl4 amd64 7.88.1-10+deb12u15 [392 kB]
+#5 4.705 Get:26 http://deb.debian.org/debian bookworm/main amd64 libcurl3-gnutls amd64 7.88.1-10+deb12u15 [386 kB]
+#5 4.726 Get:27 http://deb.debian.org/debian bookworm/main amd64 git-man all 1:2.39.5-0+deb12u3 [2,053 kB]
+#5 4.877 Get:28 http://deb.debian.org/debian bookworm/main amd64 git amd64 1:2.39.5-0+deb12u3 [7,264 kB]
+#5 5.224 Get:29 http://deb.debian.org/debian bookworm/main amd64 icu-devtools amd64 72.1-3+deb12u1 [206 kB]
+#5 5.230 Get:30 http://deb.debian.org/debian bookworm/main amd64 javascript-common all 11+nmu1 [6,260 B]
+#5 5.230 Get:31 http://deb.debian.org/debian bookworm/main amd64 libc6-i386 amd64 2.36-9+deb12u14 [2,458 kB]
+#5 5.350 Get:32 http://deb.debian.org/debian bookworm/main amd64 lib32gcc-s1 amd64 12.2.0-14+deb12u1 [59.7 kB]
+#5 5.353 Get:33 http://deb.debian.org/debian bookworm/main amd64 lib32stdc++6 amd64 12.2.0-14+deb12u1 [643 kB]
+#5 5.398 Get:34 http://deb.debian.org/debian bookworm/main amd64 libclang-14-dev amd64 1:14.0.6-12 [23.1 MB]
+#5 6.691 Get:35 http://deb.debian.org/debian bookworm/main amd64 libxml2 amd64 2.9.14+dfsg-1.3~deb12u6 [689 kB]
+#5 6.703 Get:36 http://deb.debian.org/debian bookworm/main amd64 libllvm15 amd64 1:15.0.6-4+b1 [23.1 MB]
+#5 7.895 Get:37 http://deb.debian.org/debian bookworm/main amd64 libclang1-15 amd64 1:15.0.6-4+b1 [6,346 kB]
+#5 8.244 Get:38 http://deb.debian.org/debian bookworm/main amd64 libclang-common-15-dev amd64 1:15.0.6-4+b1 [5,855 kB]
+#5 8.680 Get:39 http://deb.debian.org/debian bookworm/main amd64 libclang-15-dev amd64 1:15.0.6-4+b1 [24.2 MB]
+#5 10.43 Get:40 http://deb.debian.org/debian bookworm/main amd64 libclang-cpp15 amd64 1:15.0.6-4+b1 [11.6 MB]
+#5 11.15 Get:41 http://deb.debian.org/debian bookworm/main amd64 libclang-dev amd64 1:14.0-55.7~deb12u1 [4,728 B]
+#5 11.15 Get:42 http://deb.debian.org/debian bookworm/main amd64 libclang-rt-14-dev amd64 1:14.0.6-12 [3,275 kB]
+#5 11.40 Get:43 http://deb.debian.org/debian bookworm/main amd64 libclc-15-dev all 1:15.0.6-4 [53.6 kB]
+#5 11.40 Get:44 http://deb.debian.org/debian bookworm/main amd64 libnspr4 amd64 2:4.35-1 [113 kB]
+#5 11.41 Get:45 http://deb.debian.org/debian-security bookworm-security/main amd64 libnss3 amd64 2:3.87.1-1+deb12u4 [1,331 kB]
+#5 11.51 Get:46 http://deb.debian.org/debian bookworm/main amd64 nss-plugin-pem amd64 1.0.8+1-1 [54.6 kB]
+#5 11.51 Get:47 http://deb.debian.org/debian bookworm/main amd64 libcurl3-nss amd64 7.88.1-10+deb12u15 [396 kB]
+#5 11.54 Get:48 http://deb.debian.org/debian-security bookworm-security/main amd64 libexpat1-dev amd64 2.5.0-1+deb12u4 [157 kB]
+#5 11.56 Get:49 http://deb.debian.org/debian bookworm/main amd64 libffi-dev amd64 3.4.4-1 [59.4 kB]
+#5 11.56 Get:50 http://deb.debian.org/debian bookworm/main amd64 libfl2 amd64 2.6.4-8.2 [84.0 kB]
+#5 11.56 Get:51 http://deb.debian.org/debian bookworm/main amd64 libfl-dev amd64 2.6.4-8.2 [85.2 kB]
+#5 11.56 Get:52 http://deb.debian.org/debian bookworm/main amd64 libgpm2 amd64 1.20.7-10+b1 [14.2 kB]
+#5 11.56 Get:53 http://deb.debian.org/debian bookworm/main amd64 libicu-dev amd64 72.1-3+deb12u1 [10.3 MB]
+#5 12.27 Get:54 http://deb.debian.org/debian bookworm/main amd64 libjs-jquery all 3.6.1+dfsg+~3.5.14-1 [326 kB]
+#5 12.28 Get:55 http://deb.debian.org/debian bookworm/main amd64 libjs-underscore all 1.13.4~dfsg+~1.11.4-3 [116 kB]
+#5 12.28 Get:56 http://deb.debian.org/debian bookworm/main amd64 libjs-sphinxdoc all 5.3.0-4 [130 kB]
+#5 12.29 Get:57 http://deb.debian.org/debian bookworm/main amd64 libllvmspirvlib15 amd64 15.0.0-2 [719 kB]
+#5 12.34 Get:58 http://deb.debian.org/debian bookworm/main amd64 libllvmspirvlib-15-dev amd64 15.0.0-2 [9,268 B]
+#5 12.35 Get:59 http://deb.debian.org/debian bookworm/main amd64 libncurses6 amd64 6.4-4 [103 kB]
+#5 12.36 Get:60 http://deb.debian.org/debian bookworm/main amd64 libncurses-dev amd64 6.4-4 [349 kB]
+#5 12.38 Get:61 http://deb.debian.org/debian bookworm/main amd64 libpfm4 amd64 4.13.0-1 [294 kB]
+#5 12.40 Get:62 http://deb.debian.org/debian-security bookworm-security/main amd64 libpython3.11 amd64 3.11.2-6+deb12u9 [1,989 kB]
+#5 12.57 Get:63 http://deb.debian.org/debian bookworm/main amd64 zlib1g-dev amd64 1:1.2.13.dfsg-1 [916 kB]
+#5 12.64 Get:64 http://deb.debian.org/debian-security bookworm-security/main amd64 libpython3.11-dev amd64 3.11.2-6+deb12u9 [4,739 kB]
+#5 12.96 Get:65 http://deb.debian.org/debian bookworm/main amd64 libpython3-dev amd64 3.11.2-1+b1 [9,572 B]
+#5 12.96 Get:66 http://deb.debian.org/debian bookworm/main amd64 libtinfo-dev amd64 6.4-4 [924 B]
+#5 12.96 Get:67 http://deb.debian.org/debian bookworm/main amd64 libxml2-dev amd64 2.9.14+dfsg-1.3~deb12u6 [785 kB]
+#5 13.01 Get:68 http://deb.debian.org/debian bookworm/main amd64 libyaml-0-2 amd64 0.2.5-1 [53.6 kB]
+#5 13.02 Get:69 http://deb.debian.org/debian bookworm/main amd64 libz3-dev amd64 4.8.12-3.1 [90.6 kB]
+#5 13.02 Get:70 http://deb.debian.org/debian bookworm/main amd64 llvm-14-runtime amd64 1:14.0.6-12 [477 kB]
+#5 13.04 Get:71 http://deb.debian.org/debian bookworm/main amd64 llvm-14 amd64 1:14.0.6-12 [11.7 MB]
+#5 13.83 Get:72 http://deb.debian.org/debian bookworm/main amd64 python3-yaml amd64 6.0-3+b2 [119 kB]
+#5 13.84 Get:73 http://deb.debian.org/debian bookworm/main amd64 llvm-14-tools amd64 1:14.0.6-12 [405 kB]
+#5 13.86 Get:74 http://deb.debian.org/debian bookworm/main amd64 llvm-14-dev amd64 1:14.0.6-12 [33.9 MB]
+#5 16.21 Get:75 http://deb.debian.org/debian bookworm/main amd64 llvm-15-runtime amd64 1:15.0.6-4+b1 [495 kB]
+#5 16.24 Get:76 http://deb.debian.org/debian bookworm/main amd64 llvm-15-linker-tools amd64 1:15.0.6-4+b1 [1,299 kB]
+#5 16.34 Get:77 http://deb.debian.org/debian bookworm/main amd64 llvm-15 amd64 1:15.0.6-4+b1 [12.6 MB]
+#5 17.32 Get:78 http://deb.debian.org/debian bookworm/main amd64 llvm-15-tools amd64 1:15.0.6-4+b1 [436 kB]
+#5 17.35 Get:79 http://deb.debian.org/debian bookworm/main amd64 llvm-15-dev amd64 1:15.0.6-4+b1 [36.8 MB]
+#5 19.66 Get:80 http://deb.debian.org/debian-security bookworm-security/main amd64 python3.11-dev amd64 3.11.2-6+deb12u9 [619 kB]
+#5 19.70 Get:81 http://deb.debian.org/debian bookworm/main amd64 python3-lib2to3 all 3.11.2-3 [76.3 kB]
+#5 19.71 Get:82 http://deb.debian.org/debian bookworm/main amd64 python3-distutils all 3.11.2-3 [131 kB]
+#5 19.72 Get:83 http://deb.debian.org/debian bookworm/main amd64 python3-dev amd64 3.11.2-1+b1 [26.2 kB]
+#5 19.72 Get:84 http://deb.debian.org/debian bookworm/main amd64 python3-pkg-resources all 66.1.1-1+deb12u2 [297 kB]
+#5 19.74 Get:85 http://deb.debian.org/debian bookworm/main amd64 python3-setuptools all 66.1.1-1+deb12u2 [522 kB]
+#5 19.78 Get:86 http://deb.debian.org/debian bookworm/main amd64 python3-wheel all 0.38.4-2 [30.8 kB]
+#5 19.78 Get:87 http://deb.debian.org/debian bookworm/main amd64 python3-pip all 23.0.1+dfsg-1 [1,325 kB]
+#5 21.35 Preconfiguring packages ...
+#5 21.44 Fetched 256 MB in 16s (15.7 MB/s)
+#5 21.46 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 21137 files and directories currently installed.)
+#5 21.48 Preparing to unpack .../libc6-dev_2.36-9+deb12u14_amd64.deb ...
+#5 21.49 Unpacking libc6-dev:amd64 (2.36-9+deb12u14) over (2.36-9+deb12u10) ...
+#5 23.42 Preparing to unpack .../libc-dev-bin_2.36-9+deb12u14_amd64.deb ...
+#5 23.44 Unpacking libc-dev-bin (2.36-9+deb12u14) over (2.36-9+deb12u10) ...
+#5 23.51 Preparing to unpack .../libc6_2.36-9+deb12u14_amd64.deb ...
+#5 23.62 Unpacking libc6:amd64 (2.36-9+deb12u14) over (2.36-9+deb12u10) ...
+#5 24.93 Setting up libc6:amd64 (2.36-9+deb12u14) ...
+#5 26.06 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 21137 files and directories currently installed.)
+#5 26.07 Preparing to unpack .../libc-bin_2.36-9+deb12u14_amd64.deb ...
+#5 26.08 Unpacking libc-bin (2.36-9+deb12u14) over (2.36-9+deb12u10) ...
+#5 26.29 Setting up libc-bin (2.36-9+deb12u14) ...
+#5 26.42 Selecting previously unselected package libpipeline1:amd64.
+#5 26.42 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 21137 files and directories currently installed.)
+#5 26.43 Preparing to unpack .../00-libpipeline1_1.5.7-1_amd64.deb ...
+#5 26.44 Unpacking libpipeline1:amd64 (1.5.7-1) ...
+#5 26.48 Selecting previously unselected package binfmt-support.
+#5 26.48 Preparing to unpack .../01-binfmt-support_2.2.2-2_amd64.deb ...
+#5 26.49 Unpacking binfmt-support (2.2.2-2) ...
+#5 26.53 Selecting previously unselected package m4.
+#5 26.53 Preparing to unpack .../02-m4_1.4.19-3_amd64.deb ...
+#5 26.53 Unpacking m4 (1.4.19-3) ...
+#5 26.59 Selecting previously unselected package flex.
+#5 26.59 Preparing to unpack .../03-flex_2.6.4-8.2_amd64.deb ...
+#5 26.59 Unpacking flex (2.6.4-8.2) ...
+#5 26.66 Preparing to unpack .../04-python3.11_3.11.2-6+deb12u9_amd64.deb ...
+#5 26.81 Unpacking python3.11 (3.11.2-6+deb12u9) over (3.11.2-6+deb12u6) ...
+#5 26.88 Preparing to unpack .../05-libpython3.11-stdlib_3.11.2-6+deb12u9_amd64.deb ...
+#5 26.93 Unpacking libpython3.11-stdlib:amd64 (3.11.2-6+deb12u9) over (3.11.2-6+deb12u6) ...
+#5 29.93 Preparing to unpack .../06-python3.11-minimal_3.11.2-6+deb12u9_amd64.deb ...
+#5 29.95 Unpacking python3.11-minimal (3.11.2-6+deb12u9) over (3.11.2-6+deb12u6) ...
+#5 30.26 Preparing to unpack .../07-libpython3.11-minimal_3.11.2-6+deb12u9_amd64.deb ...
+#5 30.35 Unpacking libpython3.11-minimal:amd64 (3.11.2-6+deb12u9) over (3.11.2-6+deb12u6) ...
+#5 31.43 Preparing to unpack .../08-libexpat1_2.5.0-1+deb12u4_amd64.deb ...
+#5 31.45 Unpacking libexpat1:amd64 (2.5.0-1+deb12u4) over (2.5.0-1+deb12u1) ...
+#5 31.51 Preparing to unpack .../09-libc-l10n_2.36-9+deb12u14_all.deb ...
+#5 31.53 Unpacking libc-l10n (2.36-9+deb12u14) over (2.36-9+deb12u10) ...
+#5 31.62 Preparing to unpack .../10-locales_2.36-9+deb12u14_all.deb ...
+#5 31.63 Unpacking locales (2.36-9+deb12u14) over (2.36-9+deb12u10) ...
+#5 33.93 Selecting previously unselected package bison.
+#5 33.93 Preparing to unpack .../11-bison_2%3a3.8.2+dfsg-1+b1_amd64.deb ...
+#5 33.94 Unpacking bison (2:3.8.2+dfsg-1+b1) ...
+#5 34.03 Selecting previously unselected package libgc1:amd64.
+#5 34.03 Preparing to unpack .../12-libgc1_1%3a8.2.2-3_amd64.deb ...
+#5 34.03 Unpacking libgc1:amd64 (1:8.2.2-3) ...
+#5 34.08 Selecting previously unselected package libobjc4:amd64.
+#5 34.09 Preparing to unpack .../13-libobjc4_12.2.0-14+deb12u1_amd64.deb ...
+#5 34.09 Unpacking libobjc4:amd64 (12.2.0-14+deb12u1) ...
+#5 34.13 Selecting previously unselected package libobjc-12-dev:amd64.
+#5 34.13 Preparing to unpack .../14-libobjc-12-dev_12.2.0-14+deb12u1_amd64.deb ...
+#5 34.13 Unpacking libobjc-12-dev:amd64 (12.2.0-14+deb12u1) ...
+#5 34.18 Selecting previously unselected package libclang-common-14-dev.
+#5 34.18 Preparing to unpack .../15-libclang-common-14-dev_1%3a14.0.6-12_all.deb ...
+#5 34.18 Unpacking libclang-common-14-dev (1:14.0.6-12) ...
+#5 34.30 Selecting previously unselected package llvm-14-linker-tools.
+#5 34.30 Preparing to unpack .../16-llvm-14-linker-tools_1%3a14.0.6-12_amd64.deb ...
+#5 34.31 Unpacking llvm-14-linker-tools (1:14.0.6-12) ...
+#5 34.41 Selecting previously unselected package clang-14.
+#5 34.41 Preparing to unpack .../17-clang-14_1%3a14.0.6-12_amd64.deb ...
+#5 34.41 Unpacking clang-14 (1:14.0.6-12) ...
+#5 34.46 Selecting previously unselected package clang.
+#5 34.46 Preparing to unpack .../18-clang_1%3a14.0-55.7~deb12u1_amd64.deb ...
+#5 34.47 Unpacking clang (1:14.0-55.7~deb12u1) ...
+#5 34.50 Preparing to unpack .../19-curl_7.88.1-10+deb12u15_amd64.deb ...
+#5 34.52 Unpacking curl (7.88.1-10+deb12u15) over (7.88.1-10+deb12u12) ...
+#5 34.59 Preparing to unpack .../20-libcurl4_7.88.1-10+deb12u15_amd64.deb ...
+#5 34.60 Unpacking libcurl4:amd64 (7.88.1-10+deb12u15) over (7.88.1-10+deb12u12) ...
+#5 34.69 Preparing to unpack .../21-libcurl3-gnutls_7.88.1-10+deb12u15_amd64.deb ...
+#5 34.70 Unpacking libcurl3-gnutls:amd64 (7.88.1-10+deb12u15) over (7.88.1-10+deb12u12) ...
+#5 34.78 Preparing to unpack .../22-git-man_1%3a2.39.5-0+deb12u3_all.deb ...
+#5 34.79 Unpacking git-man (1:2.39.5-0+deb12u3) over (1:2.39.5-0+deb12u2) ...
+#5 34.90 Preparing to unpack .../23-git_1%3a2.39.5-0+deb12u3_amd64.deb ...
+#5 34.93 Unpacking git (1:2.39.5-0+deb12u3) over (1:2.39.5-0+deb12u2) ...
+#5 36.25 Selecting previously unselected package icu-devtools.
+#5 36.26 Preparing to unpack .../24-icu-devtools_72.1-3+deb12u1_amd64.deb ...
+#5 36.26 Unpacking icu-devtools (72.1-3+deb12u1) ...
+#5 36.32 Selecting previously unselected package javascript-common.
+#5 36.32 Preparing to unpack .../25-javascript-common_11+nmu1_all.deb ...
+#5 36.33 Unpacking javascript-common (11+nmu1) ...
+#5 36.38 Selecting previously unselected package libc6-i386.
+#5 36.39 Preparing to unpack .../26-libc6-i386_2.36-9+deb12u14_amd64.deb ...
+#5 36.39 Unpacking libc6-i386 (2.36-9+deb12u14) ...
+#5 36.58 Selecting previously unselected package lib32gcc-s1.
+#5 36.58 Preparing to unpack .../27-lib32gcc-s1_12.2.0-14+deb12u1_amd64.deb ...
+#5 36.59 Unpacking lib32gcc-s1 (12.2.0-14+deb12u1) ...
+#5 36.64 Selecting previously unselected package lib32stdc++6.
+#5 36.64 Preparing to unpack .../28-lib32stdc++6_12.2.0-14+deb12u1_amd64.deb ...
+#5 36.65 Unpacking lib32stdc++6 (12.2.0-14+deb12u1) ...
+#5 36.72 Selecting previously unselected package libclang-14-dev.
+#5 36.72 Preparing to unpack .../29-libclang-14-dev_1%3a14.0.6-12_amd64.deb ...
+#5 36.72 Unpacking libclang-14-dev (1:14.0.6-12) ...
+#5 37.63 Preparing to unpack .../30-libxml2_2.9.14+dfsg-1.3~deb12u6_amd64.deb ...
+#5 37.64 Unpacking libxml2:amd64 (2.9.14+dfsg-1.3~deb12u6) over (2.9.14+dfsg-1.3~deb12u2) ...
+#5 37.77 Selecting previously unselected package libllvm15:amd64.
+#5 37.78 Preparing to unpack .../31-libllvm15_1%3a15.0.6-4+b1_amd64.deb ...
+#5 37.78 Unpacking libllvm15:amd64 (1:15.0.6-4+b1) ...
+#5 38.40 Selecting previously unselected package libclang1-15.
+#5 38.40 Preparing to unpack .../32-libclang1-15_1%3a15.0.6-4+b1_amd64.deb ...
+#5 38.40 Unpacking libclang1-15 (1:15.0.6-4+b1) ...
+#5 38.73 Selecting previously unselected package libclang-common-15-dev.
+#5 38.74 Preparing to unpack .../33-libclang-common-15-dev_1%3a15.0.6-4+b1_amd64.deb ...
+#5 38.74 Unpacking libclang-common-15-dev (1:15.0.6-4+b1) ...
+#5 39.04 Selecting previously unselected package libclang-15-dev.
+#5 39.04 Preparing to unpack .../34-libclang-15-dev_1%3a15.0.6-4+b1_amd64.deb ...
+#5 39.05 Unpacking libclang-15-dev (1:15.0.6-4+b1) ...
+#5 48.61 Selecting previously unselected package libclang-cpp15.
+#5 48.61 Preparing to unpack .../35-libclang-cpp15_1%3a15.0.6-4+b1_amd64.deb ...
+#5 48.62 Unpacking libclang-cpp15 (1:15.0.6-4+b1) ...
+#5 49.02 Selecting previously unselected package libclang-dev.
+#5 49.02 Preparing to unpack .../36-libclang-dev_1%3a14.0-55.7~deb12u1_amd64.deb ...
+#5 49.03 Unpacking libclang-dev (1:14.0-55.7~deb12u1) ...
+#5 49.07 Selecting previously unselected package libclang-rt-14-dev:amd64.
+#5 49.07 Preparing to unpack .../37-libclang-rt-14-dev_1%3a14.0.6-12_amd64.deb ...
+#5 49.08 Unpacking libclang-rt-14-dev:amd64 (1:14.0.6-12) ...
+#5 49.31 Selecting previously unselected package libclc-15-dev.
+#5 49.31 Preparing to unpack .../38-libclc-15-dev_1%3a15.0.6-4_all.deb ...
+#5 49.31 Unpacking libclc-15-dev (1:15.0.6-4) ...
+#5 49.40 Selecting previously unselected package libnspr4:amd64.
+#5 49.40 Preparing to unpack .../39-libnspr4_2%3a4.35-1_amd64.deb ...
+#5 49.41 Unpacking libnspr4:amd64 (2:4.35-1) ...
+#5 49.46 Selecting previously unselected package libnss3:amd64.
+#5 49.46 Preparing to unpack .../40-libnss3_2%3a3.87.1-1+deb12u4_amd64.deb ...
+#5 49.46 Unpacking libnss3:amd64 (2:3.87.1-1+deb12u4) ...
+#5 49.58 Selecting previously unselected package nss-plugin-pem:amd64.
+#5 49.58 Preparing to unpack .../41-nss-plugin-pem_1.0.8+1-1_amd64.deb ...
+#5 49.59 Unpacking nss-plugin-pem:amd64 (1.0.8+1-1) ...
+#5 49.63 Selecting previously unselected package libcurl3-nss:amd64.
+#5 49.64 Preparing to unpack .../42-libcurl3-nss_7.88.1-10+deb12u15_amd64.deb ...
+#5 49.64 Unpacking libcurl3-nss:amd64 (7.88.1-10+deb12u15) ...
+#5 49.70 Selecting previously unselected package libexpat1-dev:amd64.
+#5 49.70 Preparing to unpack .../43-libexpat1-dev_2.5.0-1+deb12u4_amd64.deb ...
+#5 49.71 Unpacking libexpat1-dev:amd64 (2.5.0-1+deb12u4) ...
+#5 49.75 Selecting previously unselected package libffi-dev:amd64.
+#5 49.75 Preparing to unpack .../44-libffi-dev_3.4.4-1_amd64.deb ...
+#5 49.76 Unpacking libffi-dev:amd64 (3.4.4-1) ...
+#5 49.80 Selecting previously unselected package libfl2:amd64.
+#5 49.80 Preparing to unpack .../45-libfl2_2.6.4-8.2_amd64.deb ...
+#5 49.81 Unpacking libfl2:amd64 (2.6.4-8.2) ...
+#5 49.84 Selecting previously unselected package libfl-dev:amd64.
+#5 49.85 Preparing to unpack .../46-libfl-dev_2.6.4-8.2_amd64.deb ...
+#5 49.85 Unpacking libfl-dev:amd64 (2.6.4-8.2) ...
+#5 49.90 Selecting previously unselected package libgpm2:amd64.
+#5 49.90 Preparing to unpack .../47-libgpm2_1.20.7-10+b1_amd64.deb ...
+#5 49.90 Unpacking libgpm2:amd64 (1.20.7-10+b1) ...
+#5 49.94 Selecting previously unselected package libicu-dev:amd64.
+#5 49.94 Preparing to unpack .../48-libicu-dev_72.1-3+deb12u1_amd64.deb ...
+#5 49.94 Unpacking libicu-dev:amd64 (72.1-3+deb12u1) ...
+#5 50.37 Selecting previously unselected package libjs-jquery.
+#5 50.37 Preparing to unpack .../49-libjs-jquery_3.6.1+dfsg+~3.5.14-1_all.deb ...
+#5 50.38 Unpacking libjs-jquery (3.6.1+dfsg+~3.5.14-1) ...
+#5 50.43 Selecting previously unselected package libjs-underscore.
+#5 50.43 Preparing to unpack .../50-libjs-underscore_1.13.4~dfsg+~1.11.4-3_all.deb ...
+#5 50.43 Unpacking libjs-underscore (1.13.4~dfsg+~1.11.4-3) ...
+#5 50.48 Selecting previously unselected package libjs-sphinxdoc.
+#5 50.48 Preparing to unpack .../51-libjs-sphinxdoc_5.3.0-4_all.deb ...
+#5 50.48 Unpacking libjs-sphinxdoc (5.3.0-4) ...
+#5 50.53 Selecting previously unselected package libllvmspirvlib15:amd64.
+#5 50.53 Preparing to unpack .../52-libllvmspirvlib15_15.0.0-2_amd64.deb ...
+#5 50.54 Unpacking libllvmspirvlib15:amd64 (15.0.0-2) ...
+#5 50.61 Selecting previously unselected package libllvmspirvlib-15-dev:amd64.
+#5 50.61 Preparing to unpack .../53-libllvmspirvlib-15-dev_15.0.0-2_amd64.deb ...
+#5 50.62 Unpacking libllvmspirvlib-15-dev:amd64 (15.0.0-2) ...
+#5 50.66 Selecting previously unselected package libncurses6:amd64.
+#5 50.67 Preparing to unpack .../54-libncurses6_6.4-4_amd64.deb ...
+#5 50.67 Unpacking libncurses6:amd64 (6.4-4) ...
+#5 50.71 Selecting previously unselected package libncurses-dev:amd64.
+#5 50.71 Preparing to unpack .../55-libncurses-dev_6.4-4_amd64.deb ...
+#5 50.71 Unpacking libncurses-dev:amd64 (6.4-4) ...
+#5 50.78 Selecting previously unselected package libpfm4:amd64.
+#5 50.78 Preparing to unpack .../56-libpfm4_4.13.0-1_amd64.deb ...
+#5 50.79 Unpacking libpfm4:amd64 (4.13.0-1) ...
+#5 50.85 Selecting previously unselected package libpython3.11:amd64.
+#5 50.85 Preparing to unpack .../57-libpython3.11_3.11.2-6+deb12u9_amd64.deb ...
+#5 50.86 Unpacking libpython3.11:amd64 (3.11.2-6+deb12u9) ...
+#5 51.00 Selecting previously unselected package zlib1g-dev:amd64.
+#5 51.00 Preparing to unpack .../58-zlib1g-dev_1%3a1.2.13.dfsg-1_amd64.deb ...
+#5 51.00 Unpacking zlib1g-dev:amd64 (1:1.2.13.dfsg-1) ...
+#5 51.05 Selecting previously unselected package libpython3.11-dev:amd64.
+#5 51.06 Preparing to unpack .../59-libpython3.11-dev_3.11.2-6+deb12u9_amd64.deb ...
+#5 51.06 Unpacking libpython3.11-dev:amd64 (3.11.2-6+deb12u9) ...
+#5 51.35 Selecting previously unselected package libpython3-dev:amd64.
+#5 51.35 Preparing to unpack .../60-libpython3-dev_3.11.2-1+b1_amd64.deb ...
+#5 51.36 Unpacking libpython3-dev:amd64 (3.11.2-1+b1) ...
+#5 51.39 Selecting previously unselected package libtinfo-dev:amd64.
+#5 51.40 Preparing to unpack .../61-libtinfo-dev_6.4-4_amd64.deb ...
+#5 51.40 Unpacking libtinfo-dev:amd64 (6.4-4) ...
+#5 51.43 Selecting previously unselected package libxml2-dev:amd64.
+#5 51.44 Preparing to unpack .../62-libxml2-dev_2.9.14+dfsg-1.3~deb12u6_amd64.deb ...
+#5 51.44 Unpacking libxml2-dev:amd64 (2.9.14+dfsg-1.3~deb12u6) ...
+#5 51.53 Selecting previously unselected package libyaml-0-2:amd64.
+#5 51.53 Preparing to unpack .../63-libyaml-0-2_0.2.5-1_amd64.deb ...
+#5 51.53 Unpacking libyaml-0-2:amd64 (0.2.5-1) ...
+#5 51.60 Selecting previously unselected package libz3-dev:amd64.
+#5 51.60 Preparing to unpack .../64-libz3-dev_4.8.12-3.1_amd64.deb ...
+#5 51.61 Unpacking libz3-dev:amd64 (4.8.12-3.1) ...
+#5 51.65 Selecting previously unselected package llvm-14-runtime.
+#5 51.66 Preparing to unpack .../65-llvm-14-runtime_1%3a14.0.6-12_amd64.deb ...
+#5 51.66 Unpacking llvm-14-runtime (1:14.0.6-12) ...
+#5 51.72 Selecting previously unselected package llvm-14.
+#5 51.72 Preparing to unpack .../66-llvm-14_1%3a14.0.6-12_amd64.deb ...
+#5 51.72 Unpacking llvm-14 (1:14.0.6-12) ...
+#5 52.18 Selecting previously unselected package python3-yaml.
+#5 52.18 Preparing to unpack .../67-python3-yaml_6.0-3+b2_amd64.deb ...
+#5 52.19 Unpacking python3-yaml (6.0-3+b2) ...
+#5 52.23 Selecting previously unselected package llvm-14-tools.
+#5 52.23 Preparing to unpack .../68-llvm-14-tools_1%3a14.0.6-12_amd64.deb ...
+#5 52.24 Unpacking llvm-14-tools (1:14.0.6-12) ...
+#5 52.40 Selecting previously unselected package llvm-14-dev.
+#5 52.40 Preparing to unpack .../69-llvm-14-dev_1%3a14.0.6-12_amd64.deb ...
+#5 52.41 Unpacking llvm-14-dev (1:14.0.6-12) ...
+#5 58.30 Selecting previously unselected package llvm-15-runtime.
+#5 58.30 Preparing to unpack .../70-llvm-15-runtime_1%3a15.0.6-4+b1_amd64.deb ...
+#5 58.34 Unpacking llvm-15-runtime (1:15.0.6-4+b1) ...
+#5 58.41 Selecting previously unselected package llvm-15-linker-tools.
+#5 58.42 Preparing to unpack .../71-llvm-15-linker-tools_1%3a15.0.6-4+b1_amd64.deb ...
+#5 58.42 Unpacking llvm-15-linker-tools (1:15.0.6-4+b1) ...
+#5 58.52 Selecting previously unselected package llvm-15.
+#5 58.52 Preparing to unpack .../72-llvm-15_1%3a15.0.6-4+b1_amd64.deb ...
+#5 58.53 Unpacking llvm-15 (1:15.0.6-4+b1) ...
+#5 59.02 Selecting previously unselected package llvm-15-tools.
+#5 59.02 Preparing to unpack .../73-llvm-15-tools_1%3a15.0.6-4+b1_amd64.deb ...
+#5 59.02 Unpacking llvm-15-tools (1:15.0.6-4+b1) ...
+#5 59.19 Selecting previously unselected package llvm-15-dev.
+#5 59.20 Preparing to unpack .../74-llvm-15-dev_1%3a15.0.6-4+b1_amd64.deb ...
+#5 59.20 Unpacking llvm-15-dev (1:15.0.6-4+b1) ...
+#5 70.64 Selecting previously unselected package python3.11-dev.
+#5 70.65 Preparing to unpack .../75-python3.11-dev_3.11.2-6+deb12u9_amd64.deb ...
+#5 70.65 Unpacking python3.11-dev (3.11.2-6+deb12u9) ...
+#5 70.70 Selecting previously unselected package python3-lib2to3.
+#5 70.70 Preparing to unpack .../76-python3-lib2to3_3.11.2-3_all.deb ...
+#5 70.71 Unpacking python3-lib2to3 (3.11.2-3) ...
+#5 70.76 Selecting previously unselected package python3-distutils.
+#5 70.77 Preparing to unpack .../77-python3-distutils_3.11.2-3_all.deb ...
+#5 70.77 Unpacking python3-distutils (3.11.2-3) ...
+#5 70.81 Selecting previously unselected package python3-dev.
+#5 70.82 Preparing to unpack .../78-python3-dev_3.11.2-1+b1_amd64.deb ...
+#5 70.82 Unpacking python3-dev (3.11.2-1+b1) ...
+#5 70.86 Preparing to unpack .../79-python3-pkg-resources_66.1.1-1+deb12u2_all.deb ...
+#5 71.05 Unpacking python3-pkg-resources (66.1.1-1+deb12u2) over (66.1.1-1+deb12u1) ...
+#5 71.31 Selecting previously unselected package python3-setuptools.
+#5 71.31 Preparing to unpack .../80-python3-setuptools_66.1.1-1+deb12u2_all.deb ...
+#5 71.32 Unpacking python3-setuptools (66.1.1-1+deb12u2) ...
+#5 71.40 Selecting previously unselected package python3-wheel.
+#5 71.41 Preparing to unpack .../81-python3-wheel_0.38.4-2_all.deb ...
+#5 71.41 Unpacking python3-wheel (0.38.4-2) ...
+#5 71.46 Selecting previously unselected package python3-pip.
+#5 71.46 Preparing to unpack .../82-python3-pip_23.0.1+dfsg-1_all.deb ...
+#5 71.47 Unpacking python3-pip (23.0.1+dfsg-1) ...
+#5 71.64 Setting up python3-pkg-resources (66.1.1-1+deb12u2) ...
+#5 71.84 Setting up libexpat1:amd64 (2.5.0-1+deb12u4) ...
+#5 71.86 Setting up libpipeline1:amd64 (1.5.7-1) ...
+#5 71.87 Setting up javascript-common (11+nmu1) ...
+#5 71.91 Setting up libz3-dev:amd64 (4.8.12-3.1) ...
+#5 71.93 Setting up libclc-15-dev (1:15.0.6-4) ...
+#5 71.94 Setting up libc-l10n (2.36-9+deb12u14) ...
+#5 71.96 Setting up libgpm2:amd64 (1.20.7-10+b1) ...
+#5 71.97 Setting up libyaml-0-2:amd64 (0.2.5-1) ...
+#5 71.98 Setting up m4 (1.4.19-3) ...
+#5 72.00 Setting up python3-yaml (6.0-3+b2) ...
+#5 72.12 Setting up libcurl3-gnutls:amd64 (7.88.1-10+deb12u15) ...
+#5 72.14 Setting up libffi-dev:amd64 (3.4.4-1) ...
+#5 72.15 Setting up locales (2.36-9+deb12u14) ...
+#5 72.62 Generating locales (this might take a while)...
+#5 72.62   en_US.UTF-8... done
+#5 73.70 Generation complete.
+#5 73.74 Setting up libpfm4:amd64 (4.13.0-1) ...
+#5 73.75 Setting up llvm-14-runtime (1:14.0.6-12) ...
+#5 73.77 Setting up libnspr4:amd64 (2:4.35-1) ...
+#5 73.78 Setting up libncurses6:amd64 (6.4-4) ...
+#5 73.80 Setting up libclang-common-14-dev (1:14.0.6-12) ...
+#5 73.81 Setting up binfmt-support (2.2.2-2) ...
+#5 73.84 invoke-rc.d: could not determine current runlevel
+#5 73.85 invoke-rc.d: policy-rc.d denied execution of start.
+#5 73.96 Setting up icu-devtools (72.1-3+deb12u1) ...
+#5 73.97 Setting up libfl2:amd64 (2.6.4-8.2) ...
+#5 73.99 Setting up libgc1:amd64 (1:8.2.2-3) ...
+#5 74.00 Setting up bison (2:3.8.2+dfsg-1+b1) ...
+#5 74.02 update-alternatives: using /usr/bin/bison.yacc to provide /usr/bin/yacc (yacc) in auto mode
+#5 74.02 update-alternatives: warning: skip creation of /usr/share/man/man1/yacc.1.gz because associated file /usr/share/man/man1/bison.yacc.1.gz (of link group yacc) doesn't exist
+#5 74.03 Setting up libc6-i386 (2.36-9+deb12u14) ...
+#5 74.05 Setting up libcurl4:amd64 (7.88.1-10+deb12u15) ...
+#5 74.06 Setting up git-man (1:2.39.5-0+deb12u3) ...
+#5 74.08 Setting up libpython3.11-minimal:amd64 (3.11.2-6+deb12u9) ...
+#5 74.10 Setting up curl (7.88.1-10+deb12u15) ...
+#5 74.11 Setting up libjs-jquery (3.6.1+dfsg+~3.5.14-1) ...
+#5 74.13 Setting up libc-dev-bin (2.36-9+deb12u14) ...
+#5 74.14 Setting up llvm-14-linker-tools (1:14.0.6-12) ...
+#5 74.16 Setting up python3-lib2to3 (3.11.2-3) ...
+#5 74.25 Setting up libxml2:amd64 (2.9.14+dfsg-1.3~deb12u6) ...
+#5 74.27 Setting up libjs-underscore (1.13.4~dfsg+~1.11.4-3) ...
+#5 74.30 Setting up llvm-14-tools (1:14.0.6-12) ...
+#5 74.34 Setting up python3-distutils (3.11.2-3) ...
+#5 74.47 Setting up python3.11-minimal (3.11.2-6+deb12u9) ...
+#5 74.92 Setting up flex (2.6.4-8.2) ...
+#5 74.96 Setting up python3-setuptools (66.1.1-1+deb12u2) ...
+#5 75.34 Setting up libpython3.11-stdlib:amd64 (3.11.2-6+deb12u9) ...
+#5 75.38 Setting up libobjc4:amd64 (12.2.0-14+deb12u1) ...
+#5 75.42 Setting up libnss3:amd64 (2:3.87.1-1+deb12u4) ...
+#5 75.47 Setting up python3-wheel (0.38.4-2) ...
+#5 75.60 Setting up libfl-dev:amd64 (2.6.4-8.2) ...
+#5 75.65 Setting up lib32gcc-s1 (12.2.0-14+deb12u1) ...
+#5 75.68 Setting up lib32stdc++6 (12.2.0-14+deb12u1) ...
+#5 75.70 Setting up git (1:2.39.5-0+deb12u3) ...
+#5 75.73 Setting up python3-pip (23.0.1+dfsg-1) ...
+#5 76.50 Setting up libjs-sphinxdoc (5.3.0-4) ...
+#5 76.51 Setting up libobjc-12-dev:amd64 (12.2.0-14+deb12u1) ...
+#5 76.53 Setting up libllvm15:amd64 (1:15.0.6-4+b1) ...
+#5 76.54 Setting up libclang-14-dev (1:14.0.6-12) ...
+#5 76.55 Setting up libc6-dev:amd64 (2.36-9+deb12u14) ...
+#5 76.57 Setting up libicu-dev:amd64 (72.1-3+deb12u1) ...
+#5 76.58 Setting up python3.11 (3.11.2-6+deb12u9) ...
+#5 77.09 Setting up libncurses-dev:amd64 (6.4-4) ...
+#5 77.10 Setting up libllvmspirvlib15:amd64 (15.0.0-2) ...
+#5 77.13 Setting up clang-14 (1:14.0.6-12) ...
+#5 77.14 Setting up libclang-dev (1:14.0-55.7~deb12u1) ...
+#5 77.16 Setting up libpython3.11:amd64 (3.11.2-6+deb12u9) ...
+#5 77.17 Setting up libclang-common-15-dev (1:15.0.6-4+b1) ...
+#5 77.30 Setting up llvm-15-linker-tools (1:15.0.6-4+b1) ...
+#5 78.14 Setting up nss-plugin-pem:amd64 (1.0.8+1-1) ...
+#5 78.15 Setting up libllvmspirvlib-15-dev:amd64 (15.0.0-2) ...
+#5 78.17 Setting up libclang1-15 (1:15.0.6-4+b1) ...
+#5 78.19 Setting up llvm-15-tools (1:15.0.6-4+b1) ...
+#5 78.20 Setting up libxml2-dev:amd64 (2.9.14+dfsg-1.3~deb12u6) ...
+#5 78.22 Setting up libexpat1-dev:amd64 (2.5.0-1+deb12u4) ...
+#5 78.23 Setting up libclang-rt-14-dev:amd64 (1:14.0.6-12) ...
+#5 78.25 Setting up clang (1:14.0-55.7~deb12u1) ...
+#5 78.28 Setting up libclang-cpp15 (1:15.0.6-4+b1) ...
+#5 78.29 Setting up llvm-15-runtime (1:15.0.6-4+b1) ...
+#5 78.32 Setting up zlib1g-dev:amd64 (1:1.2.13.dfsg-1) ...
+#5 78.33 Setting up libcurl3-nss:amd64 (7.88.1-10+deb12u15) ...
+#5 78.35 Setting up llvm-14 (1:14.0.6-12) ...
+#5 78.36 Setting up libtinfo-dev:amd64 (6.4-4) ...
+#5 78.37 Setting up llvm-15 (1:15.0.6-4+b1) ...
+#5 78.39 Setting up libclang-15-dev (1:15.0.6-4+b1) ...
+#5 78.40 Setting up llvm-15-dev (1:15.0.6-4+b1) ...
+#5 78.41 Setting up libpython3.11-dev:amd64 (3.11.2-6+deb12u9) ...
+#5 78.43 Setting up llvm-14-dev (1:14.0.6-12) ...
+#5 78.46 Setting up libpython3-dev:amd64 (3.11.2-1+b1) ...
+#5 78.48 Setting up python3.11-dev (3.11.2-6+deb12u9) ...
+#5 78.49 Setting up python3-dev (3.11.2-1+b1) ...
+#5 78.51 Processing triggers for libc-bin (2.36-9+deb12u14) ...
+#5 DONE 79.6s
+
+#6 [3/5] RUN pip3 install --break-system-packages meson mako
+#6 0.734 Collecting meson
+#6 0.875   Downloading meson-1.12.1-py3-none-any.whl (1.1 MB)
+#6 0.991      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 9.7 MB/s eta 0:00:00
+#6 1.033 Collecting mako
+#6 1.043   Downloading mako-1.4.3-py3-none-any.whl (80 kB)
+#6 1.053      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 kB 9.1 MB/s eta 0:00:00
+#6 1.174 Collecting MarkupSafe>=2.0
+#6 1.187   Downloading markupsafe-3.0.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+#6 1.215 Installing collected packages: meson, MarkupSafe, mako
+#6 1.852 Successfully installed MarkupSafe-3.0.4 mako-1.4.3 meson-1.12.1
+#6 1.852 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+#6 DONE 2.1s
+
+#7 [4/5] RUN cd /tmp &&     git clone --depth 1 --branch vulkan-sdk-1.3.290.0 https://github.com/KhronosGroup/SPIRV-Tools.git &&     git clone --depth 1 --branch vulkan-sdk-1.3.290.0 https://github.com/KhronosGroup/SPIRV-Headers.git SPIRV-Tools/external/spirv-headers &&     cd SPIRV-Tools && mkdir build && cd build &&     cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON &&     make -j$(nproc) && make install &&     rm -rf /tmp/SPIRV-Tools
+#7 0.243 Cloning into 'SPIRV-Tools'...
+#7 2.140 Note: switching to '0cfe9e7219148716dfd30b37f4d21753f098707a'.
+#7 2.140 
+#7 2.140 You are in 'detached HEAD' state. You can look around, make experimental
+#7 2.140 changes and commit them, and you can discard any commits you make in this
+#7 2.140 state without impacting any branches by switching back to a branch.
+#7 2.140 
+#7 2.140 If you want to create a new branch to retain commits you create, you may
+#7 2.140 do so (now or later) by using -c with the switch command. Example:
+#7 2.140 
+#7 2.140   git switch -c <new-branch-name>
+#7 2.140 
+#7 2.140 Or undo this operation with:
+#7 2.140 
+#7 2.140   git switch -
+#7 2.140 
+#7 2.140 Turn off this advice by setting config variable advice.detachedHead to false
+#7 2.140 
+#7 2.313 Cloning into 'SPIRV-Tools/external/spirv-headers'...
+#7 3.044 Note: switching to '2acb319af38d43be3ea76bfabf3998e5281d8d12'.
+#7 3.044 
+#7 3.044 You are in 'detached HEAD' state. You can look around, make experimental
+#7 3.044 changes and commit them, and you can discard any commits you make in this
+#7 3.044 state without impacting any branches by switching back to a branch.
+#7 3.044 
+#7 3.044 If you want to create a new branch to retain commits you create, you may
+#7 3.044 do so (now or later) by using -c with the switch command. Example:
+#7 3.044 
+#7 3.044   git switch -c <new-branch-name>
+#7 3.044 
+#7 3.044 Or undo this operation with:
+#7 3.044 
+#7 3.044   git switch -
+#7 3.044 
+#7 3.044 Turn off this advice by setting config variable advice.detachedHead to false
+#7 3.044 
+#7 3.178 -- The C compiler identification is GNU 12.2.0
+#7 3.250 -- The CXX compiler identification is GNU 12.2.0
+#7 3.259 -- Detecting C compiler ABI info
+#7 3.353 -- Detecting C compiler ABI info - done
+#7 3.367 -- Check for working C compiler: /usr/bin/cc - skipped
+#7 3.367 -- Detecting C compile features
+#7 3.368 -- Detecting C compile features - done
+#7 3.380 -- Detecting CXX compiler ABI info
+#7 3.469 -- Detecting CXX compiler ABI info - done
+#7 3.484 -- Check for working CXX compiler: /usr/bin/c++ - skipped
+#7 3.484 -- Detecting CXX compile features
+#7 3.485 -- Detecting CXX compile features - done
+#7 3.583 -- Found Python3: /usr/bin/python3 (found version "3.11.2") found components: Interpreter
+#7 3.609 -- Configuring done (0.5s)
+#7 3.721 -- Generating done (0.1s)
+#7 3.722 -- Build files have been written to: /tmp/SPIRV-Tools/build
+#7 3.776 [  1%] Update build-version.inc in the SPIRV-Tools build directory (if necessary).
+#7 3.777 [  1%] Generate language specific header for NonSemanticShaderDebugInfo100.
+#7 3.777 [  1%] Generate extended instruction tables for spv-amd-shader-explicit-vertex-parameter.
+#7 3.777 [  1%] Generate info tables for SPIR-V vunified1 core instructions and operands.
+#7 3.777 [  2%] Generate enum-string mapping for SPIR-V vunified1.
+#7 3.777 [  1%] Generating SPIRV-Tools-shared.pc
+#7 3.778 [  2%] Generate extended instruction tables for spv-amd-shader-trinary-minmax.
+#7 3.779 [  2%] Generate extended instruction tables for spv-amd-gcn-shader.
+#7 3.784 [  3%] Generate extended instruction tables for spv-amd-shader-ballot.
+#7 3.784 [  3%] Generate extended instruction tables for opencl.debuginfo.100.
+#7 3.784 [  3%] Generate extended instruction tables for nonsemantic.shader.debuginfo.100.
+#7 3.784 [  3%] Generate extended instruction tables for debuginfo.
+#7 3.791 [  4%] Generate extended instruction tables for nonsemantic.clspvreflection.
+#7 3.793 [  5%] Generate language specific header for DebugInfo.
+#7 3.796 [  5%] Generate language specific header for OpenCLDebugInfo100.
+#7 3.806 [  6%] Generate extended instruction tables for nonsemantic.vkspreflection.
+#7 3.815 [  7%] Generating SPIRV-Tools.pc
+#7 3.840 [  7%] Built target spirv-tools-header-NonSemanticShaderDebugInfo100
+#7 3.849 [  7%] Built target spv-tools-spv-amd-stm
+#7 3.849 [  7%] Built target spv-tools-spv-amd-sevp
+#7 3.849 [  7%] Built target spv-tools-spv-amd-gs
+#7 3.854 [  7%] Built target spirv-tools-header-DebugInfo
+#7 3.855 [  7%] Generate tables based on the SPIR-V XML registry.
+#7 3.858 [  7%] Built target spv-tools-spv-amd-sb
+#7 3.858 [  7%] Built target spirv-tools-build-version
+#7 3.859 [  7%] Built target spirv-tools-pkg-config
+#7 3.860 [  7%] Built target spv-tools-debuginfo
+#7 3.866 [  7%] Built target spirv-tools-header-OpenCLDebugInfo100
+#7 3.871 [  7%] Built target spv-tools-cldi100
+#7 3.871 [  7%] Built target enum_string_mapping
+#7 3.875 [  7%] Built target spv-tools-vkspreflection
+#7 3.878 [  7%] Built target spv-tools-shdi100
+#7 3.883 [  7%] Built target spv-tools-clspvreflection
+#7 3.900 [  7%] Built target core_tables
+#7 3.903 [  7%] Generate info tables for OpenCL extended instructions and operands vunified1.
+#7 3.903 [  7%] Generate info tables for GLSL extended instructions and operands vunified1.
+#7 3.941 [  7%] Built target extinst_tables
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/util/string_utils.cpp.o
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/enum_string_mapping.cpp.o
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/assembly_grammar.cpp.o
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/diagnostic.cpp.o
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/util/bit_vector.cpp.o
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/util/parse_number.cpp.o
+#7 3.968 [ 10%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/disassemble.cpp.o
+#7 3.968 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/assembly_grammar.cpp.o
+#7 3.969 [ 10%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/ext_inst.cpp.o
+#7 3.969 [ 11%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/extensions.cpp.o
+#7 3.970 [ 10%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/util/parse_number.cpp.o
+#7 3.970 [ 11%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/util/string_utils.cpp.o
+#7 3.970 [ 11%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/util/bit_vector.cpp.o
+#7 3.971 [  9%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/binary.cpp.o
+#7 3.974 [ 11%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/binary.cpp.o
+#7 3.981 [ 12%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/diagnostic.cpp.o
+#7 4.748 [ 12%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/libspirv.cpp.o
+#7 4.769 [ 12%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/disassemble.cpp.o
+#7 4.854 [ 12%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/name_mapper.cpp.o
+#7 4.854 [ 12%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/enum_string_mapping.cpp.o
+#7 4.893 [ 12%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/opcode.cpp.o
+#7 4.904 [ 13%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/operand.cpp.o
+#7 5.029 [ 13%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/ext_inst.cpp.o
+#7 5.089 [ 13%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/parsed_operand.cpp.o
+#7 5.095 [ 13%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/print.cpp.o
+#7 5.260 [ 13%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/software_version.cpp.o
+#7 5.267 [ 14%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/spirv_endian.cpp.o
+#7 5.349 [ 15%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/extensions.cpp.o
+#7 5.385 [ 15%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/spirv_fuzzer_options.cpp.o
+#7 5.666 [ 15%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/libspirv.cpp.o
+#7 5.718 [ 15%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/name_mapper.cpp.o
+#7 5.820 [ 15%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/spirv_optimizer_options.cpp.o
+#7 5.930 [ 16%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/spirv_target_env.cpp.o
+#7 5.931 [ 16%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/spirv_reducer_options.cpp.o
+#7 6.011 [ 16%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/opcode.cpp.o
+#7 6.222 [ 16%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/spirv_validator_options.cpp.o
+#7 6.281 [ 17%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/operand.cpp.o
+#7 6.315 [ 17%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/parsed_operand.cpp.o
+#7 6.326 [ 17%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/table.cpp.o
+#7 6.434 [ 18%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/text.cpp.o
+#7 6.455 [ 18%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/print.cpp.o
+#7 6.649 [ 19%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/software_version.cpp.o
+#7 6.707 [ 19%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/text_handler.cpp.o
+#7 6.857 [ 19%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate.cpp.o
+#7 7.052 [ 19%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_adjacency.cpp.o
+#7 7.242 [ 19%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/spirv_endian.cpp.o
+#7 7.251 [ 19%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/spirv_fuzzer_options.cpp.o
+#7 7.325 [ 20%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_annotation.cpp.o
+#7 7.368 [ 20%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_arithmetics.cpp.o
+#7 7.385 [ 20%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/spirv_optimizer_options.cpp.o
+#7 7.472 [ 20%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_atomics.cpp.o
+#7 7.485 [ 21%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_barriers.cpp.o
+#7 7.618 [ 21%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_bitwise.cpp.o
+#7 7.661 [ 21%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_builtins.cpp.o
+#7 7.708 [ 21%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_capability.cpp.o
+#7 7.741 [ 22%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/spirv_reducer_options.cpp.o
+#7 7.814 [ 22%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/spirv_target_env.cpp.o
+#7 8.068 [ 23%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_cfg.cpp.o
+#7 8.226 [ 23%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_composites.cpp.o
+#7 8.279 [ 23%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/spirv_validator_options.cpp.o
+#7 8.390 [ 23%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_constants.cpp.o
+#7 8.460 [ 23%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_conversion.cpp.o
+#7 8.576 [ 23%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/table.cpp.o
+#7 9.712 [ 24%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/text.cpp.o
+#7 9.849 [ 24%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/text_handler.cpp.o
+#7 9.889 [ 24%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate.cpp.o
+#7 10.08 [ 25%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_debug.cpp.o
+#7 10.42 [ 26%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_adjacency.cpp.o
+#7 10.55 [ 26%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_annotation.cpp.o
+#7 10.61 [ 26%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_arithmetics.cpp.o
+#7 10.81 [ 26%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_atomics.cpp.o
+#7 11.20 [ 27%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_barriers.cpp.o
+#7 11.51 [ 27%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_bitwise.cpp.o
+#7 11.51 [ 27%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_decorations.cpp.o
+#7 11.73 [ 27%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_builtins.cpp.o
+#7 11.99 [ 28%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_capability.cpp.o
+#7 12.65 [ 28%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_cfg.cpp.o
+#7 12.76 [ 28%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_composites.cpp.o
+#7 13.45 [ 28%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_derivatives.cpp.o
+#7 13.62 [ 29%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_extensions.cpp.o
+#7 14.11 [ 29%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_execution_limitations.cpp.o
+#7 14.22 [ 29%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_function.cpp.o
+#7 14.23 [ 29%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_constants.cpp.o
+#7 14.37 [ 29%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_id.cpp.o
+#7 14.46 [ 30%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_image.cpp.o
+#7 14.87 [ 30%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_interfaces.cpp.o
+#7 15.10 [ 31%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_conversion.cpp.o
+#7 15.56 [ 31%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_instruction.cpp.o
+#7 15.57 [ 32%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_layout.cpp.o
+#7 15.75 [ 32%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_literals.cpp.o
+#7 16.00 [ 32%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_debug.cpp.o
+#7 16.36 [ 32%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_decorations.cpp.o
+#7 16.96 [ 32%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_derivatives.cpp.o
+#7 17.15 [ 33%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_extensions.cpp.o
+#7 17.18 [ 33%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_logicals.cpp.o
+#7 18.20 [ 33%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_memory.cpp.o
+#7 18.27 [ 34%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_memory_semantics.cpp.o
+#7 18.34 [ 34%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_mesh_shading.cpp.o
+#7 18.66 [ 34%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_misc.cpp.o
+#7 18.77 [ 34%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_execution_limitations.cpp.o
+#7 18.91 [ 34%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_mode_setting.cpp.o
+#7 19.05 [ 34%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_function.cpp.o
+#7 19.28 [ 35%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_id.cpp.o
+#7 19.61 [ 36%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_non_uniform.cpp.o
+#7 19.73 [ 36%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_image.cpp.o
+#7 19.77 [ 36%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_interfaces.cpp.o
+#7 20.58 [ 36%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_primitives.cpp.o
+#7 20.71 [ 36%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_instruction.cpp.o
+#7 20.84 [ 37%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_layout.cpp.o
+#7 20.93 [ 37%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_literals.cpp.o
+#7 20.96 [ 37%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_ray_query.cpp.o
+#7 21.83 [ 38%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_ray_tracing.cpp.o
+#7 21.85 [ 38%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_logicals.cpp.o
+#7 22.04 [ 38%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_memory.cpp.o
+#7 22.53 [ 39%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_memory_semantics.cpp.o
+#7 22.68 [ 39%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_mesh_shading.cpp.o
+#7 22.81 [ 39%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_ray_tracing_reorder.cpp.o
+#7 23.09 [ 39%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_scopes.cpp.o
+#7 23.22 [ 39%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_small_type_uses.cpp.o
+#7 23.29 [ 39%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_misc.cpp.o
+#7 23.64 [ 40%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validate_type.cpp.o
+#7 23.64 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_mode_setting.cpp.o
+#7 23.92 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/basic_block.cpp.o
+#7 23.99 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_non_uniform.cpp.o
+#7 24.24 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/construct.cpp.o
+#7 24.25 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_primitives.cpp.o
+#7 24.30 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_ray_query.cpp.o
+#7 24.54 [ 41%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/function.cpp.o
+#7 24.88 [ 42%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_ray_tracing.cpp.o
+#7 24.94 [ 43%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/instruction.cpp.o
+#7 25.01 [ 43%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/val/validation_state.cpp.o
+#7 25.34 [ 43%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_ray_tracing_reorder.cpp.o
+#7 25.56 [ 43%] Building CXX object source/CMakeFiles/SPIRV-Tools-shared.dir/util/timer.cpp.o
+#7 25.83 [ 43%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_scopes.cpp.o
+#7 25.85 [ 43%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_small_type_uses.cpp.o
+#7 26.05 [ 44%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validate_type.cpp.o
+#7 26.19 [ 44%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/basic_block.cpp.o
+#7 26.34 [ 44%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/construct.cpp.o
+#7 26.37 [ 45%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/function.cpp.o
+#7 26.37 [ 45%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/instruction.cpp.o
+#7 26.51 [ 45%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/val/validation_state.cpp.o
+#7 26.68 [ 45%] Building CXX object source/CMakeFiles/SPIRV-Tools-static.dir/util/timer.cpp.o
+#7 30.14 [ 46%] Linking CXX shared library libSPIRV-Tools-shared.so
+#7 30.25 [ 47%] Built target SPIRV-Tools-shared
+#7 30.65 [ 48%] Linking CXX static library libSPIRV-Tools.a
+#7 30.98 [ 48%] Built target SPIRV-Tools-static
+#7 31.01 [ 51%] Building CXX object tools/CMakeFiles/spirv-val.dir/util/cli_consumer.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-objdump.dir/util/cli_consumer.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-val.dir/util/flags.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-objdump.dir/objdump/objdump.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-val.dir/val/val.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-objdump.dir/objdump/extract_source.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-dis.dir/util/flags.cpp.o
+#7 31.01 [ 51%] Building CXX object tools/CMakeFiles/spirv-as.dir/util/flags.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-dis.dir/dis/dis.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-cfg.dir/cfg/cfg.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-cfg.dir/cfg/bin_to_dot.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-objdump.dir/util/flags.cpp.o
+#7 31.01 [ 52%] Building CXX object tools/CMakeFiles/spirv-as.dir/as/as.cpp.o
+#7 31.01 [ 53%] Building CXX object tools/CMakeFiles/spirv-cfg.dir/util/flags.cpp.o
+#7 31.02 [ 53%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/fix_func_call_arguments.cpp.o
+#7 31.03 [ 53%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/aggressive_dead_code_elim_pass.cpp.o
+#7 31.56 [ 54%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/amd_ext_to_khr.cpp.o
+#7 31.64 [ 54%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/analyze_live_input_pass.cpp.o
+#7 32.08 [ 54%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/basic_block.cpp.o
+#7 32.11 [ 54%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/block_merge_pass.cpp.o
+#7 32.17 [ 55%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/block_merge_util.cpp.o
+#7 32.30 [ 55%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/build_module.cpp.o
+#7 32.35 [ 55%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/ccp_pass.cpp.o
+#7 32.56 [ 55%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/cfg_cleanup_pass.cpp.o
+#7 33.05 [ 56%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/cfg.cpp.o
+#7 38.23 [ 56%] Linking CXX executable spirv-dis
+#7 38.23 [ 56%] Linking CXX executable spirv-cfg
+#7 38.35 [ 56%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/code_sink.cpp.o
+#7 38.45 [ 56%] Linking CXX executable spirv-as
+#7 38.45 [ 56%] Built target spirv-dis
+#7 38.46 [ 56%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/combine_access_chains.cpp.o
+#7 38.51 [ 56%] Built target spirv-cfg
+#7 38.53 [ 57%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/compact_ids_pass.cpp.o
+#7 38.66 [ 57%] Built target spirv-as
+#7 38.68 [ 57%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/composite.cpp.o
+#7 38.74 [ 57%] Linking CXX executable spirv-val
+#7 38.75 [ 57%] Linking CXX executable spirv-objdump
+#7 39.11 [ 57%] Built target spirv-val
+#7 39.12 [ 57%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/const_folding_rules.cpp.o
+#7 39.14 [ 57%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/constants.cpp.o
+#7 39.18 [ 57%] Built target spirv-objdump
+#7 39.22 [ 58%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/control_dependence.cpp.o
+#7 39.37 [ 58%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/convert_to_sampled_image_pass.cpp.o
+#7 39.67 [ 58%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/convert_to_half_pass.cpp.o
+#7 40.09 [ 58%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/copy_prop_arrays.cpp.o
+#7 41.50 [ 59%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/dataflow.cpp.o
+#7 41.75 [ 59%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/dead_branch_elim_pass.cpp.o
+#7 42.02 [ 59%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/dead_insert_elim_pass.cpp.o
+#7 42.87 [ 60%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/dead_variable_elimination.cpp.o
+#7 42.92 [ 60%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/decoration_manager.cpp.o
+#7 43.36 [ 60%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/debug_info_manager.cpp.o
+#7 43.66 [ 60%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/def_use_manager.cpp.o
+#7 44.75 [ 61%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/desc_sroa.cpp.o
+#7 45.26 [ 61%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/desc_sroa_util.cpp.o
+#7 46.31 [ 61%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/dominator_analysis.cpp.o
+#7 46.63 [ 62%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/dominator_tree.cpp.o
+#7 46.75 [ 62%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/eliminate_dead_constant_pass.cpp.o
+#7 47.16 [ 62%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/eliminate_dead_functions_pass.cpp.o
+#7 48.14 [ 62%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/eliminate_dead_functions_util.cpp.o
+#7 48.28 [ 63%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/eliminate_dead_io_components_pass.cpp.o
+#7 48.65 [ 63%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/eliminate_dead_members_pass.cpp.o
+#7 48.75 [ 63%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/eliminate_dead_output_stores_pass.cpp.o
+#7 49.04 [ 63%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/feature_manager.cpp.o
+#7 49.68 [ 64%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/fix_storage_class.cpp.o
+#7 50.74 [ 64%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/flatten_decoration_pass.cpp.o
+#7 51.28 [ 64%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/fold.cpp.o
+#7 51.31 [ 65%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/folding_rules.cpp.o
+#7 51.65 [ 65%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/fold_spec_constant_op_and_composite_pass.cpp.o
+#7 51.70 [ 65%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/freeze_spec_constant_value_pass.cpp.o
+#7 52.02 [ 65%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/function.cpp.o
+#7 52.64 [ 66%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/graphics_robust_access_pass.cpp.o
+#7 53.08 [ 66%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/if_conversion.cpp.o
+#7 53.51 [ 66%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/inline_exhaustive_pass.cpp.o
+#7 53.68 [ 66%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/inline_opaque_pass.cpp.o
+#7 54.37 [ 67%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/inline_pass.cpp.o
+#7 54.73 [ 67%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/inst_debug_printf_pass.cpp.o
+#7 54.91 [ 67%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/instruction.cpp.o
+#7 56.00 [ 68%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/instruction_list.cpp.o
+#7 56.80 [ 68%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/instrument_pass.cpp.o
+#7 57.17 [ 68%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/interface_var_sroa.cpp.o
+#7 57.45 [ 68%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/invocation_interlock_placement_pass.cpp.o
+#7 57.49 [ 69%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/interp_fixup_pass.cpp.o
+#7 57.82 [ 69%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/opextinst_forward_ref_fixup_pass.cpp.o
+#7 58.51 [ 69%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/ir_context.cpp.o
+#7 59.30 [ 70%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/ir_loader.cpp.o
+#7 60.39 [ 70%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/licm_pass.cpp.o
+#7 60.88 [ 70%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/liveness.cpp.o
+#7 61.04 [ 70%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/local_access_chain_convert_pass.cpp.o
+#7 61.59 [ 71%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/local_redundancy_elimination.cpp.o
+#7 61.82 [ 71%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/local_single_block_elim_pass.cpp.o
+#7 63.73 [ 71%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/local_single_store_elim_pass.cpp.o
+#7 64.44 [ 71%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_dependence.cpp.o
+#7 64.86 [ 72%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_dependence_helpers.cpp.o
+#7 64.93 [ 72%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_descriptor.cpp.o
+#7 65.16 [ 72%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_fission.cpp.o
+#7 65.63 [ 73%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_fusion.cpp.o
+#7 66.76 [ 73%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_fusion_pass.cpp.o
+#7 66.89 [ 73%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_peeling.cpp.o
+#7 66.98 [ 73%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_utils.cpp.o
+#7 67.32 [ 74%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_unroller.cpp.o
+#7 67.64 [ 74%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/loop_unswitch_pass.cpp.o
+#7 67.70 [ 74%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/mem_pass.cpp.o
+#7 67.76 [ 74%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/merge_return_pass.cpp.o
+#7 68.87 [ 75%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/modify_maximal_reconvergence.cpp.o
+#7 69.74 [ 75%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/module.cpp.o
+#7 70.73 [ 75%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/optimizer.cpp.o
+#7 70.87 [ 76%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/pass.cpp.o
+#7 71.83 [ 76%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/pass_manager.cpp.o
+#7 72.59 [ 76%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/private_to_local_pass.cpp.o
+#7 74.38 [ 76%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/propagator.cpp.o
+#7 75.14 [ 77%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/reduce_load_size.cpp.o
+#7 75.29 [ 77%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/redundancy_elimination.cpp.o
+#7 76.02 [ 77%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/register_pressure.cpp.o
+#7 76.17 [ 77%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/relax_float_ops_pass.cpp.o
+#7 76.54 [ 78%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/remove_dontinline_pass.cpp.o
+#7 77.06 [ 78%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/remove_duplicates_pass.cpp.o
+#7 77.97 [ 78%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/remove_unused_interface_variables_pass.cpp.o
+#7 77.99 [ 79%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/replace_desc_array_access_using_var_index.cpp.o
+#7 78.16 [ 79%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/replace_invalid_opc.cpp.o
+#7 78.30 [ 79%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/scalar_analysis.cpp.o
+#7 78.60 [ 79%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/scalar_analysis_simplification.cpp.o
+#7 78.92 [ 80%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/scalar_replacement_pass.cpp.o
+#7 79.79 [ 80%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/set_spec_constant_default_value_pass.cpp.o
+#7 80.69 [ 80%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/simplification_pass.cpp.o
+#7 81.30 [ 81%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/spread_volatile_semantics.cpp.o
+#7 81.65 [ 81%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/ssa_rewrite_pass.cpp.o
+#7 82.26 [ 81%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/strength_reduction_pass.cpp.o
+#7 82.35 [ 81%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/strip_debug_info_pass.cpp.o
+#7 82.85 [ 82%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/strip_nonsemantic_info_pass.cpp.o
+#7 82.88 [ 82%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/struct_cfg_analysis.cpp.o
+#7 83.47 [ 82%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/switch_descriptorset_pass.cpp.o
+#7 84.31 [ 82%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/trim_capabilities_pass.cpp.o
+#7 84.68 [ 83%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/type_manager.cpp.o
+#7 84.81 [ 83%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/types.cpp.o
+#7 86.69 [ 83%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/unify_const_pass.cpp.o
+#7 86.92 [ 84%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/upgrade_memory_model.cpp.o
+#7 87.09 [ 84%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/value_number_table.cpp.o
+#7 87.35 [ 84%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/vector_dce.cpp.o
+#7 87.75 [ 84%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/workaround1209.cpp.o
+#7 88.33 [ 85%] Building CXX object source/opt/CMakeFiles/SPIRV-Tools-opt.dir/wrap_opkill.cpp.o
+#7 94.10 [ 85%] Linking CXX static library libSPIRV-Tools-opt.a
+#7 94.42 [ 85%] Built target SPIRV-Tools-opt
+#7 94.47 [ 86%] Building CXX object source/lint/CMakeFiles/SPIRV-Tools-lint.dir/lint_divergent_derivatives.cpp.o
+#7 94.47 [ 86%] Building CXX object source/lint/CMakeFiles/SPIRV-Tools-lint.dir/linter.cpp.o
+#7 94.47 [ 86%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/change_operand_reduction_opportunity.cpp.o
+#7 94.47 [ 86%] Building CXX object examples/cpp-interface/CMakeFiles/spirv-tools-cpp-example.dir/main.cpp.o
+#7 94.47 [ 86%] Building CXX object tools/CMakeFiles/spirv-opt.dir/opt/opt.cpp.o
+#7 94.47 [ 86%] Building CXX object source/lint/CMakeFiles/SPIRV-Tools-lint.dir/divergence_analysis.cpp.o
+#7 94.47 [ 86%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/change_operand_to_undef_reduction_opportunity.cpp.o
+#7 94.47 [ 87%] Building CXX object source/diff/CMakeFiles/SPIRV-Tools-diff.dir/diff.cpp.o
+#7 94.47 [ 86%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/conditional_branch_to_simple_conditional_branch_reduction_opportunity.cpp.o
+#7 94.47 [ 87%] Building CXX object tools/CMakeFiles/spirv-opt.dir/util/flags.cpp.o
+#7 94.47 [ 87%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/merge_blocks_reduction_opportunity.cpp.o
+#7 94.47 [ 88%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/conditional_branch_to_simple_conditional_branch_opportunity_finder.cpp.o
+#7 94.47 [ 88%] Building CXX object tools/CMakeFiles/spirv-opt.dir/util/cli_consumer.cpp.o
+#7 94.47 [ 88%] Building CXX object source/link/CMakeFiles/SPIRV-Tools-link.dir/linker.cpp.o
+#7 94.47 [ 88%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/merge_blocks_reduction_opportunity_finder.cpp.o
+#7 94.48 [ 88%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/operand_to_const_reduction_opportunity_finder.cpp.o
+#7 95.02 [ 88%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/operand_to_undef_reduction_opportunity_finder.cpp.o
+#7 95.70 [ 88%] Linking CXX executable spirv-tools-cpp-example
+#7 96.13 [ 88%] Built target spirv-tools-cpp-example
+#7 96.15 [ 88%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/operand_to_dominating_id_reduction_opportunity_finder.cpp.o
+#7 96.49 [ 89%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/reducer.cpp.o
+#7 99.83 [ 89%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/reduction_opportunity.cpp.o
+#7 99.96 [ 89%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/reduction_opportunity_finder.cpp.o
+#7 100.1 [ 90%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/reduction_pass.cpp.o
+#7 100.3 [ 90%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/reduction_util.cpp.o
+#7 100.3 [ 90%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_block_reduction_opportunity.cpp.o
+#7 100.4 [ 90%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_block_reduction_opportunity_finder.cpp.o
+#7 100.5 [ 91%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_function_reduction_opportunity.cpp.o
+#7 100.8 [ 91%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_function_reduction_opportunity_finder.cpp.o
+#7 100.8 [ 91%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_instruction_reduction_opportunity.cpp.o
+#7 101.3 [ 91%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_selection_reduction_opportunity.cpp.o
+#7 101.4 [ 91%] Linking CXX executable spirv-opt
+#7 101.6 [ 92%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_selection_reduction_opportunity_finder.cpp.o
+#7 101.8 [ 92%] Built target spirv-opt
+#7 101.8 [ 92%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_struct_member_reduction_opportunity.cpp.o
+#7 102.0 [ 92%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_unused_instruction_reduction_opportunity_finder.cpp.o
+#7 102.3 [ 93%] Linking CXX static library libSPIRV-Tools-lint.a
+#7 102.5 [ 93%] Built target SPIRV-Tools-lint
+#7 102.5 [ 94%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/remove_unused_struct_member_reduction_opportunity_finder.cpp.o
+#7 102.9 [ 94%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/simple_conditional_branch_to_branch_opportunity_finder.cpp.o
+#7 105.2 [ 94%] Building CXX object tools/CMakeFiles/spirv-lint.dir/util/flags.cpp.o
+#7 105.9 [ 94%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/simple_conditional_branch_to_branch_reduction_opportunity.cpp.o
+#7 106.1 [ 94%] Building CXX object tools/CMakeFiles/spirv-lint.dir/lint/lint.cpp.o
+#7 106.2 [ 95%] Building CXX object tools/CMakeFiles/spirv-lint.dir/util/cli_consumer.cpp.o
+#7 106.5 [ 95%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/structured_construct_to_block_reduction_opportunity.cpp.o
+#7 106.5 [ 96%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/structured_construct_to_block_reduction_opportunity_finder.cpp.o
+#7 106.6 [ 97%] Linking CXX static library libSPIRV-Tools-link.a
+#7 106.6 [ 97%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/structured_loop_to_selection_reduction_opportunity.cpp.o
+#7 106.7 [ 97%] Building CXX object source/reduce/CMakeFiles/SPIRV-Tools-reduce.dir/structured_loop_to_selection_reduction_opportunity_finder.cpp.o
+#7 106.8 [ 97%] Built target SPIRV-Tools-link
+#7 106.8 [ 97%] Building CXX object tools/CMakeFiles/spirv-link.dir/link/linker.cpp.o
+#7 106.8 [ 97%] Building CXX object tools/CMakeFiles/spirv-link.dir/util/flags.cpp.o
+#7 108.0 [ 97%] Linking CXX static library libSPIRV-Tools-diff.a
+#7 108.2 [ 97%] Built target SPIRV-Tools-diff
+#7 108.2 [ 98%] Building CXX object tools/CMakeFiles/spirv-diff.dir/util/flags.cpp.o
+#7 108.2 [ 98%] Building CXX object tools/CMakeFiles/spirv-diff.dir/util/cli_consumer.cpp.o
+#7 108.2 [ 98%] Building CXX object tools/CMakeFiles/spirv-diff.dir/diff/diff.cpp.o
+#7 110.7 [ 98%] Linking CXX executable spirv-lint
+#7 111.0 [ 98%] Built target spirv-lint
+#7 111.9 [ 99%] Linking CXX executable spirv-link
+#7 112.1 [ 99%] Built target spirv-link
+#7 112.5 [ 99%] Linking CXX static library libSPIRV-Tools-reduce.a
+#7 112.6 [ 99%] Built target SPIRV-Tools-reduce
+#7 112.6 [100%] Building CXX object tools/CMakeFiles/spirv-reduce.dir/util/cli_consumer.cpp.o
+#7 112.6 [100%] Building CXX object tools/CMakeFiles/spirv-reduce.dir/reduce/reduce.cpp.o
+#7 112.6 [100%] Building CXX object tools/CMakeFiles/spirv-reduce.dir/util/flags.cpp.o
+#7 113.7 [100%] Linking CXX executable spirv-diff
+#7 113.9 [100%] Built target spirv-diff
+#7 117.1 [100%] Linking CXX executable spirv-reduce
+#7 117.2 [100%] Built target spirv-reduce
+#7 117.3 [  1%] Built target spirv-tools-pkg-config
+#7 117.3 [  2%] Built target spirv-tools-build-version
+#7 117.4 [  2%] Built target core_tables
+#7 117.4 [  3%] Built target enum_string_mapping
+#7 117.4 [  3%] Built target spirv-tools-header-NonSemanticShaderDebugInfo100
+#7 117.4 [  3%] Built target spv-tools-spv-amd-sevp
+#7 117.5 [  3%] Built target spv-tools-spv-amd-stm
+#7 117.5 [  3%] Built target spv-tools-spv-amd-gs
+#7 117.5 [  4%] Built target spv-tools-spv-amd-sb
+#7 117.5 [  4%] Built target spv-tools-debuginfo
+#7 117.5 [  4%] Built target spv-tools-cldi100
+#7 117.6 [  4%] Built target spv-tools-shdi100
+#7 117.6 [  5%] Built target spv-tools-clspvreflection
+#7 117.6 [  6%] Built target spv-tools-vkspreflection
+#7 117.6 [  7%] Built target spirv-tools-header-DebugInfo
+#7 117.7 [  7%] Built target spirv-tools-header-OpenCLDebugInfo100
+#7 117.7 [  7%] Built target extinst_tables
+#7 117.8 [ 28%] Built target SPIRV-Tools-shared
+#7 117.9 [ 48%] Built target SPIRV-Tools-static
+#7 118.0 [ 80%] Built target SPIRV-Tools-opt
+#7 118.1 [ 88%] Built target SPIRV-Tools-reduce
+#7 118.1 [ 89%] Built target SPIRV-Tools-link
+#7 118.2 [ 90%] Built target SPIRV-Tools-lint
+#7 118.2 [ 90%] Built target SPIRV-Tools-diff
+#7 118.2 [ 91%] Built target spirv-diff
+#7 118.2 [ 92%] Built target spirv-dis
+#7 118.3 [ 93%] Built target spirv-val
+#7 118.3 [ 94%] Built target spirv-opt
+#7 118.3 [ 95%] Built target spirv-reduce
+#7 118.4 [ 96%] Built target spirv-link
+#7 118.4 [ 97%] Built target spirv-lint
+#7 118.4 [ 98%] Built target spirv-as
+#7 118.4 [ 99%] Built target spirv-cfg
+#7 118.5 [100%] Built target spirv-objdump
+#7 118.5 [100%] Built target spirv-tools-cpp-example
+#7 118.5 Install the project...
+#7 118.5 -- Install configuration: "Release"
+#7 118.5 -- Installing: /usr/local/lib/libSPIRV-Tools-opt.a
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-opt/SPIRV-Tools-optTargets.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-opt/SPIRV-Tools-optTargets-release.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-opt/SPIRV-Tools-optConfig.cmake
+#7 118.5 -- Installing: /usr/local/lib/libSPIRV-Tools-reduce.a
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-reduce/SPIRV-Tools-reduceTarget.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-reduce/SPIRV-Tools-reduceTarget-release.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-reduce/SPIRV-Tools-reduceConfig.cmake
+#7 118.5 -- Installing: /usr/local/lib/libSPIRV-Tools-link.a
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-link/SPIRV-Tools-linkTargets.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-link/SPIRV-Tools-linkTargets-release.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-link/SPIRV-Tools-linkConfig.cmake
+#7 118.5 -- Installing: /usr/local/lib/libSPIRV-Tools-lint.a
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-lint/SPIRV-Tools-lintTargets.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-lint/SPIRV-Tools-lintTargets-release.cmake
+#7 118.5 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-lint/SPIRV-Tools-lintConfig.cmake
+#7 118.5 -- Installing: /usr/local/lib/libSPIRV-Tools-diff.a
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-diff/SPIRV-Tools-diffTargets.cmake
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-diff/SPIRV-Tools-diffTargets-release.cmake
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-diff/SPIRV-Tools-diffConfig.cmake
+#7 118.6 -- Installing: /usr/local/lib/libSPIRV-Tools.a
+#7 118.6 -- Installing: /usr/local/lib/libSPIRV-Tools-shared.so
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools/SPIRV-ToolsTarget.cmake
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools/SPIRV-ToolsTarget-release.cmake
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools/SPIRV-ToolsConfig.cmake
+#7 118.6 -- Installing: /usr/local/bin/spirv-lesspipe.sh
+#7 118.6 -- Installing: /usr/local/bin/spirv-as
+#7 118.6 -- Installing: /usr/local/bin/spirv-dis
+#7 118.6 -- Installing: /usr/local/bin/spirv-val
+#7 118.6 -- Installing: /usr/local/bin/spirv-opt
+#7 118.6 -- Installing: /usr/local/bin/spirv-cfg
+#7 118.6 -- Installing: /usr/local/bin/spirv-link
+#7 118.6 -- Installing: /usr/local/bin/spirv-lint
+#7 118.6 -- Installing: /usr/local/bin/spirv-objdump
+#7 118.6 -- Installing: /usr/local/bin/spirv-reduce
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-tools/SPIRV-Tools-toolsTargets.cmake
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-tools/SPIRV-Tools-toolsTargets-release.cmake
+#7 118.6 -- Installing: /usr/local/lib/cmake/SPIRV-Tools-tools/SPIRV-Tools-toolsConfig.cmake
+#7 118.6 -- Installing: /usr/local/include/spirv-tools/libspirv.h
+#7 118.6 -- Installing: /usr/local/include/spirv-tools/libspirv.hpp
+#7 118.6 -- Installing: /usr/local/include/spirv-tools/optimizer.hpp
+#7 118.6 -- Installing: /usr/local/include/spirv-tools/linker.hpp
+#7 118.6 -- Installing: /usr/local/include/spirv-tools/instrument.hpp
+#7 118.6 -- Installing: /usr/local/lib/pkgconfig/SPIRV-Tools.pc
+#7 118.6 -- Installing: /usr/local/lib/pkgconfig/SPIRV-Tools-shared.pc
+#7 DONE 119.2s
+
+#8 [5/5] RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly &&     . $HOME/.cargo/env &&     rustup component add rust-src &&     cargo install bindgen-cli cbindgen
+#8 0.770 info: downloading installer
+#8 2.278 info: profile set to default
+#8 2.278 info: default host tuple is x86_64-unknown-linux-gnu
+#8 2.280 info: syncing channel updates for nightly-x86_64-unknown-linux-gnu
+#8 2.500 info: latest update on 2026-10-09 for version 1.101.0-nightly (a30aa9064 2026-10-08)
+#8 2.500 info: downloading 6 components
+#8 27.67 info: default toolchain set to nightly-x86_64-unknown-linux-gnu
+#8 27.67 
+#8 27.68   nightly-x86_64-unknown-linux-gnu installed - rustc 1.101.0-nightly (a30aa9064 2026-10-08)
+#8 27.68 
+#8 27.68 
+#8 27.68 Rust is installed now. Great!
+#8 27.68 
+#8 27.68 To get started you may need to restart your current shell.
+#8 27.68 This would reload your PATH environment variable to include
+#8 27.68 Cargo's bin directory ($HOME/.cargo/bin).
+#8 27.68 
+#8 27.68 To configure your current shell, you need to source the
+#8 27.68 corresponding env file under $HOME/.cargo.
+#8 27.68 
+#8 27.68 Consider running the right command for your shell (note the leading DOT):
+#8 27.68 . "$HOME/.cargo/env" # For sh/ash/dash/pdksh/bash
+#8 27.68 cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+#8 27.68 CC_x86_64-unknown-linux-gnu = None
+#8 27.68 cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+#8 27.68 CC_x86_64_unknown_linux_gnu = None
+#8 27.68 cargo:rerun-if-env-changed=HOST_CC
+#8 27.68 HOST_CC = None
+#8 27.68 cargo:rerun-if-env-changed=CC
+#8 27.68 CC = None
+#8 27.69 cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+#8 27.70 cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+#8 27.70 CRATE_CC_NO_DEFAULTS = None
+#8 27.70 cargo:rerun-if-env-changed=CFLAGS
+#8 27.70 CFLAGS = None
+#8 27.70 cargo:rerun-if-env-changed=HOST_CFLAGS
+#8 27.70 HOST_CFLAGS = None
+#8 27.70 cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+#8 27.70 CFLAGS_x86_64_unknown_linux_gnu = None
+#8 27.70 cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+#8 27.70 CFLAGS_x86_64-unknown-linux-gnu = None
+#8 27.79 info: downloading component rust-src
+#8 29.72     Updating crates.io index
+#8 30.14  Downloading crates ...
+#8 30.34   Downloaded bindgen-cli v0.73.2
+#8 30.37     Updating crates.io index
+#8 30.39  Downloading crates ...
+#8 30.44   Downloaded cbindgen v0.29.4
+#8 30.59   Installing bindgen-cli v0.73.2
+#8 30.59     Updating crates.io index
+#8 31.75     Updating crates.io index
+#8 31.82  Downloading crates ...
+#8 31.84   Downloaded annotate-snippets v0.11.5
+#8 31.84   Downloaded anstyle-query v1.1.5
+#8 31.84   Downloaded anstyle v1.0.14
+#8 31.85   Downloaded anstyle-parse v0.2.7
+#8 31.85   Downloaded anstream v0.6.21
+#8 31.86   Downloaded clap_lex v0.6.0
+#8 31.86   Downloaded heck v0.4.1
+#8 31.86   Downloaded cfg-if v1.0.4
+#8 31.87   Downloaded colorchoice v1.0.5
+#8 31.87   Downloaded glob v0.3.4
+#8 31.88   Downloaded humantime v2.4.0
+#8 31.88   Downloaded cexpr v0.6.0
+#8 31.88   Downloaded is_terminal_polyfill v1.70.2
+#8 31.89   Downloaded clap_derive v4.4.7
+#8 31.89   Downloaded is-terminal v0.4.17
+#8 31.89   Downloaded rustc-hash v2.1.1
+#8 31.90   Downloaded libloading v0.8.9
+#8 31.90   Downloaded shlex v2.0.1
+#8 31.91   Downloaded utf8parse v0.2.2
+#8 31.91   Downloaded clap_complete v4.4.10
+#8 31.92   Downloaded env_logger v0.10.2
+#8 31.92   Downloaded termcolor v1.4.1
+#8 31.93   Downloaded strsim v0.10.0
+#8 31.93   Downloaded clap v4.4.18
+#8 31.95   Downloaded log v0.4.34
+#8 31.96   Downloaded clang-sys v1.9.1
+#8 31.96   Downloaded bitflags v2.13.1
+#8 31.97   Downloaded minimal-lexical v0.2.1
+#8 31.98   Downloaded proc-macro2 v1.0.107
+#8 31.98   Downloaded unicode-ident v1.0.24
+#8 31.99   Downloaded prettyplease v0.2.37
+#8 32.00   Downloaded quote v1.0.47
+#8 32.00   Downloaded memchr v2.8.3
+#8 32.02   Downloaded nom v7.1.3
+#8 32.03   Downloaded regex v1.13.1
+#8 32.04   Downloaded aho-corasick v1.1.5
+#8 32.05   Downloaded clap_builder v4.4.18
+#8 32.06   Downloaded bindgen v0.73.2
+#8 32.07   Downloaded unicode-width v0.2.2
+#8 32.08   Downloaded syn v2.0.119
+#8 32.09   Downloaded regex-syntax v0.8.11
+#8 32.10   Downloaded regex-automata v0.4.18
+#8 32.13   Downloaded libc v0.2.189
+#8 32.38    Compiling proc-macro2 v1.0.107
+#8 32.38    Compiling unicode-ident v1.0.24
+#8 32.38    Compiling memchr v2.8.3
+#8 32.38    Compiling quote v1.0.47
+#8 32.38    Compiling utf8parse v0.2.2
+#8 32.38    Compiling anstyle v1.0.14
+#8 32.38    Compiling libc v0.2.189
+#8 32.38    Compiling glob v0.3.4
+#8 32.39    Compiling is_terminal_polyfill v1.70.2
+#8 32.39    Compiling anstyle-query v1.1.5
+#8 32.39    Compiling colorchoice v1.0.5
+#8 32.39    Compiling heck v0.4.1
+#8 32.39    Compiling strsim v0.10.0
+#8 32.39    Compiling prettyplease v0.2.37
+#8 32.45    Compiling anstyle-parse v0.2.7
+#8 32.45    Compiling clap_lex v0.6.0
+#8 32.47    Compiling regex-syntax v0.8.11
+#8 32.48    Compiling minimal-lexical v0.2.1
+#8 32.50    Compiling cfg-if v1.0.4
+#8 32.51    Compiling log v0.4.34
+#8 32.56    Compiling libloading v0.8.9
+#8 32.59    Compiling unicode-width v0.2.2
+#8 32.63    Compiling anstream v0.6.21
+#8 32.68    Compiling bindgen v0.73.2
+#8 32.69    Compiling termcolor v1.4.1
+#8 32.80    Compiling humantime v2.4.0
+#8 32.83    Compiling clang-sys v1.9.1
+#8 32.86    Compiling rustc-hash v2.1.1
+#8 32.87    Compiling annotate-snippets v0.11.5
+#8 32.91    Compiling bitflags v2.13.1
+#8 32.92    Compiling shlex v2.0.1
+#8 32.97    Compiling clap_builder v4.4.18
+#8 33.22    Compiling aho-corasick v1.1.5
+#8 33.23    Compiling nom v7.1.3
+#8 33.53    Compiling syn v2.0.119
+#8 34.24    Compiling is-terminal v0.4.17
+#8 34.85    Compiling regex-automata v0.4.18
+#8 36.57    Compiling cexpr v0.6.0
+#8 37.58    Compiling clap_derive v4.4.7
+#8 39.33    Compiling clap v4.4.18
+#8 39.36    Compiling clap_complete v4.4.10
+#8 39.48    Compiling regex v1.13.1
+#8 40.03    Compiling env_logger v0.10.2
+#8 55.48    Compiling bindgen-cli v0.73.2
+#8 56.25     Finished `release` profile [optimized] target(s) in 26.54s
+#8 56.25   Installing /root/.cargo/bin/bindgen
+#8 56.26    Installed package `bindgen-cli v0.73.2` (executable `bindgen`)
+#8 56.28   Installing cbindgen v0.29.4
+#8 56.29     Updating crates.io index
+#8 57.91     Updating crates.io index
+#8 57.98  Downloading crates ...
+#8 57.99   Downloaded anstyle v1.0.11
+#8 58.00   Downloaded errno v0.3.13
+#8 58.00   Downloaded hashbrown v0.14.5
+#8 58.01   Downloaded anstyle-query v1.1.3
+#8 58.02   Downloaded equivalent v1.0.2
+#8 58.02   Downloaded fastrand v2.3.0
+#8 58.02   Downloaded colorchoice v1.0.4
+#8 58.02   Downloaded heck v0.5.0
+#8 58.03   Downloaded cfg-if v1.0.1
+#8 58.03   Downloaded anstream v0.6.19
+#8 58.04   Downloaded clap v4.5.41
+#8 58.05   Downloaded getrandom v0.3.3
+#8 58.06   Downloaded clap_lex v0.7.5
+#8 58.06   Downloaded bitflags v2.9.1
+#8 58.07   Downloaded clap_builder v4.5.41
+#8 58.09   Downloaded quote v1.0.40
+#8 58.10   Downloaded serde_derive v1.0.228
+#8 58.10   Downloaded strsim v0.11.1
+#8 58.11   Downloaded ryu v1.0.20
+#8 58.12   Downloaded is_terminal_polyfill v1.70.1
+#8 58.12   Downloaded toml v0.9.2
+#8 58.13   Downloaded toml_parser v1.0.1
+#8 58.14   Downloaded toml_datetime v0.7.0
+#8 58.14   Downloaded itoa v1.0.15
+#8 58.14   Downloaded unicode-ident v1.0.18
+#8 58.15   Downloaded log v0.4.27
+#8 58.16   Downloaded serde_spanned v1.0.0
+#8 58.16   Downloaded memchr v2.7.5
+#8 58.17   Downloaded toml_writer v1.0.2
+#8 58.17   Downloaded once_cell v1.21.3
+#8 58.18   Downloaded serde_core v1.0.228
+#8 58.19   Downloaded tempfile v3.20.0
+#8 58.20   Downloaded proc-macro2 v1.0.95
+#8 58.21   Downloaded serde v1.0.228
+#8 58.21   Downloaded serde_json v1.0.140
+#8 58.23   Downloaded indexmap v2.5.0
+#8 58.24   Downloaded winnow v0.7.12
+#8 58.26   Downloaded rustix v1.0.8
+#8 58.32   Downloaded syn v2.0.104
+#8 58.34   Downloaded libc v0.2.174
+#8 58.40   Downloaded linux-raw-sys v0.9.4
+#8 58.60    Compiling proc-macro2 v1.0.95
+#8 58.60    Compiling unicode-ident v1.0.18
+#8 58.60    Compiling serde_core v1.0.228
+#8 58.60    Compiling serde v1.0.228
+#8 58.60    Compiling libc v0.2.174
+#8 58.60    Compiling utf8parse v0.2.2
+#8 58.61    Compiling anstyle v1.0.11
+#8 58.61    Compiling anstyle-query v1.1.3
+#8 58.61    Compiling is_terminal_polyfill v1.70.1
+#8 58.61    Compiling getrandom v0.3.3
+#8 58.61    Compiling colorchoice v1.0.4
+#8 58.61    Compiling rustix v1.0.8
+#8 58.61    Compiling clap_lex v0.7.5
+#8 58.61    Compiling strsim v0.11.1
+#8 58.68    Compiling cfg-if v1.0.1
+#8 58.69    Compiling anstyle-parse v0.2.7
+#8 58.69    Compiling bitflags v2.9.1
+#8 58.71    Compiling winnow v0.7.12
+#8 58.72    Compiling linux-raw-sys v0.9.4
+#8 58.72    Compiling serde_json v1.0.140
+#8 58.73    Compiling itoa v1.0.15
+#8 58.86    Compiling fastrand v2.3.0
+#8 58.88    Compiling cbindgen v0.29.4
+#8 58.89    Compiling once_cell v1.21.3
+#8 58.92    Compiling anstream v0.6.19
+#8 58.96    Compiling hashbrown v0.14.5
+#8 58.98    Compiling equivalent v1.0.2
+#8 58.98    Compiling memchr v2.7.5
+#8 59.02    Compiling ryu v1.0.20
+#8 59.12    Compiling log v0.4.27
+#8 59.17    Compiling heck v0.5.0
+#8 59.26    Compiling clap_builder v4.5.41
+#8 59.52    Compiling quote v1.0.40
+#8 59.69    Compiling syn v2.0.104
+#8 60.13    Compiling indexmap v2.5.0
+#8 61.16    Compiling tempfile v3.20.0
+#8 61.28    Compiling toml_parser v1.0.1
+#8 61.59    Compiling serde_derive v1.0.228
+#8 62.28    Compiling clap v4.5.41
+#8 64.26    Compiling toml_datetime v0.7.0
+#8 64.26    Compiling serde_spanned v1.0.0
+#8 64.44    Compiling toml v0.9.2
+#8 79.11     Finished `release` profile [optimized] target(s) in 49.41s
+#8 79.12   Installing /root/.cargo/bin/cbindgen
+#8 79.12    Installed package `cbindgen v0.29.4` (executable `cbindgen`)
+#8 79.15      Summary Successfully installed bindgen-cli, cbindgen!
+#8 DONE 80.1s
+
+#9 exporting to image
+#9 exporting layers
+#9 exporting layers 53.3s done
+#9 exporting manifest sha256:0cb5b4a529c88167d60c58f064d41ba36896cb91caf36cc6c2909f04461411b4 0.0s done
+#9 exporting config sha256:ca7ca1ce7874091dc736a2292214c243035c2654339ec762fb19af73d4314b46 0.0s done
+#9 exporting attestation manifest sha256:0ca772a096605f75a812fad2ad2cf1c27f6ba299827a80ecc9a20cce66dc6c14 0.0s done
+#9 exporting manifest list sha256:2aa5968b557917de4714572348a465df7b4310576152b7c480bd7601c06c14b5 0.0s done
+#9 naming to docker.io/library/devkitpro-mesa-rust-aarch64:latest 0.0s done
+#9 unpacking to docker.io/library/devkitpro-mesa-rust-aarch64:latest
+#9 unpacking to docker.io/library/devkitpro-mesa-rust-aarch64:latest 70.2s done
+#9 DONE 124.1s
+da3426b3f92536f352676a1ad3874bbb4bd51bfddf20155e88ac7c3db112b254
+=== Building native host tools (mesa_clc, vtn_bindgen2) ===
+The Meson build system
+Version: 1.12.1
+Source dir: /project
+Build dir: /project/builddir-native
+Build type: native build
+DEPRECATION: Option "shader-cache" value 'true' is replaced by 'enabled'
+Project name: mesa
+Project version: 26.2.3
+C compiler for the host machine: cc (gcc 12.2.0 "cc (Debian 12.2.0-14+deb12u1) 12.2.0")
+C linker for the host machine: cc ld.bfd 2.40
+C++ compiler for the host machine: c++ (gcc 12.2.0 "c++ (Debian 12.2.0-14+deb12u1) 12.2.0")
+C++ linker for the host machine: c++ ld.bfd 2.40
+Host machine cpu family: x86_64
+Host machine cpu: x86_64
+Checking for size of "void*" : 8 
+Checking if "-mtls-dialect=gnu2" runs: YES
+Checking if "split TLSDESC" links: YES 
+Dependency libglvnd for host machine skipped: feature glvnd disabled
+Program glslangValidator found: NO
+Dependency libva for host machine skipped: feature gallium-va disabled
+Program python3.16 found: NO
+Program python3.15 found: NO
+Program python3.14 found: NO
+Program python3.13 found: NO
+Program python3.12 found: NO
+Program python3.11 found: YES 3.11.2 3.11.2 (/usr/bin/python3.11)
+Fetching value of define "ETIME" : 62 
+Compiler for C supports arguments -gsplit-dwarf: YES 
+Compiler for C supports link arguments -Wl,--gdb-index: NO 
+Checking for function "bswap32" : YES 
+Checking for function "bswap64" : YES 
+Checking for function "clz" : YES 
+Checking for function "clzll" : YES 
+Checking for function "ctz" : YES 
+Checking for function "expect" : YES 
+Checking for function "ffs" : YES 
+Checking for function "ffsll" : YES 
+Checking for function "popcount" : YES 
+Checking for function "popcountll" : YES 
+Checking for function "unreachable" : YES 
+Checking for function "types_compatible_p" : YES 
+Checking for function "__builtin_add_overflow" : YES 
+Checking for function "__builtin_add_overflow_p" : YES 
+Checking for function "__builtin_sub_overflow_p" : YES 
+Checking for function "__builtin_arm_get_fpscr" : NO 
+Checking for function "__builtin_arm_set_fpscr" : NO 
+Checking for function "__builtin_aarch64_get_fpcr" : NO 
+Checking for function "__builtin_aarch64_set_fpcr" : NO 
+Compiler for C supports function attribute const: YES 
+Compiler for C supports function attribute flatten: YES 
+Compiler for C supports function attribute malloc: YES 
+Compiler for C supports function attribute pure: YES 
+Compiler for C supports function attribute unused: YES 
+Compiler for C supports function attribute warn_unused_result: YES 
+Compiler for C supports function attribute weak: YES 
+Compiler for C supports function attribute format: YES 
+Compiler for C supports function attribute packed: YES 
+Compiler for C supports function attribute returns_nonnull: YES 
+Compiler for C supports function attribute alias: YES 
+Compiler for C supports function attribute noreturn: YES 
+Compiler for C supports function attribute optimize: YES 
+Compiler for C supports function attribute cold: YES 
+Compiler for C supports function attribute visibility:hidden: YES 
+Checking if "__uint128_t" compiles: YES 
+Checking for function "reallocarray" : YES 
+Checking for function "fmemopen" : YES 
+Checking if "gc-sections" links: YES 
+Compiler for C supports arguments -Werror=implicit-function-declaration: YES 
+Compiler for C supports arguments -Werror=missing-prototypes: YES 
+Compiler for C supports arguments -Werror=return-type: YES 
+Compiler for C supports arguments -Werror=empty-body: YES 
+Compiler for C supports arguments -Werror=incompatible-pointer-types: YES 
+Compiler for C supports arguments -Werror=int-conversion: YES 
+Compiler for C supports arguments -Wimplicit-fallthrough: YES 
+Compiler for C supports arguments -Wmisleading-indentation: YES 
+Compiler for C supports arguments -Wno-error=maybe-uninitialized: YES 
+Compiler for C supports arguments -Wno-missing-field-initializers: YES 
+Compiler for C supports arguments -Wno-format-truncation: YES 
+Compiler for C supports arguments -Wno-nonnull-compare: YES 
+Compiler for C supports arguments -fno-math-errno: YES 
+Compiler for C supports arguments -fno-trapping-math: YES 
+Compiler for C supports arguments -Qunused-arguments: NO 
+Compiler for C supports arguments -fno-common: YES 
+Compiler for C supports arguments -Wno-unknown-pragmas: YES 
+Compiler for C supports arguments -Wno-microsoft-enum-value: NO 
+Compiler for C supports arguments -Wno-unused-function: YES 
+Compiler for C supports arguments -Werror=format: YES 
+Compiler for C supports arguments -Wformat-security: YES 
+Compiler for C supports arguments -Werror=thread-safety: NO 
+Compiler for C supports arguments -ffunction-sections: YES 
+Compiler for C supports arguments -fdata-sections: YES 
+Compiler for C++ supports arguments -Werror=return-type: YES 
+Compiler for C++ supports arguments -Werror=empty-body: YES 
+Compiler for C++ supports arguments -Wmisleading-indentation: YES 
+Compiler for C++ supports arguments -Wno-error=maybe-uninitialized: YES 
+Compiler for C++ supports arguments -Wno-non-virtual-dtor: YES 
+Compiler for C++ supports arguments -Wno-missing-field-initializers: YES 
+Compiler for C++ supports arguments -Wno-format-truncation: YES 
+Compiler for C++ supports arguments -fno-math-errno: YES 
+Compiler for C++ supports arguments -fno-trapping-math: YES 
+Compiler for C++ supports arguments -Qunused-arguments: NO 
+Compiler for C++ supports arguments -flifetime-dse=1: YES 
+Compiler for C++ supports arguments -Wno-unknown-pragmas: YES 
+Compiler for C++ supports arguments -Wno-microsoft-enum-value: NO 
+Compiler for C++ supports arguments -Werror=format: YES 
+Compiler for C++ supports arguments -Wformat-security: YES 
+Compiler for C++ supports arguments -ffunction-sections: YES 
+Compiler for C++ supports arguments -fdata-sections: YES 
+Compiler for C supports arguments -Wno-override-init: YES 
+Compiler for C supports arguments -Wno-initializer-overrides: NO 
+Compiler for C supports arguments -Werror=pointer-arith: YES 
+Compiler for C supports arguments -Werror=vla: YES 
+Compiler for C supports arguments -Werror=gnu-empty-initializer: NO 
+Compiler for C supports arguments -Wgnu-pointer-arith: NO 
+Compiler for C++ supports arguments -Werror=pointer-arith: YES 
+Compiler for C++ supports arguments -Werror=vla: YES 
+Compiler for C++ supports arguments -Werror=gnu-empty-initializer: NO 
+Compiler for C++ supports arguments -Wgnu-pointer-arith: NO 
+Compiler for C supports arguments -Werror=date-time: YES 
+Compiler for C supports arguments -Werror=gnu-alignof-expression: NO 
+Compiler for C supports arguments -Werror=ignored-qualifiers: YES 
+Compiler for C supports arguments -Werror=implicit-fallthrough: YES 
+Compiler for C supports arguments -Werror=int-conversion: YES (cached)
+Compiler for C supports arguments -Werror=missing-prototypes: YES (cached)
+Compiler for C supports arguments -Werror=pragma-pack: NO 
+Compiler for C supports arguments -Werror=pragma-pack-suspicious-include: NO 
+Compiler for C supports arguments -Werror=sizeof-array-div: YES 
+Compiler for C supports arguments -Werror=string-plus-int: NO 
+Compiler for C supports arguments -Werror=unreachable-code-loop-increment: NO 
+Compiler for C++ supports arguments -D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS: YES 
+Compiler for C++ supports arguments -Werror=date-time: YES 
+Compiler for C++ supports arguments -Werror=gnu-alignof-expression: NO 
+Compiler for C++ supports arguments -Werror=ignored-qualifiers: YES 
+Compiler for C++ supports arguments -Werror=implicit-fallthrough: YES 
+Compiler for C++ supports arguments -Werror=pragma-pack: NO 
+Compiler for C++ supports arguments -Werror=pragma-pack-suspicious-include: NO 
+Compiler for C++ supports arguments -Werror=sizeof-array-div: YES 
+Compiler for C++ supports arguments -Werror=string-plus-int: NO 
+Compiler for C++ supports arguments -Werror=unreachable-code-loop-increment: NO 
+Compiler for C++ supports arguments -Werror=missing-declarations: YES 
+Checking for function "__builtin_ia32_clflushopt" : YES 
+Checking if "GCC atomic builtins" compiles: YES 
+Checking if "GCC atomic builtins required -latomic" links: YES 
+Checking if "GCC 64bit atomics" with dependency  links: YES 
+Library ws2_32 found: NO
+Header "sys/sysmacros.h" has symbol "major" : YES 
+Header "sys/sysmacros.h" has symbol "minor" : YES 
+Header "sys/sysmacros.h" has symbol "makedev" : YES 
+Header "sys/mkdev.h" has symbol "major" : NO 
+Check usable header "sched.h" : YES 
+Checking for function "sched_getaffinity" : YES 
+Check usable header "xlocale.h" : NO 
+Check usable header "linux/futex.h" : YES 
+Check usable header "endian.h" : YES 
+Check usable header "dlfcn.h" : YES 
+Check usable header "sys/shm.h" : YES 
+Check usable header "cet.h" : YES 
+Check usable header "pthread_np.h" : NO 
+Check usable header "poll.h" : YES 
+Check usable header "sys/inotify.h" : YES 
+Check usable header "linux/udmabuf.h" : YES 
+Checking for function "strtof" : YES 
+Checking for function "mkostemp" : YES 
+Checking for function "memfd_create" : YES 
+Checking for function "random_r" : YES 
+Checking for function "flock" : YES 
+Checking for function "strtok_r" : YES 
+Checking for function "getrandom" : YES 
+Checking for function "qsort_s" : NO 
+Checking for function "posix_fallocate" : YES 
+Checking for function "secure_getenv" : YES 
+Checking for function "sysconf" : YES 
+Checking if "GNU qsort_r" links: YES 
+Header "time.h" has symbol "struct timespec" : YES 
+Checking for function "thrd_create" : YES 
+Header "errno.h" has symbol "program_invocation_name" : YES 
+Header "math.h" has symbol "issignaling" : YES 
+Checking for function "posix_memalign" : YES 
+Checking whether type "struct dirent" has member "d_type" : YES 
+Checking if "strtod has locale support" links: YES 
+Checking if "Bsymbolic" links: YES 
+Checking if "version-script" links: YES 
+Checking if "dynamic-list" links: YES 
+Compiler for C supports link arguments -Wl,--build-id=sha1: YES 
+Checking for function "dlopen" : YES 
+Checking for function "dladdr" with dependency : YES 
+Checking for function "dl_iterate_phdr" : YES 
+Checking for function "clock_gettime" : YES 
+Found pkg-config: YES (/usr/bin/pkg-config) 1.8.1
+Run-time dependency zlib found: YES 1.2.13
+Found CMake: /usr/bin/cmake (3.31.6)
+Run-time dependency libdisplay-info found: NO  (tried pkg-config and cmake)
+Run-time dependency libzstd found: NO  (tried pkg-config and cmake)
+Run-time dependency threads found: YES
+Checking for function "pthread_setaffinity_np" with dependency threads: YES 
+Run-time dependency expat found: YES 2.5.0
+Library m found: YES
+Run-time dependency libdrm found: NO  (tried pkg-config and cmake)
+Run-time dependency libudev found: NO  (tried pkg-config and cmake)
+llvm-config found: YES (/usr/bin/llvm-config-15) 15.0.6
+Run-time dependency LLVM (modules: bitwriter, core, coverage, engine, executionengine, instcombine, irreader, libdriver, linker, lto, mcdisassembler, mcjit, native, option, scalaropts, target, transformutils, abi(missing but optional), all-targets, coroutines, frontenddriver(missing but optional), frontendhlsl(missing but optional), lto, windowsdriver) found: YES 15.0.6
+Run-time dependency llvmspirvlib found: YES 15.0.0.0
+Run-time dependency spirv-tools found: YES 2024.3.1
+Library clang-cpp found: NO
+Library clangBasic found: YES
+Library clangAST found: YES
+Library clangCodeGen found: YES
+Library clangLex found: YES
+Library clangDriver found: YES
+Library clangFrontend found: YES
+Library clangFrontendTool found: YES
+Library clangHandleCXX found: YES
+Library clangHandleLLVM found: YES
+Library clangSerialization found: YES
+Library clangSema found: YES
+Library clangParse found: YES
+Library clangEdit found: YES
+Library clangAnalysis found: YES
+Library clangSupport found: YES
+Run-time dependency lua54 found: NO  (tried pkg-config and cmake)
+Run-time dependency lua5.4 found: NO  (tried pkg-config and cmake)
+Run-time dependency lua-5.4 found: NO  (tried pkg-config and cmake)
+Run-time dependency lua53 found: NO  (tried pkg-config and cmake)
+Run-time dependency lua5.3 found: NO  (tried pkg-config and cmake)
+Run-time dependency lua-5.3 found: NO  (tried pkg-config and cmake)
+Run-time dependency lua found: NO  (tried pkg-config)
+Run-time dependency libelf found: NO  (tried pkg-config and cmake)
+Library elf found: NO
+Run-time dependency valgrind found: NO  (tried pkg-config)
+Program bison found: YES (/usr/bin/bison)
+Program bison found: YES 3.8.2 3.8.2 (/usr/bin/bison)
+Program flex found: YES (/usr/bin/flex)
+Program ln found: YES (/usr/bin/ln)
+Run-time dependency libunwind found: NO  (tried pkg-config and cmake)
+Run-time dependency OpenMP found: YES 4.5
+Library sensors found: NO
+Program nm found: YES (/usr/bin/nm)
+Program symbols-check.py found: YES (/project/bin/symbols-check.py)
+Program install_megadrivers.py found: YES (/project/bin/install_megadrivers.py)
+Checking for size of "void *" : 8 
+Compiler for C supports arguments -Wno-error: YES 
+Compiler for C supports arguments -Wno-misleading-indentation: YES 
+Checking whether type "spvtools::LinkerOptions" has member "SetAllowPtrTypeMismatch(true)" with dependency SPIRV-Tools: NO 
+Compiler for C supports link arguments -fPIC: YES 
+Program decode.py found: YES (/project/src/compiler/isaspec/decode.py)
+Program encode.py found: YES (/project/src/compiler/isaspec/encode.py)
+Program sphinx-build skipped: feature html-docs disabled
+Build targets in project: 38
+
+mesa 26.2.3
+
+  Directories
+    prefix          : /usr/local
+    libdir          : lib/x86_64-linux-gnu
+    includedir      : include
+
+  Common C and C++ arguments
+    c_cpp_args      : -mtls-dialect=gnu2
+
+  OpenGL
+    OpenGL          : NO
+    ES1             : NO
+    ES2             : NO
+    GLVND           : NO
+
+  DRI
+    Platform        : drm
+    Driver dir      : /usr/local/lib/x86_64-linux-gnu/dri
+
+  GLX
+    Enabled         : NO
+    Provider        : None
+
+  EGL
+    Enabled         : NO
+
+  GBM
+    Enabled         : NO
+
+  Vulkan
+    Drivers         : NO
+
+  Video
+    Codecs          : all_free av1dec av1enc vp9dec mpeg12dec jpegdec
+    APIs            : NO
+    Encoding        : YES
+
+  LLVM
+    Required        : enabled
+    Version         : 15.0.6
+
+  Gallium
+    Enabled         : NO
+
+  Perfetto
+    Enabled         : NO
+
+  Teflon (TensorFlow Lite delegate)
+    Enabled         : NO
+
+  User defined options
+    egl             : disabled
+    gallium-drivers : 
+    gles1           : disabled
+    gles2           : disabled
+    glx             : disabled
+    install-mesa-clc: true
+    llvm            : enabled
+    mesa-clc        : enabled
+    opengl          : false
+    platforms       : 
+    precomp-compiler: enabled
+    shader-cache    : true
+    tools           : []
+    vulkan-drivers  : 
+
+Found ninja-1.11.1 at /usr/bin/ninja
+ninja: Entering directory `/project/builddir-native'
+[1/390] Compiling C object src/util/blake3/libblake3.a.p/blake3_sse2_x86-64_unix.S.o
+[2/390] Compiling C object src/util/blake3/libblake3.a.p/blake3_sse41_x86-64_unix.S.o
+[3/390] Compiling C object src/util/blake3/libblake3.a.p/blake3_avx2_x86-64_unix.S.o
+[4/390] Compiling C object src/util/blake3/libblake3.a.p/blake3_avx512_x86-64_unix.S.o
+[5/390] Generating src/git_sha1.h with a custom command
+[6/390] Compiling C object src/c11/impl/libmesa_util_c11.a.p/time.c.o
+[7/390] Generating src/util/shader_stats.h with a custom command (wrapped by meson to capture output)
+
+****
+lxml or rnc2rng missing, skipping validation
+If this script fails, install for diagnostics
+****
+
+
+[8/390] Generating src/compiler/builtin_types.c with a custom command
+[9/390] Generating src/compiler/nir/nir_opcodes.h with a custom command (wrapped by meson to capture output)
+[10/390] Generating src/compiler/ir_expression_operation.h with a custom command (wrapped by meson to capture output)
+[11/390] Generating src/compiler/nir/nir_constant_expressions.c with a custom command (wrapped by meson to capture output)
+[12/390] Generating src/compiler/nir/nir_builder_opcodes.h with a custom command (wrapped by meson to capture output)
+[13/390] Compiling C object src/util/blake3/libblake3.a.p/blake3_portable.c.o
+[14/390] Generating src/compiler/nir/nir_opcodes.c with a custom command (wrapped by meson to capture output)
+[15/390] Generating src/compiler/nir/nir_intrinsics.h with a custom command
+[16/390] Generating src/util/format/u_format_pack.h with a custom command (wrapped by meson to capture output)
+[17/390] Generating src/util/format/u_format_gen.h with a custom command (wrapped by meson to capture output)
+[18/390] Generating src/util/format/u_format_table.c with a custom command (wrapped by meson to capture output)
+[19/390] Compiling C object src/util/blake3/libblake3.a.p/blake3.c.o
+[20/390] Compiling C object src/util/libmesa_util_clflush.a.p/cache_ops_x86.c.o
+[21/390] Compiling C object src/c11/impl/libmesa_util_c11.a.p/threads_posix.c.o
+[22/390] Compiling C object src/util/libmesa_util_clflushopt.a.p/cache_ops_x86_clflushopt.c.o
+[23/390] Generating src/compiler/nir/nir_intrinsics_indices.h with a custom command
+[24/390] Generating src/compiler/nir/nir_intrinsic.c with a custom command
+[25/390] Generating src/compiler/spirv/vtn_gather_types.c with a custom command
+[26/390] Generating src/compiler/spirv/spirv_info with a custom command
+[27/390] Linking static target src/util/libmesa_util_clflush.a
+[28/390] Generating src/compiler/spirv/vtn_generator_ids.h with a custom command
+[29/390] Linking static target src/util/libmesa_util_clflushopt.a
+[30/390] Linking static target src/c11/impl/libmesa_util_c11.a
+[31/390] Compiling C object src/util/libmesa_util_simd.a.p/streaming-load-memcpy.c.o
+[32/390] Linking static target src/util/libmesa_util_simd.a
+[33/390] Compiling C object src/util/libmesa_util.a.p/bitscan.c.o
+[34/390] Compiling C object src/util/blake3/libblake3.a.p/blake3_dispatch.c.o
+[35/390] Generating src/util/format_srgb with a custom command (wrapped by meson to capture output)
+[36/390] Compiling C object src/util/libmesa_util.a.p/build_id.c.o
+[37/390] Compiling C object src/util/libmesa_util.a.p/crc32.c.o
+[38/390] Linking static target src/util/blake3/libblake3.a
+[39/390] Compiling C object src/util/libmesa_util.a.p/double.c.o
+[40/390] Compiling C object src/compiler/clc/mesa_clc.p/mesa_clc.c.o
+[41/390] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+[42/390] Compiling C object src/util/libmesa_util.a.p/fast_idiv_by_const.c.o
+[43/390] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_srgb.c.o
+[44/390] Compiling C object src/util/libmesa_util.a.p/cnd_monotonic.c.o
+[45/390] Compiling C object src/util/libmesa_util.a.p/float8.c.o
+[46/390] Compiling C object src/util/libmesa_util.a.p/dag.c.o
+[47/390] Compiling C object src/util/libmesa_util.a.p/anon_file.c.o
+[48/390] Compiling C object src/util/libmesa_util.a.p/helpers.c.o
+[49/390] Compiling C object src/util/libmesa_util.a.p/futex.c.o
+[50/390] Compiling C object src/util/libmesa_util.a.p/blob.c.o
+[51/390] Compiling C object src/util/libmesa_util.a.p/thread_sched.c.o
+[52/390] Compiling C object src/util/libmesa_util.a.p/lut.c.o
+[53/390] Compiling C object src/util/libmesa_util.a.p/memstream.c.o
+[54/390] Compiling C object src/util/libmesa_util.a.p/mesa-blake3.c.o
+[55/390] Compiling C object src/util/libmesa_util.a.p/os_time.c.o
+[56/390] Compiling C object src/util/libmesa_util.a.p/half_float.c.o
+[57/390] Compiling C object src/util/libmesa_util.a.p/disk_cache.c.o
+[58/390] Compiling C object src/util/libmesa_util.a.p/os_socket.c.o
+[59/390] Compiling C object src/util/libmesa_util.a.p/os_file.c.o
+[60/390] Compiling C object src/util/libmesa_util.a.p/os_file_notify.c.o
+[61/390] Compiling C object src/util/libmesa_util.a.p/os_memory_fd.c.o
+[62/390] Compiling C object src/util/libmesa_util.a.p/u_idalloc.c.o
+[63/390] Compiling C object src/util/libmesa_util.a.p/disk_cache_os.c.o
+[64/390] Compiling C object src/util/libmesa_util.a.p/rwlock.c.o
+[65/390] Compiling C object src/util/libmesa_util.a.p/log.c.o
+[66/390] Compiling C object src/util/libmesa_util.a.p/fossilize_db.c.o
+../src/util/fossilize_db.c: In function ‘foz_dbs_list_updater_init’:
+../src/util/fossilize_db.c:523:1: warning: label ‘fail’ defined but not used [-Wunused-label]
+  523 | fail:
+      | ^~~~
+[67/390] Compiling C object src/util/libmesa_util.a.p/os_misc.c.o
+[68/390] Compiling C object src/util/libmesa_util.a.p/hash_table.c.o
+[69/390] Compiling C object src/util/libmesa_util.a.p/rand_xor.c.o
+[70/390] Compiling C object src/util/libmesa_util.a.p/strndup.c.o
+[71/390] Compiling C object src/util/libmesa_util.a.p/range_minimum_query.c.o
+[72/390] Compiling C++ object src/util/libmesa_util.a.p/u_qsort.cpp.o
+[73/390] Compiling C object src/util/libmesa_util.a.p/pb_slab.c.o
+[74/390] Compiling C object src/util/libmesa_util.a.p/u_process.c.o
+[75/390] Compiling C object src/util/libmesa_util.a.p/u_atomic.c.o
+[76/390] Compiling C object src/util/libmesa_util.a.p/rb_tree.c.o
+[77/390] Compiling C object src/util/libmesa_util.a.p/simple_mtx.c.o
+[78/390] Compiling C object src/util/libmesa_util.a.p/set.c.o
+[79/390] Compiling C object src/util/libmesa_util.a.p/rgtc.c.o
+[80/390] Compiling C object src/util/libmesa_util.a.p/slab.c.o
+[81/390] Compiling C object src/util/libmesa_util.a.p/string_buffer.c.o
+[82/390] Compiling C object src/util/libmesa_util.a.p/perf_u_trace.c.o
+[83/390] Compiling C object src/util/libmesa_util.a.p/strtod.c.o
+[84/390] Compiling C object src/util/libmesa_util.a.p/u_dynarray.c.o
+[85/390] Compiling C object src/util/libmesa_util.a.p/u_dl.c.o
+[86/390] Compiling C object src/util/libmesa_util.a.p/softfloat.c.o
+[87/390] Compiling C object src/util/libmesa_util.a.p/register_allocate.c.o
+[88/390] Compiling C object src/util/libmesa_util.a.p/u_call_once.c.o
+[89/390] Compiling C object src/util/libmesa_util.a.p/sparse_array.c.o
+[90/390] Compiling C object src/util/libmesa_util.a.p/u_range_remap.c.o
+[91/390] Compiling C object src/util/libmesa_util.a.p/ralloc.c.o
+[92/390] Compiling C object src/util/libmesa_util.a.p/u_hash_table.c.o
+[93/390] Compiling C object src/util/libmesa_util.a.p/u_string.c.o
+[94/390] Compiling C object src/util/libmesa_util.a.p/vl_zscan_data.c.o
+[95/390] Compiling C object src/util/libmesa_util.a.p/u_vector.c.o
+[96/390] Compiling C object src/util/libmesa_util.a.p/u_queue.c.o
+[97/390] Compiling C object src/util/libmesa_util.a.p/u_thread.c.o
+[98/390] Compiling C object src/util/libmesa_util.a.p/u_worklist.c.o
+[99/390] Compiling C object src/util/libmesa_util.a.p/u_shader_variant_cache.c.o
+[100/390] Compiling C object src/util/libmesa_util.a.p/u_math.c.o
+[101/390] Compiling C object src/util/libmesa_util.a.p/u_mm.c.o
+[102/390] Compiling C object src/util/libmesa_util.a.p/vma.c.o
+[103/390] Compiling C object src/util/libmesa_util.a.p/u_debug_memory.c.o
+[104/390] Compiling C++ object src/util/libmesa_util.a.p/texcompress_astc_luts_wrap.cpp.o
+[105/390] Compiling C object src/util/libmesa_util.a.p/u_debug.c.o
+[106/390] Compiling C object src/util/libmesa_util.a.p/u_cpu_detect.c.o
+[107/390] Compiling C object src/util/libmesa_util.a.p/u_printf.c.o
+[108/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_etc.c.o
+[109/390] Compiling C++ object src/util/libmesa_util.a.p/texcompress_astc_luts.cpp.o
+[110/390] Compiling C object src/util/libmesa_util.a.p/mesa_cache_db_multipart.c.o
+[111/390] Compiling C object src/util/libmesa_util.a.p/mesa_cache_db.c.o
+[112/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_latc.c.o
+[113/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_unpack_neon.c.o
+[114/390] Compiling C++ object src/util/libmesa_util.a.p/texcompress_astc.cpp.o
+[115/390] Generating src/compiler/builtin_types.h with a custom command
+[116/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_other.c.o
+[117/390] Compiling C object src/util/libmesa_util.a.p/format_u_format.c.o
+[118/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_rgtc.c.o
+[119/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_fxt1.c.o
+[120/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_zs.c.o
+[121/390] Compiling C object src/util/libmesa_util.a.p/u_debug_stack.c.o
+[122/390] Compiling C object src/util/libmesa_util.a.p/u_debug_symbol.c.o
+[123/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_bptc.c.o
+[124/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_tests.c.o
+[125/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_yuv.c.o
+[126/390] Compiling C object src/compiler/libcompiler.a.p/shader_enums.c.o
+[127/390] Compiling C object src/compiler/libcompiler.a.p/meson-generated_.._builtin_types.c.o
+[128/390] Compiling C object src/util/libmesa_util.a.p/format_u_format_s3tc.c.o
+[129/390] Compiling C object src/compiler/nir/libnir.a.p/meson-generated_.._nir_opcodes.c.o
+[130/390] Compiling C object src/compiler/nir/libnir.a.p/meson-generated_.._nir_intrinsics.c.o
+[131/390] Compiling C object src/compiler/nir/libnir.a.p/nir_convert_address_format.c.o
+[132/390] Compiling C object src/compiler/nir/libnir.a.p/nir_dominance.c.o
+[133/390] Compiling C object src/compiler/nir/libnir.a.p/nir_clone.c.o
+[134/390] Compiling C object src/compiler/nir/libnir.a.p/nir_builtin_builder.c.o
+[135/390] Compiling C object src/compiler/nir/libnir.a.p/nir_clip_cull_distance_io_utils.c.o
+[136/390] Compiling C object src/compiler/nir/libnir.a.p/nir_builder.c.o
+[137/390] Compiling C object src/compiler/nir/libnir.a.p/nir_control_flow.c.o
+[138/390] Compiling C object src/compiler/libcompiler.a.p/glsl_types.c.o
+[139/390] Linking static target src/compiler/libcompiler.a
+[140/390] Compiling C object src/compiler/nir/libnir.a.p/nir_dominance_lca.c.o
+[141/390] Compiling C object src/compiler/nir/libnir.a.p/nir_divergence_analysis.c.o
+[142/390] Compiling C object src/compiler/nir/libnir.a.p/nir_fixup_is_exported.c.o
+[143/390] Compiling C object src/compiler/nir/libnir.a.p/nir_downgrade_pls_vars.c.o
+[144/390] Compiling C object src/compiler/nir/libnir.a.p/nir_deref.c.o
+[145/390] Compiling C object src/compiler/nir/libnir.a.p/nir.c.o
+[146/390] Compiling C object src/compiler/nir/libnir.a.p/nir_gather_types.c.o
+[147/390] Compiling C object src/compiler/nir/libnir.a.p/nir_format_convert.c.o
+[148/390] Compiling C object src/compiler/nir/libnir.a.p/nir_functions.c.o
+[149/390] Compiling C object src/compiler/nir/libnir.a.p/nir_gather_xfb_info.c.o
+[150/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_group_loads.c.o
+[151/390] Compiling C object src/compiler/nir/libnir.a.p/nir_gather_tcs_info.c.o
+[152/390] Compiling C object src/compiler/nir/libnir.a.p/nir_gs_count_vertices.c.o
+[153/390] Compiling C object src/compiler/nir/libnir.a.p/nir_gather_output_deps.c.o
+[154/390] Compiling C object src/compiler/nir/libnir.a.p/nir_inline_sysval.c.o
+[155/390] Compiling C object src/compiler/nir/libnir.a.p/nir_gather_info.c.o
+[156/390] Compiling C object src/compiler/nir/libnir.a.p/nir_from_ssa.c.o
+[157/390] Compiling C object src/compiler/nir/libnir.a.p/nir_io_add_xfb_info.c.o
+[158/390] Compiling C object src/compiler/nir/libnir.a.p/nir_inline_uniforms.c.o
+[159/390] Compiling C object src/compiler/nir/libnir.a.p/nir_instr_set.c.o
+[160/390] Compiling C object src/compiler/nir/libnir.a.p/nir_legacy.c.o
+[161/390] Compiling C object src/compiler/nir/libnir.a.p/nir_liveness.c.o
+[162/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_abort.c.o
+[163/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_amul.c.o
+[164/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_alu.c.o
+[165/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_alpha.c.o
+[166/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_atomics_to_ssbo.c.o
+[167/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_array_deref_of_vec.c.o
+[168/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_alu_width.c.o
+[169/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_bitmap.c.o
+[170/390] Compiling C object src/compiler/nir/libnir.a.p/nir_linking_helpers.c.o
+[171/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_bool_to_float.c.o
+[172/390] Compiling C object src/compiler/nir/libnir.a.p/nir_loop_analyze.c.o
+[173/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_bool_to_int32.c.o
+[174/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_calls_to_builtins.c.o
+[175/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_clamp_color_outputs.c.o
+[176/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_cl_images.c.o
+[177/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_clip_disable.c.o
+[178/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_blend.c.o
+[179/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_clip_halfz.c.o
+[180/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_const_arrays_to_uniforms.c.o
+[181/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_continue_constructs.c.o
+[182/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_clip.c.o
+[183/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_discard_if.c.o
+[184/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_convert_alu_types.c.o
+[185/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_variable_initializers.c.o
+[186/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_fb_read.c.o
+[187/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_double_ops.c.o
+[188/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_cooperative_matrix.c.o
+[189/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_flatshade.c.o
+[190/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_floats.c.o
+[191/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_flrp.c.o
+[192/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_fragcoord_wtrans.c.o
+[193/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_frag_coord_to_pixel_coord.c.o
+[194/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_global_vars_to_local.c.o
+[195/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_fp16_conv.c.o
+[196/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_fragcolor.c.o
+[197/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_explicit_io.c.o
+[198/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_frexp.c.o
+[199/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_goto_ifs.c.o
+[200/390] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_u_format_table.c.o
+[201/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_halt_to_return.c.o
+[202/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_gs_intrinsics.c.o
+[203/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_helper_writes.c.o
+[204/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_load_const_to_scalar.c.o
+[205/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_idiv.c.o
+[206/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_locals_to_regs.c.o
+[207/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_image_atomics_to_global.c.o
+[208/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_image.c.o
+[209/390] Linking static target src/util/libmesa_util.a
+[210/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_indirect_derefs_to_if_else_trees.c.o
+[211/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_interpolation.c.o
+[212/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_input_attachments.c.o
+[213/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_int_to_float.c.o
+[214/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_io_array_vars_to_elements.c.o
+[215/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_int64.c.o
+[216/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_io_vars_to_temporaries.c.o
+[217/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_io_vars_to_scalar.c.o
+[218/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_io_indirect_loads.c.o
+[219/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_io_to_scalar.c.o
+[220/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_is_helper_invocation.c.o
+[221/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_io.c.o
+[222/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_multiview.c.o
+[223/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_memcpy.c.o
+[224/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_packing.c.o
+[225/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_passthrough_edgeflags.c.o
+[226/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_mediump.c.o
+[227/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_non_uniform_access.c.o
+[228/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_memory_model.c.o
+[229/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_mem_access_bit_sizes.c.o
+[230/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_patch_vertices.c.o
+[231/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_phis_to_scalar.c.o
+[232/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_pntc_ytransform.c.o
+[233/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_point_size.c.o
+[234/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_point_smooth.c.o
+[235/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_poly_line_smooth.c.o
+[236/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_reg_intrinsics_to_ssa.c.o
+[237/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_printf.c.o
+[238/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_readonly_images_to_tex.c.o
+[239/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_returns.c.o
+[240/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_sample_shading.c.o
+[241/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_samplers.c.o
+[242/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_robust_access.c.o
+[243/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_scratch.c.o
+[244/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_scratch_to_var.c.o
+[245/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_single_sampled.c.o
+[246/390] Generating src/compiler/nir/nir_opt_algebraic with a custom command
+[247/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_ssbo.c.o
+[248/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_terminate_to_demote.c.o
+[249/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_system_values.c.o
+[250/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_tess_coord_z.c.o
+[251/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_tex_shadow.c.o
+[252/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_task_shader.c.o
+[253/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_texcoord_replace_late.c.o
+[254/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_two_sided_color.c.o
+[255/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_undef_to_zero.c.o
+[256/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_texcoord_replace.c.o
+[257/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_var_copies.c.o
+[258/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_subgroups.c.o
+[259/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_vec_to_regs.c.o
+[260/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_view_index_to_device_index.c.o
+[261/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_vars_to_ssa.c.o
+[262/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_vec3_to_vec4.c.o
+[263/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_shader_calls.c.o
+[264/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_viewport_transform.c.o
+[265/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_wpos_center.c.o
+[266/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_tex.c.o
+[267/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_wrmasks.c.o
+[268/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_wpos_ytransform.c.o
+[269/390] Compiling C object src/compiler/nir/libnir.a.p/meson-generated_.._nir_constant_expressions.c.o
+[270/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_uniforms_to_ubo.c.o
+[271/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_ubo_vec4.c.o
+[272/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_bit_size.c.o
+[273/390] Compiling C object src/compiler/nir/libnir.a.p/nir_metadata.c.o
+[274/390] Compiling C object src/compiler/nir/libnir.a.p/nir_mod_analysis.c.o
+[275/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_sysvals_to_varyings.c.o
+[276/390] Compiling C object src/compiler/nir/libnir.a.p/nir_move_vec_src_uses_to_dest.c.o
+[277/390] Compiling C object src/compiler/nir/libnir.a.p/nir_move_output_stores_to_end.c.o
+[278/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_workgroup_size.c.o
+[279/390] Compiling C object src/compiler/nir/libnir.a.p/nir_normalize_cubemap_coords.c.o
+[280/390] Compiling C object src/compiler/nir/libnir.a.p/nir_normalize_sin_cos.c.o
+[281/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_access.c.o
+[282/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_barriers.c.o
+[283/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_barycentric.c.o
+[284/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_call.c.o
+[285/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_clip_cull_const.c.o
+[286/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_cse.c.o
+[287/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_comparison_pre.c.o
+[288/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_combine_stores.c.o
+[289/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_copy_propagate.c.o
+[290/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_dce.c.o
+[291/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_dead_cf.c.o
+[292/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_constant_folding.c.o
+[293/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_dead_write_vars.c.o
+[294/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_fp_math_ctrl.c.o
+[295/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_copy_prop_vars.c.o
+[296/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_find_array_copies.c.o
+[297/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_frag_coord_to_pixel_coord.c.o
+[298/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_fragdepth.c.o
+[299/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_gcm.c.o
+[300/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_generate_bfi.c.o
+[301/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_idiv_const.c.o
+[302/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_licm.c.o
+[303/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_load_skip_helpers.c.o
+[304/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_move.c.o
+[305/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_if.c.o
+[306/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_loop.c.o
+[307/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_large_constants.c.o
+[308/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_memcpy.c.o
+[309/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_move_to_top.c.o
+[310/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_move_discards_to_top.c.o
+[311/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_loop_unroll.c.o
+[312/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_intrinsics.c.o
+[313/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_non_uniform_access.c.o
+[314/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_mqsad.c.o
+[315/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_offsets.c.o
+[316/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_peephole_select.c.o
+[317/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_phi_precision.c.o
+[318/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_phi_to_bool.c.o
+[319/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_load_store_vectorize.c.o
+[320/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_preamble.c.o
+[321/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_ray_queries.c.o
+[322/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_reassociate_bfi.c.o
+[323/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_rematerialize_compares.c.o
+[324/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_sink.c.o
+[325/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_remove_phis.c.o
+[326/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_reassociate.c.o
+[327/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_shrink_stores.c.o
+[328/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_undef.c.o
+[329/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_uniform_atomics.c.o
+[330/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_shrink_vectors.c.o
+[331/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_uniform_subgroup.c.o
+[332/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_shared_vars_to_subgroup.c.o
+[333/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_uub.c.o
+[334/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_vectorize.c.o
+[335/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_vectorize_io.c.o
+[336/390] Compiling C object src/compiler/nir/libnir.a.p/nir_phi_builder.c.o
+[337/390] Compiling C object src/compiler/nir/libnir.a.p/nir_passthrough_tcs.c.o
+[338/390] Compiling C object src/compiler/nir/libnir.a.p/nir_propagate_invariant.c.o
+[339/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_vectorize_io_vars.c.o
+[340/390] Compiling C object src/compiler/nir/libnir.a.p/nir_passthrough_gs.c.o
+[341/390] Compiling C object src/compiler/nir/libnir.a.p/nir_recompute_io_bases.c.o
+[342/390] Compiling C object src/compiler/nir/libnir.a.p/nir_remove_dead_variables.c.o
+[343/390] Compiling C object src/compiler/nir/libnir.a.p/nir_remove_outputs.c.o
+[344/390] Compiling C object src/compiler/nir/libnir.a.p/nir_remove_tex_shadow.c.o
+[345/390] Compiling C object src/compiler/nir/libnir.a.p/nir_repair_ssa.c.o
+[346/390] Compiling C object src/compiler/nir/libnir.a.p/nir_scale_fdiv.c.o
+[347/390] Compiling C object src/compiler/nir/libnir.a.p/nir_schedule.c.o
+[348/390] Compiling C object src/compiler/nir/libnir.a.p/nir_range_analysis.c.o
+[349/390] Compiling C object src/compiler/nir/libnir.a.p/nir_print.c.o
+[350/390] Compiling C object src/compiler/nir/libnir.a.p/nir_shader_bisect.c.o
+[351/390] Compiling C object src/compiler/nir/libnir.a.p/nir_separate_merged_clip_cull_io.c.o
+[352/390] Compiling C object src/compiler/nir/libnir.a.p/nir_search.c.o
+[353/390] Compiling C object src/compiler/nir/libnir.a.p/nir_split_conversions.c.o
+[354/390] Compiling C object src/compiler/nir/libnir.a.p/nir_split_per_member_structs.c.o
+[355/390] Compiling C object src/compiler/nir/libnir.a.p/nir_split_var_copies.c.o
+[356/390] Compiling C object src/compiler/nir/libnir.a.p/nir_sweep.c.o
+[357/390] Compiling C object src/compiler/nir/libnir.a.p/nir_split_64bit_vec3_and_vec4.c.o
+[358/390] Compiling C object src/compiler/nir/libnir.a.p/nir_to_lcssa.c.o
+[359/390] Compiling C object src/compiler/nir/libnir.a.p/nir_serialize.c.o
+[360/390] Compiling C object src/compiler/nir/libnir.a.p/nir_trivialize_registers.c.o
+[361/390] Compiling C object src/compiler/spirv/libvtn.a.p/meson-generated_.._spirv_info.c.o
+[362/390] Compiling C object src/compiler/nir/libnir.a.p/nir_opt_varyings.c.o
+[363/390] Compiling C object src/compiler/nir/libnir.a.p/nir_use_dominance.c.o
+[364/390] Compiling C object src/compiler/nir/libnir.a.p/nir_worklist.c.o
+[365/390] Compiling C object src/compiler/nir/libnir.a.p/nir_split_vars.c.o
+[366/390] Compiling C object src/compiler/nir/libnir.a.p/meson-generated_.._nir_opt_algebraic.c.o
+[367/390] Compiling C object src/compiler/nir/libnir.a.p/nir_lower_atomics.c.o
+[368/390] Compiling C object src/compiler/nir/libnir.a.p/nir_unlower_io_to_vars.c.o
+[369/390] Compiling C object src/compiler/spirv/libvtn.a.p/gl_spirv.c.o
+[370/390] Compiling C object src/compiler/spirv/libvtn.a.p/meson-generated_.._vtn_gather_types.c.o
+[371/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_amd.c.o
+[372/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_debug.c.o
+[373/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_cfg.c.o
+[374/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_cmat.c.o
+[375/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_subgroup.c.o
+[376/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_alu.c.o
+[377/390] Compiling C object src/compiler/nir/libnir.a.p/nir_validate.c.o
+[378/390] Compiling C object src/compiler/clc/liblibmesaclc.a.p/clc.c.o
+[379/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_glsl450.c.o
+[380/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_opencl.c.o
+[381/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_structured_cfg.c.o
+[382/390] Compiling C object src/compiler/spirv/vtn_bindgen2.p/vtn_bindgen2.c.o
+[383/390] Compiling C object src/compiler/spirv/libvtn.a.p/vtn_variables.c.o
+[384/390] Linking static target src/compiler/nir/libnir.a
+[385/390] Compiling C object src/compiler/spirv/libvtn.a.p/spirv_to_nir.c.o
+[386/390] Linking static target src/compiler/spirv/libvtn.a
+[387/390] Linking target src/compiler/spirv/vtn_bindgen2
+[388/390] Compiling C++ object src/compiler/clc/liblibmesaclc.a.p/clc_helpers.cpp.o
+[389/390] Linking static target src/compiler/clc/liblibmesaclc.a
+[390/390] Linking target src/compiler/clc/mesa_clc
+=== Configuring cross build (Switch + nouveau + nouveau_vk) ===
+The Meson build system
+Version: 1.12.1
+Source dir: /project
+Build dir: /project/builddir-switch
+Build type: cross build
+DEPRECATION: Option "shader-cache" value 'true' is replaced by 'enabled'
+DEPRECATION: Option "shared-glapi" is deprecated
+Project name: mesa
+Project version: 26.2.3
+C compiler for the host machine: /opt/devkitpro/devkitA64/bin/aarch64-none-elf-gcc (gcc 15.2.0 "aarch64-none-elf-gcc (devkitA64) 15.2.0")
+C linker for the host machine: /opt/devkitpro/devkitA64/bin/aarch64-none-elf-gcc ld.bfd 2.45.1
+C++ compiler for the host machine: /opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++ (gcc 15.2.0 "aarch64-none-elf-g++ (devkitA64) 15.2.0")
+C++ linker for the host machine: /opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++ ld.bfd 2.45.1
+C compiler for the build machine: cc (gcc 12.2.0 "cc (Debian 12.2.0-14+deb12u1) 12.2.0")
+C linker for the build machine: cc ld.bfd 2.40
+C++ compiler for the build machine: c++ (gcc 12.2.0 "c++ (Debian 12.2.0-14+deb12u1) 12.2.0")
+C++ linker for the build machine: c++ ld.bfd 2.40
+Build machine cpu family: x86_64
+Build machine cpu: x86_64
+Host machine cpu family: aarch64
+Host machine cpu: cortex-a57
+Target machine cpu family: aarch64
+Target machine cpu: cortex-a57
+Checking for size of "void*" : 8 
+meson.build:645: WARNING: cannot auto-detect -mtls-dialect when cross-compiling, using compiler default
+Dependency libglvnd for host machine skipped: feature glvnd disabled
+Program glslangValidator found: NO
+Found pkg-config: YES (/opt/devkitpro/portlibs/switch/bin/aarch64-none-elf-pkg-config) 1.8.1
+Found CMake: NO
+Run-time dependency libva found: NO  (tried pkg-config and cmake)
+meson.build:878: WARNING: add_languages is missing native:, assuming languages are wanted for both host and build.
+
+meson.build:878:2: ERROR: Unknown compiler(s): [['/usr/local/libexec/rustc']]
+The following exception(s) were encountered:
+Running `/usr/local/libexec/rustc --version` gave "[Errno 2] No such file or directory: '/usr/local/libexec/rustc'"
+
+A full log can be found at /project/builddir-switch/meson-logs/meson-log.txt

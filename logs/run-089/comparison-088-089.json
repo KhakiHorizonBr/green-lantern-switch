@@ -1,0 +1,1188 @@
+{
+  "88": {
+    "mode": [
+      "0",
+      "true"
+    ],
+    "sha256": "0ca8070072386cb4ecb6a53a34ae01c513b9a3c2c4d4994883b8691764e02747",
+    "clocks": [
+      [
+        "1020000000",
+        "00000000",
+        "307200000",
+        "00000000",
+        "1331200000",
+        "00000000"
+      ],
+      [
+        "1020000000",
+        "00000000",
+        "460800000",
+        "00000000",
+        "1331200000",
+        "00000000"
+      ]
+    ],
+    "windows": [
+      {
+        "timestamp": "2026-10-30 00:58:25.182",
+        "seconds": 10.003083,
+        "swaps": 294,
+        "fps": 29.391,
+        "draws_per_frame": 2.683673469387755,
+        "sections_ms": {
+          "state": 0.21,
+          "indices": 0.05,
+          "vertices": 0.02,
+          "constants_textures": 0.76,
+          "recording": 0.15,
+          "resolves": 0.21,
+          "swap": 1.25
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:58:35.205",
+        "seconds": 10.022993,
+        "swaps": 299,
+        "fps": 29.831,
+        "draws_per_frame": 1.9933110367892977,
+        "sections_ms": {
+          "state": 0.01,
+          "indices": 0.03,
+          "vertices": 0.01,
+          "constants_textures": 0.47,
+          "recording": 0.13,
+          "resolves": 0.07,
+          "swap": 1.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:58:45.247",
+        "seconds": 10.041556,
+        "swaps": 124,
+        "fps": 12.349,
+        "draws_per_frame": 120.56451612903226,
+        "sections_ms": {
+          "state": 2.62,
+          "indices": 0.97,
+          "vertices": 0.49,
+          "constants_textures": 1.57,
+          "recording": 3.66,
+          "resolves": 3.12,
+          "swap": 64.07
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:58:55.311",
+        "seconds": 10.064432,
+        "swaps": 127,
+        "fps": 12.619,
+        "draws_per_frame": 121.96850393700787,
+        "sections_ms": {
+          "state": 0.1,
+          "indices": 0.75,
+          "vertices": 0.48,
+          "constants_textures": 0.93,
+          "recording": 3.59,
+          "resolves": 2.78,
+          "swap": 66.8
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:59:05.378",
+        "seconds": 10.066899,
+        "swaps": 127,
+        "fps": 12.616,
+        "draws_per_frame": 121.96062992125984,
+        "sections_ms": {
+          "state": 0.1,
+          "indices": 1.02,
+          "vertices": 0.48,
+          "constants_textures": 0.94,
+          "recording": 3.51,
+          "resolves": 2.79,
+          "swap": 66.89
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:59:15.404",
+        "seconds": 10.025673,
+        "swaps": 122,
+        "fps": 12.169,
+        "draws_per_frame": 122.10655737704919,
+        "sections_ms": {
+          "state": 2.65,
+          "indices": 0.81,
+          "vertices": 0.74,
+          "constants_textures": 1.47,
+          "recording": 4.77,
+          "resolves": 2.95,
+          "swap": 63.05
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:59:25.438",
+        "seconds": 10.033995,
+        "swaps": 160,
+        "fps": 15.946,
+        "draws_per_frame": 84.96875,
+        "sections_ms": {
+          "state": 0.29,
+          "indices": 2.86,
+          "vertices": 2.01,
+          "constants_textures": 2.18,
+          "recording": 6.2,
+          "resolves": 4.58,
+          "swap": 36.69
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:59:35.445",
+        "seconds": 10.007214,
+        "swaps": 245,
+        "fps": 24.482,
+        "draws_per_frame": 57.76326530612245,
+        "sections_ms": {
+          "state": 0.04,
+          "indices": 0.66,
+          "vertices": 0.23,
+          "constants_textures": 0.34,
+          "recording": 0.66,
+          "resolves": 3.37,
+          "swap": 32.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:59:45.464",
+        "seconds": 10.019514,
+        "swaps": 245,
+        "fps": 24.452,
+        "draws_per_frame": 60.25714285714286,
+        "sections_ms": {
+          "state": 0.05,
+          "indices": 0.77,
+          "vertices": 0.24,
+          "constants_textures": 0.37,
+          "recording": 0.69,
+          "resolves": 3.8,
+          "swap": 31.7
+        }
+      },
+      {
+        "timestamp": "2026-10-30 00:59:55.494",
+        "seconds": 10.029593,
+        "swaps": 192,
+        "fps": 19.143,
+        "draws_per_frame": 102.52604166666667,
+        "sections_ms": {
+          "state": 6.4,
+          "indices": 1.06,
+          "vertices": 3.3,
+          "constants_textures": 2.47,
+          "recording": 1.62,
+          "resolves": 3.69,
+          "swap": 28.55
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:05.577",
+        "seconds": 10.083191,
+        "swaps": 85,
+        "fps": 8.43,
+        "draws_per_frame": 788.4705882352941,
+        "sections_ms": {
+          "state": 9.99,
+          "indices": 9.15,
+          "vertices": 34.86,
+          "constants_textures": 8.33,
+          "recording": 13.93,
+          "resolves": 6.03,
+          "swap": 29.0
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:15.673",
+        "seconds": 10.096098,
+        "swaps": 86,
+        "fps": 8.518,
+        "draws_per_frame": 838.7558139534884,
+        "sections_ms": {
+          "state": 1.86,
+          "indices": 8.55,
+          "vertices": 39.18,
+          "constants_textures": 7.69,
+          "recording": 14.21,
+          "resolves": 5.74,
+          "swap": 32.49
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:25.748",
+        "seconds": 10.074466,
+        "swaps": 79,
+        "fps": 7.842,
+        "draws_per_frame": 895.3417721518987,
+        "sections_ms": {
+          "state": 5.24,
+          "indices": 8.01,
+          "vertices": 53.75,
+          "constants_textures": 10.43,
+          "recording": 12.73,
+          "resolves": 10.3,
+          "swap": 18.83
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:35.833",
+        "seconds": 10.08537,
+        "swaps": 78,
+        "fps": 7.734,
+        "draws_per_frame": 805.3974358974359,
+        "sections_ms": {
+          "state": 2.87,
+          "indices": 14.08,
+          "vertices": 51.05,
+          "constants_textures": 7.92,
+          "recording": 12.52,
+          "resolves": 9.2,
+          "swap": 23.71
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:45.892",
+        "seconds": 10.059226,
+        "swaps": 77,
+        "fps": 7.655,
+        "draws_per_frame": 823.2337662337662,
+        "sections_ms": {
+          "state": 4.96,
+          "indices": 9.98,
+          "vertices": 41.67,
+          "constants_textures": 9.2,
+          "recording": 12.9,
+          "resolves": 9.2,
+          "swap": 33.82
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:56.054",
+        "seconds": 10.161672,
+        "swaps": 73,
+        "fps": 7.184,
+        "draws_per_frame": 848.6438356164383,
+        "sections_ms": {
+          "state": 9.86,
+          "indices": 7.42,
+          "vertices": 54.91,
+          "constants_textures": 8.17,
+          "recording": 13.7,
+          "resolves": 7.48,
+          "swap": 29.14
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:06.073",
+        "seconds": 10.019502,
+        "swaps": 81,
+        "fps": 8.084,
+        "draws_per_frame": 864.074074074074,
+        "sections_ms": {
+          "state": 2.44,
+          "indices": 9.94,
+          "vertices": 25.88,
+          "constants_textures": 7.45,
+          "recording": 12.26,
+          "resolves": 7.89,
+          "swap": 49.84
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:16.192",
+        "seconds": 10.118481,
+        "swaps": 85,
+        "fps": 8.4,
+        "draws_per_frame": 868.8588235294118,
+        "sections_ms": {
+          "state": 1.84,
+          "indices": 6.66,
+          "vertices": 19.74,
+          "constants_textures": 7.37,
+          "recording": 12.13,
+          "resolves": 6.87,
+          "swap": 56.59
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:26.253",
+        "seconds": 10.061327,
+        "swaps": 84,
+        "fps": 8.349,
+        "draws_per_frame": 839.3333333333334,
+        "sections_ms": {
+          "state": 2.08,
+          "indices": 6.62,
+          "vertices": 19.0,
+          "constants_textures": 7.16,
+          "recording": 12.03,
+          "resolves": 7.07,
+          "swap": 53.75
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:36.284",
+        "seconds": 10.031131,
+        "swaps": 85,
+        "fps": 8.474,
+        "draws_per_frame": 815.9058823529411,
+        "sections_ms": {
+          "state": 2.17,
+          "indices": 6.45,
+          "vertices": 16.68,
+          "constants_textures": 7.1,
+          "recording": 12.05,
+          "resolves": 7.56,
+          "swap": 58.12
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:46.287",
+        "seconds": 10.002994,
+        "swaps": 85,
+        "fps": 8.497,
+        "draws_per_frame": 829.8823529411765,
+        "sections_ms": {
+          "state": 2.25,
+          "indices": 6.55,
+          "vertices": 20.17,
+          "constants_textures": 7.24,
+          "recording": 12.32,
+          "resolves": 7.9,
+          "swap": 53.75
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:56.331",
+        "seconds": 10.043591,
+        "swaps": 82,
+        "fps": 8.164,
+        "draws_per_frame": 847.609756097561,
+        "sections_ms": {
+          "state": 2.17,
+          "indices": 6.42,
+          "vertices": 29.28,
+          "constants_textures": 6.92,
+          "recording": 13.35,
+          "resolves": 8.2,
+          "swap": 48.12
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:06.344",
+        "seconds": 10.013295,
+        "swaps": 79,
+        "fps": 7.89,
+        "draws_per_frame": 840.2278481012659,
+        "sections_ms": {
+          "state": 2.91,
+          "indices": 9.16,
+          "vertices": 34.44,
+          "constants_textures": 7.22,
+          "recording": 12.15,
+          "resolves": 8.82,
+          "swap": 43.88
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:16.379",
+        "seconds": 10.034938,
+        "swaps": 64,
+        "fps": 6.378,
+        "draws_per_frame": 768.15625,
+        "sections_ms": {
+          "state": 37.85,
+          "indices": 12.97,
+          "vertices": 61.05,
+          "constants_textures": 8.36,
+          "recording": 11.75,
+          "resolves": 7.47,
+          "swap": 8.87
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:27.287",
+        "seconds": 10.907733,
+        "swaps": 32,
+        "fps": 2.934,
+        "draws_per_frame": 724.09375,
+        "sections_ms": {
+          "state": 0.7,
+          "indices": 10.87,
+          "vertices": 33.34,
+          "constants_textures": 7.41,
+          "recording": 12.77,
+          "resolves": 6.87,
+          "swap": 36.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:37.356",
+        "seconds": 10.069454,
+        "swaps": 71,
+        "fps": 7.051,
+        "draws_per_frame": 797.9577464788732,
+        "sections_ms": {
+          "state": 0.78,
+          "indices": 7.71,
+          "vertices": 60.67,
+          "constants_textures": 8.79,
+          "recording": 11.87,
+          "resolves": 9.65,
+          "swap": 32.87
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:47.393",
+        "seconds": 10.036617,
+        "swaps": 102,
+        "fps": 10.163,
+        "draws_per_frame": 451.27450980392155,
+        "sections_ms": {
+          "state": 0.22,
+          "indices": 4.11,
+          "vertices": 17.31,
+          "constants_textures": 4.53,
+          "recording": 6.75,
+          "resolves": 8.26,
+          "swap": 43.55
+        }
+      }
+    ],
+    "heavy_windows": [
+      {
+        "timestamp": "2026-10-30 01:00:05.577",
+        "seconds": 10.083191,
+        "swaps": 85,
+        "fps": 8.43,
+        "draws_per_frame": 788.4705882352941,
+        "sections_ms": {
+          "state": 9.99,
+          "indices": 9.15,
+          "vertices": 34.86,
+          "constants_textures": 8.33,
+          "recording": 13.93,
+          "resolves": 6.03,
+          "swap": 29.0
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:15.673",
+        "seconds": 10.096098,
+        "swaps": 86,
+        "fps": 8.518,
+        "draws_per_frame": 838.7558139534884,
+        "sections_ms": {
+          "state": 1.86,
+          "indices": 8.55,
+          "vertices": 39.18,
+          "constants_textures": 7.69,
+          "recording": 14.21,
+          "resolves": 5.74,
+          "swap": 32.49
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:25.748",
+        "seconds": 10.074466,
+        "swaps": 79,
+        "fps": 7.842,
+        "draws_per_frame": 895.3417721518987,
+        "sections_ms": {
+          "state": 5.24,
+          "indices": 8.01,
+          "vertices": 53.75,
+          "constants_textures": 10.43,
+          "recording": 12.73,
+          "resolves": 10.3,
+          "swap": 18.83
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:35.833",
+        "seconds": 10.08537,
+        "swaps": 78,
+        "fps": 7.734,
+        "draws_per_frame": 805.3974358974359,
+        "sections_ms": {
+          "state": 2.87,
+          "indices": 14.08,
+          "vertices": 51.05,
+          "constants_textures": 7.92,
+          "recording": 12.52,
+          "resolves": 9.2,
+          "swap": 23.71
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:45.892",
+        "seconds": 10.059226,
+        "swaps": 77,
+        "fps": 7.655,
+        "draws_per_frame": 823.2337662337662,
+        "sections_ms": {
+          "state": 4.96,
+          "indices": 9.98,
+          "vertices": 41.67,
+          "constants_textures": 9.2,
+          "recording": 12.9,
+          "resolves": 9.2,
+          "swap": 33.82
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:00:56.054",
+        "seconds": 10.161672,
+        "swaps": 73,
+        "fps": 7.184,
+        "draws_per_frame": 848.6438356164383,
+        "sections_ms": {
+          "state": 9.86,
+          "indices": 7.42,
+          "vertices": 54.91,
+          "constants_textures": 8.17,
+          "recording": 13.7,
+          "resolves": 7.48,
+          "swap": 29.14
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:06.073",
+        "seconds": 10.019502,
+        "swaps": 81,
+        "fps": 8.084,
+        "draws_per_frame": 864.074074074074,
+        "sections_ms": {
+          "state": 2.44,
+          "indices": 9.94,
+          "vertices": 25.88,
+          "constants_textures": 7.45,
+          "recording": 12.26,
+          "resolves": 7.89,
+          "swap": 49.84
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:16.192",
+        "seconds": 10.118481,
+        "swaps": 85,
+        "fps": 8.4,
+        "draws_per_frame": 868.8588235294118,
+        "sections_ms": {
+          "state": 1.84,
+          "indices": 6.66,
+          "vertices": 19.74,
+          "constants_textures": 7.37,
+          "recording": 12.13,
+          "resolves": 6.87,
+          "swap": 56.59
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:26.253",
+        "seconds": 10.061327,
+        "swaps": 84,
+        "fps": 8.349,
+        "draws_per_frame": 839.3333333333334,
+        "sections_ms": {
+          "state": 2.08,
+          "indices": 6.62,
+          "vertices": 19.0,
+          "constants_textures": 7.16,
+          "recording": 12.03,
+          "resolves": 7.07,
+          "swap": 53.75
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:36.284",
+        "seconds": 10.031131,
+        "swaps": 85,
+        "fps": 8.474,
+        "draws_per_frame": 815.9058823529411,
+        "sections_ms": {
+          "state": 2.17,
+          "indices": 6.45,
+          "vertices": 16.68,
+          "constants_textures": 7.1,
+          "recording": 12.05,
+          "resolves": 7.56,
+          "swap": 58.12
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:46.287",
+        "seconds": 10.002994,
+        "swaps": 85,
+        "fps": 8.497,
+        "draws_per_frame": 829.8823529411765,
+        "sections_ms": {
+          "state": 2.25,
+          "indices": 6.55,
+          "vertices": 20.17,
+          "constants_textures": 7.24,
+          "recording": 12.32,
+          "resolves": 7.9,
+          "swap": 53.75
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:01:56.331",
+        "seconds": 10.043591,
+        "swaps": 82,
+        "fps": 8.164,
+        "draws_per_frame": 847.609756097561,
+        "sections_ms": {
+          "state": 2.17,
+          "indices": 6.42,
+          "vertices": 29.28,
+          "constants_textures": 6.92,
+          "recording": 13.35,
+          "resolves": 8.2,
+          "swap": 48.12
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:06.344",
+        "seconds": 10.013295,
+        "swaps": 79,
+        "fps": 7.89,
+        "draws_per_frame": 840.2278481012659,
+        "sections_ms": {
+          "state": 2.91,
+          "indices": 9.16,
+          "vertices": 34.44,
+          "constants_textures": 7.22,
+          "recording": 12.15,
+          "resolves": 8.82,
+          "swap": 43.88
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:16.379",
+        "seconds": 10.034938,
+        "swaps": 64,
+        "fps": 6.378,
+        "draws_per_frame": 768.15625,
+        "sections_ms": {
+          "state": 37.85,
+          "indices": 12.97,
+          "vertices": 61.05,
+          "constants_textures": 8.36,
+          "recording": 11.75,
+          "resolves": 7.47,
+          "swap": 8.87
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:27.287",
+        "seconds": 10.907733,
+        "swaps": 32,
+        "fps": 2.934,
+        "draws_per_frame": 724.09375,
+        "sections_ms": {
+          "state": 0.7,
+          "indices": 10.87,
+          "vertices": 33.34,
+          "constants_textures": 7.41,
+          "recording": 12.77,
+          "resolves": 6.87,
+          "swap": 36.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:02:37.356",
+        "seconds": 10.069454,
+        "swaps": 71,
+        "fps": 7.051,
+        "draws_per_frame": 797.9577464788732,
+        "sections_ms": {
+          "state": 0.78,
+          "indices": 7.71,
+          "vertices": 60.67,
+          "constants_textures": 8.79,
+          "recording": 11.87,
+          "resolves": 9.65,
+          "swap": 32.87
+        }
+      }
+    ],
+    "heavy_gpu_samples": [
+      {
+        "timestamp": "2026-10-30 01:00:47.391",
+        "total_ms": 77.4,
+        "main_ms": 34.98,
+        "draws": 491
+      },
+      {
+        "timestamp": "2026-10-30 01:01:26.957",
+        "total_ms": 73.8,
+        "main_ms": 33.43,
+        "draws": 454
+      },
+      {
+        "timestamp": "2026-10-30 01:02:05.732",
+        "total_ms": 73.1,
+        "main_ms": 33.36,
+        "draws": 442
+      },
+      {
+        "timestamp": "2026-10-30 01:02:49.298",
+        "total_ms": 67.3,
+        "main_ms": 30.51,
+        "draws": 298
+      }
+    ],
+    "heavy_fps_weighted": 7.574331514737984,
+    "heavy_fps_range": [
+      2.934,
+      8.518
+    ],
+    "heavy_gpu_total_range": [
+      67.3,
+      77.4
+    ],
+    "heavy_main_gpu_range": [
+      30.51,
+      34.98
+    ]
+  },
+  "89": {
+    "mode": [
+      "2",
+      "true"
+    ],
+    "sha256": "e5efbc6412b84bf4f8ac35cc2b29097ea7db2e48da3e6fb57411679392dff631",
+    "clocks": [
+      [
+        "1020000000",
+        "00000000",
+        "307200000",
+        "00000000",
+        "1331200000",
+        "00000000"
+      ],
+      [
+        "1020000000",
+        "00000000",
+        "460800000",
+        "00000000",
+        "1331200000",
+        "00000000"
+      ]
+    ],
+    "windows": [
+      {
+        "timestamp": "2026-10-30 01:09:00.306",
+        "seconds": 10.038564,
+        "swaps": 216,
+        "fps": 21.517,
+        "draws_per_frame": 62.513888888888886,
+        "sections_ms": {
+          "state": 3.22,
+          "indices": 1.85,
+          "vertices": 1.6,
+          "constants_textures": 2.43,
+          "recording": 5.22,
+          "resolves": 3.08,
+          "swap": 11.42
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:09:10.336",
+        "seconds": 10.030018,
+        "swaps": 260,
+        "fps": 25.922,
+        "draws_per_frame": 71.31538461538462,
+        "sections_ms": {
+          "state": 0.18,
+          "indices": 1.59,
+          "vertices": 1.04,
+          "constants_textures": 0.82,
+          "recording": 3.28,
+          "resolves": 3.9,
+          "swap": 5.25
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:09:20.367",
+        "seconds": 10.030747,
+        "swaps": 299,
+        "fps": 29.808,
+        "draws_per_frame": 57.60535117056856,
+        "sections_ms": {
+          "state": 0.04,
+          "indices": 0.49,
+          "vertices": 0.25,
+          "constants_textures": 0.36,
+          "recording": 0.71,
+          "resolves": 3.65,
+          "swap": 1.24
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:09:30.365",
+        "seconds": 9.998541,
+        "swaps": 298,
+        "fps": 29.804,
+        "draws_per_frame": 61.41275167785235,
+        "sections_ms": {
+          "state": 0.04,
+          "indices": 0.56,
+          "vertices": 0.27,
+          "constants_textures": 0.4,
+          "recording": 0.75,
+          "resolves": 3.79,
+          "swap": 1.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:09:40.436",
+        "seconds": 10.070722,
+        "swaps": 142,
+        "fps": 14.1,
+        "draws_per_frame": 375.5845070422535,
+        "sections_ms": {
+          "state": 12.23,
+          "indices": 4.94,
+          "vertices": 10.8,
+          "constants_textures": 6.19,
+          "recording": 6.62,
+          "resolves": 4.94,
+          "swap": 6.61
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:09:50.524",
+        "seconds": 10.08819,
+        "swaps": 110,
+        "fps": 10.904,
+        "draws_per_frame": 856.9818181818182,
+        "sections_ms": {
+          "state": 4.71,
+          "indices": 11.07,
+          "vertices": 32.37,
+          "constants_textures": 8.38,
+          "recording": 14.89,
+          "resolves": 6.08,
+          "swap": 7.6
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:00.526",
+        "seconds": 10.001625,
+        "swaps": 111,
+        "fps": 11.098,
+        "draws_per_frame": 854.1441441441441,
+        "sections_ms": {
+          "state": 3.84,
+          "indices": 10.9,
+          "vertices": 30.14,
+          "constants_textures": 8.44,
+          "recording": 14.87,
+          "resolves": 8.08,
+          "swap": 7.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:10.539",
+        "seconds": 10.013452,
+        "swaps": 123,
+        "fps": 12.283,
+        "draws_per_frame": 827.4146341463414,
+        "sections_ms": {
+          "state": 0.82,
+          "indices": 7.39,
+          "vertices": 25.68,
+          "constants_textures": 7.39,
+          "recording": 13.28,
+          "resolves": 5.9,
+          "swap": 14.9
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:20.559",
+        "seconds": 10.020035,
+        "swaps": 103,
+        "fps": 10.279,
+        "draws_per_frame": 892.6213592233009,
+        "sections_ms": {
+          "state": 10.37,
+          "indices": 7.58,
+          "vertices": 36.41,
+          "constants_textures": 8.74,
+          "recording": 12.46,
+          "resolves": 9.85,
+          "swap": 4.41
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:30.573",
+        "seconds": 10.013683,
+        "swaps": 102,
+        "fps": 10.186,
+        "draws_per_frame": 849.656862745098,
+        "sections_ms": {
+          "state": 8.46,
+          "indices": 8.93,
+          "vertices": 35.57,
+          "constants_textures": 8.82,
+          "recording": 12.7,
+          "resolves": 9.22,
+          "swap": 7.21
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:40.619",
+        "seconds": 10.046375,
+        "swaps": 107,
+        "fps": 10.651,
+        "draws_per_frame": 887.0280373831775,
+        "sections_ms": {
+          "state": 2.71,
+          "indices": 7.6,
+          "vertices": 31.15,
+          "constants_textures": 9.08,
+          "recording": 13.64,
+          "resolves": 10.43,
+          "swap": 12.04
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:50.638",
+        "seconds": 10.019154,
+        "swaps": 111,
+        "fps": 11.079,
+        "draws_per_frame": 881.5765765765766,
+        "sections_ms": {
+          "state": 2.58,
+          "indices": 7.14,
+          "vertices": 29.82,
+          "constants_textures": 8.57,
+          "recording": 13.59,
+          "resolves": 8.36,
+          "swap": 13.42
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:11:00.645",
+        "seconds": 10.006389,
+        "swaps": 106,
+        "fps": 10.593,
+        "draws_per_frame": 788.433962264151,
+        "sections_ms": {
+          "state": 2.36,
+          "indices": 7.4,
+          "vertices": 41.94,
+          "constants_textures": 8.54,
+          "recording": 12.92,
+          "resolves": 9.27,
+          "swap": 5.17
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:11:10.755",
+        "seconds": 10.109994,
+        "swaps": 94,
+        "fps": 9.298,
+        "draws_per_frame": 792.2446808510638,
+        "sections_ms": {
+          "state": 7.29,
+          "indices": 7.22,
+          "vertices": 44.83,
+          "constants_textures": 9.66,
+          "recording": 13.68,
+          "resolves": 11.92,
+          "swap": 4.26
+        }
+      }
+    ],
+    "heavy_windows": [
+      {
+        "timestamp": "2026-10-30 01:09:50.524",
+        "seconds": 10.08819,
+        "swaps": 110,
+        "fps": 10.904,
+        "draws_per_frame": 856.9818181818182,
+        "sections_ms": {
+          "state": 4.71,
+          "indices": 11.07,
+          "vertices": 32.37,
+          "constants_textures": 8.38,
+          "recording": 14.89,
+          "resolves": 6.08,
+          "swap": 7.6
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:00.526",
+        "seconds": 10.001625,
+        "swaps": 111,
+        "fps": 11.098,
+        "draws_per_frame": 854.1441441441441,
+        "sections_ms": {
+          "state": 3.84,
+          "indices": 10.9,
+          "vertices": 30.14,
+          "constants_textures": 8.44,
+          "recording": 14.87,
+          "resolves": 8.08,
+          "swap": 7.22
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:10.539",
+        "seconds": 10.013452,
+        "swaps": 123,
+        "fps": 12.283,
+        "draws_per_frame": 827.4146341463414,
+        "sections_ms": {
+          "state": 0.82,
+          "indices": 7.39,
+          "vertices": 25.68,
+          "constants_textures": 7.39,
+          "recording": 13.28,
+          "resolves": 5.9,
+          "swap": 14.9
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:20.559",
+        "seconds": 10.020035,
+        "swaps": 103,
+        "fps": 10.279,
+        "draws_per_frame": 892.6213592233009,
+        "sections_ms": {
+          "state": 10.37,
+          "indices": 7.58,
+          "vertices": 36.41,
+          "constants_textures": 8.74,
+          "recording": 12.46,
+          "resolves": 9.85,
+          "swap": 4.41
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:30.573",
+        "seconds": 10.013683,
+        "swaps": 102,
+        "fps": 10.186,
+        "draws_per_frame": 849.656862745098,
+        "sections_ms": {
+          "state": 8.46,
+          "indices": 8.93,
+          "vertices": 35.57,
+          "constants_textures": 8.82,
+          "recording": 12.7,
+          "resolves": 9.22,
+          "swap": 7.21
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:40.619",
+        "seconds": 10.046375,
+        "swaps": 107,
+        "fps": 10.651,
+        "draws_per_frame": 887.0280373831775,
+        "sections_ms": {
+          "state": 2.71,
+          "indices": 7.6,
+          "vertices": 31.15,
+          "constants_textures": 9.08,
+          "recording": 13.64,
+          "resolves": 10.43,
+          "swap": 12.04
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:10:50.638",
+        "seconds": 10.019154,
+        "swaps": 111,
+        "fps": 11.079,
+        "draws_per_frame": 881.5765765765766,
+        "sections_ms": {
+          "state": 2.58,
+          "indices": 7.14,
+          "vertices": 29.82,
+          "constants_textures": 8.57,
+          "recording": 13.59,
+          "resolves": 8.36,
+          "swap": 13.42
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:11:00.645",
+        "seconds": 10.006389,
+        "swaps": 106,
+        "fps": 10.593,
+        "draws_per_frame": 788.433962264151,
+        "sections_ms": {
+          "state": 2.36,
+          "indices": 7.4,
+          "vertices": 41.94,
+          "constants_textures": 8.54,
+          "recording": 12.92,
+          "resolves": 9.27,
+          "swap": 5.17
+        }
+      },
+      {
+        "timestamp": "2026-10-30 01:11:10.755",
+        "seconds": 10.109994,
+        "swaps": 94,
+        "fps": 9.298,
+        "draws_per_frame": 792.2446808510638,
+        "sections_ms": {
+          "state": 7.29,
+          "indices": 7.22,
+          "vertices": 44.83,
+          "constants_textures": 9.66,
+          "recording": 13.68,
+          "resolves": 11.92,
+          "swap": 4.26
+        }
+      }
+    ],
+    "heavy_gpu_samples": [
+      {
+        "timestamp": "2026-10-30 01:09:57.327",
+        "total_ms": 44.0,
+        "main_ms": 17.82,
+        "draws": 383
+      },
+      {
+        "timestamp": "2026-10-30 01:10:26.653",
+        "total_ms": 53.2,
+        "main_ms": 20.25,
+        "draws": 487
+      },
+      {
+        "timestamp": "2026-10-30 01:10:55.993",
+        "total_ms": 54.0,
+        "main_ms": 21.63,
+        "draws": 445
+      }
+    ],
+    "heavy_fps_weighted": 10.706508074384477,
+    "heavy_fps_range": [
+      9.298,
+      12.283
+    ],
+    "heavy_gpu_total_range": [
+      44.0,
+      54.0
+    ],
+    "heavy_main_gpu_range": [
+      17.82,
+      21.63
+    ]
+  }
+}

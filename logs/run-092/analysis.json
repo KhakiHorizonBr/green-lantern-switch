@@ -1,0 +1,1773 @@
+{
+  "log": "outputs\\run-092\\green_lantern_092.log",
+  "windows": [
+    {
+      "end_frame": 23,
+      "seconds": 1.040442,
+      "frames": 23,
+      "fps": 22.106,
+      "interval_counts": [
+        10,
+        11,
+        1,
+        1
+      ]
+    },
+    {
+      "end_frame": 45,
+      "seconds": 1.036085,
+      "frames": 22,
+      "fps": 21.234,
+      "interval_counts": [
+        0,
+        17,
+        5,
+        0
+      ]
+    },
+    {
+      "end_frame": 62,
+      "seconds": 1.026316,
+      "frames": 17,
+      "fps": 16.564,
+      "interval_counts": [
+        4,
+        2,
+        11,
+        0
+      ]
+    },
+    {
+      "end_frame": 74,
+      "seconds": 1.072003,
+      "frames": 12,
+      "fps": 11.194,
+      "interval_counts": [
+        0,
+        0,
+        12,
+        0
+      ]
+    },
+    {
+      "end_frame": 89,
+      "seconds": 1.014345,
+      "frames": 15,
+      "fps": 14.788,
+      "interval_counts": [
+        0,
+        0,
+        15,
+        0
+      ]
+    },
+    {
+      "end_frame": 105,
+      "seconds": 1.02073,
+      "frames": 16,
+      "fps": 15.675,
+      "interval_counts": [
+        0,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "end_frame": 121,
+      "seconds": 1.015477,
+      "frames": 16,
+      "fps": 15.756,
+      "interval_counts": [
+        0,
+        0,
+        16,
+        0
+      ]
+    },
+    {
+      "end_frame": 138,
+      "seconds": 1.054457,
+      "frames": 17,
+      "fps": 16.122,
+      "interval_counts": [
+        1,
+        1,
+        14,
+        1
+      ]
+    },
+    {
+      "end_frame": 155,
+      "seconds": 1.051163,
+      "frames": 17,
+      "fps": 16.173,
+      "interval_counts": [
+        0,
+        0,
+        17,
+        0
+      ]
+    },
+    {
+      "end_frame": 175,
+      "seconds": 1.018875,
+      "frames": 20,
+      "fps": 19.629,
+      "interval_counts": [
+        4,
+        2,
+        14,
+        0
+      ]
+    },
+    {
+      "end_frame": 200,
+      "seconds": 1.029856,
+      "frames": 25,
+      "fps": 24.275,
+      "interval_counts": [
+        17,
+        0,
+        8,
+        0
+      ]
+    },
+    {
+      "end_frame": 231,
+      "seconds": 1.03293,
+      "frames": 31,
+      "fps": 30.012,
+      "interval_counts": [
+        31,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "end_frame": 261,
+      "seconds": 1.000001,
+      "frames": 30,
+      "fps": 30.0,
+      "interval_counts": [
+        29,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "end_frame": 292,
+      "seconds": 1.033352,
+      "frames": 31,
+      "fps": 29.999,
+      "interval_counts": [
+        31,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "end_frame": 322,
+      "seconds": 1.000028,
+      "frames": 30,
+      "fps": 29.999,
+      "interval_counts": [
+        26,
+        3,
+        1,
+        0
+      ]
+    },
+    {
+      "end_frame": 352,
+      "seconds": 1.000151,
+      "frames": 30,
+      "fps": 29.995,
+      "interval_counts": [
+        29,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "end_frame": 381,
+      "seconds": 1.016337,
+      "frames": 29,
+      "fps": 28.534,
+      "interval_counts": [
+        25,
+        3,
+        1,
+        0
+      ]
+    },
+    {
+      "end_frame": 391,
+      "seconds": 1.141928,
+      "frames": 10,
+      "fps": 8.757,
+      "interval_counts": [
+        6,
+        1,
+        0,
+        3
+      ]
+    },
+    {
+      "end_frame": 396,
+      "seconds": 1.168792,
+      "frames": 5,
+      "fps": 4.278,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        5
+      ]
+    },
+    {
+      "end_frame": 401,
+      "seconds": 1.165024,
+      "frames": 5,
+      "fps": 4.292,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        5
+      ]
+    },
+    {
+      "end_frame": 405,
+      "seconds": 1.571441,
+      "frames": 4,
+      "fps": 2.545,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 411,
+      "seconds": 1.140409,
+      "frames": 6,
+      "fps": 5.261,
+      "interval_counts": [
+        0,
+        0,
+        2,
+        4
+      ]
+    },
+    {
+      "end_frame": 415,
+      "seconds": 1.172355,
+      "frames": 4,
+      "fps": 3.412,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 419,
+      "seconds": 1.173133,
+      "frames": 4,
+      "fps": 3.41,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 423,
+      "seconds": 1.17425,
+      "frames": 4,
+      "fps": 3.406,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 426,
+      "seconds": 1.075764,
+      "frames": 3,
+      "fps": 2.789,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        3
+      ]
+    },
+    {
+      "end_frame": 431,
+      "seconds": 1.217637,
+      "frames": 5,
+      "fps": 4.106,
+      "interval_counts": [
+        0,
+        0,
+        1,
+        4
+      ]
+    },
+    {
+      "end_frame": 435,
+      "seconds": 1.136355,
+      "frames": 4,
+      "fps": 3.52,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 439,
+      "seconds": 1.137577,
+      "frames": 4,
+      "fps": 3.516,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 443,
+      "seconds": 1.134655,
+      "frames": 4,
+      "fps": 3.525,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 447,
+      "seconds": 1.130773,
+      "frames": 4,
+      "fps": 3.537,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 451,
+      "seconds": 1.131742,
+      "frames": 4,
+      "fps": 3.534,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 455,
+      "seconds": 1.135964,
+      "frames": 4,
+      "fps": 3.521,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 459,
+      "seconds": 1.133292,
+      "frames": 4,
+      "fps": 3.53,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 463,
+      "seconds": 1.131361,
+      "frames": 4,
+      "fps": 3.536,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 467,
+      "seconds": 1.136462,
+      "frames": 4,
+      "fps": 3.52,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 471,
+      "seconds": 1.131432,
+      "frames": 4,
+      "fps": 3.535,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 475,
+      "seconds": 1.133302,
+      "frames": 4,
+      "fps": 3.53,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 479,
+      "seconds": 1.13144,
+      "frames": 4,
+      "fps": 3.535,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 483,
+      "seconds": 1.132659,
+      "frames": 4,
+      "fps": 3.532,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 487,
+      "seconds": 1.131773,
+      "frames": 4,
+      "fps": 3.534,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 491,
+      "seconds": 1.13474,
+      "frames": 4,
+      "fps": 3.525,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 495,
+      "seconds": 1.131311,
+      "frames": 4,
+      "fps": 3.536,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 499,
+      "seconds": 1.132179,
+      "frames": 4,
+      "fps": 3.533,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 503,
+      "seconds": 1.131733,
+      "frames": 4,
+      "fps": 3.534,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 507,
+      "seconds": 1.13541,
+      "frames": 4,
+      "fps": 3.523,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 511,
+      "seconds": 1.136737,
+      "frames": 4,
+      "fps": 3.519,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 515,
+      "seconds": 1.130964,
+      "frames": 4,
+      "fps": 3.537,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 519,
+      "seconds": 1.137933,
+      "frames": 4,
+      "fps": 3.515,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 523,
+      "seconds": 1.132901,
+      "frames": 4,
+      "fps": 3.531,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 527,
+      "seconds": 1.134822,
+      "frames": 4,
+      "fps": 3.525,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 531,
+      "seconds": 1.136702,
+      "frames": 4,
+      "fps": 3.519,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 535,
+      "seconds": 1.135971,
+      "frames": 4,
+      "fps": 3.521,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 539,
+      "seconds": 1.13428,
+      "frames": 4,
+      "fps": 3.526,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 543,
+      "seconds": 1.134592,
+      "frames": 4,
+      "fps": 3.525,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 547,
+      "seconds": 1.132714,
+      "frames": 4,
+      "fps": 3.531,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 551,
+      "seconds": 1.130494,
+      "frames": 4,
+      "fps": 3.538,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 555,
+      "seconds": 1.134035,
+      "frames": 4,
+      "fps": 3.527,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 559,
+      "seconds": 1.131261,
+      "frames": 4,
+      "fps": 3.536,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 563,
+      "seconds": 1.133358,
+      "frames": 4,
+      "fps": 3.529,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 567,
+      "seconds": 1.132773,
+      "frames": 4,
+      "fps": 3.531,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 571,
+      "seconds": 1.13416,
+      "frames": 4,
+      "fps": 3.527,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 575,
+      "seconds": 1.137912,
+      "frames": 4,
+      "fps": 3.515,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 579,
+      "seconds": 1.13362,
+      "frames": 4,
+      "fps": 3.529,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 583,
+      "seconds": 1.132592,
+      "frames": 4,
+      "fps": 3.532,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 587,
+      "seconds": 1.137136,
+      "frames": 4,
+      "fps": 3.518,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 591,
+      "seconds": 1.131976,
+      "frames": 4,
+      "fps": 3.534,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 595,
+      "seconds": 1.130769,
+      "frames": 4,
+      "fps": 3.537,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 599,
+      "seconds": 1.146368,
+      "frames": 4,
+      "fps": 3.489,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 603,
+      "seconds": 1.116215,
+      "frames": 4,
+      "fps": 3.584,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 607,
+      "seconds": 1.136793,
+      "frames": 4,
+      "fps": 3.519,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 611,
+      "seconds": 1.134086,
+      "frames": 4,
+      "fps": 3.527,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 615,
+      "seconds": 1.132982,
+      "frames": 4,
+      "fps": 3.531,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 619,
+      "seconds": 1.132517,
+      "frames": 4,
+      "fps": 3.532,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 623,
+      "seconds": 1.1352,
+      "frames": 4,
+      "fps": 3.524,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 627,
+      "seconds": 1.134378,
+      "frames": 4,
+      "fps": 3.526,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 631,
+      "seconds": 1.130623,
+      "frames": 4,
+      "fps": 3.538,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 635,
+      "seconds": 1.140004,
+      "frames": 4,
+      "fps": 3.509,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 639,
+      "seconds": 1.139688,
+      "frames": 4,
+      "fps": 3.51,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 653,
+      "seconds": 1.060934,
+      "frames": 14,
+      "fps": 13.196,
+      "interval_counts": [
+        1,
+        2,
+        10,
+        1
+      ]
+    },
+    {
+      "end_frame": 666,
+      "seconds": 1.066415,
+      "frames": 13,
+      "fps": 12.19,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 679,
+      "seconds": 1.064246,
+      "frames": 13,
+      "fps": 12.215,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 695,
+      "seconds": 1.02211,
+      "frames": 16,
+      "fps": 15.654,
+      "interval_counts": [
+        4,
+        1,
+        11,
+        0
+      ]
+    },
+    {
+      "end_frame": 708,
+      "seconds": 1.067307,
+      "frames": 13,
+      "fps": 12.18,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 721,
+      "seconds": 1.06661,
+      "frames": 13,
+      "fps": 12.188,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 734,
+      "seconds": 1.06606,
+      "frames": 13,
+      "fps": 12.194,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 747,
+      "seconds": 1.063707,
+      "frames": 13,
+      "fps": 12.221,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 760,
+      "seconds": 1.065469,
+      "frames": 13,
+      "fps": 12.201,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 773,
+      "seconds": 1.06561,
+      "frames": 13,
+      "fps": 12.2,
+      "interval_counts": [
+        0,
+        0,
+        12,
+        1
+      ]
+    },
+    {
+      "end_frame": 786,
+      "seconds": 1.066467,
+      "frames": 13,
+      "fps": 12.19,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 799,
+      "seconds": 1.064688,
+      "frames": 13,
+      "fps": 12.21,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 812,
+      "seconds": 1.0658,
+      "frames": 13,
+      "fps": 12.197,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 825,
+      "seconds": 1.063875,
+      "frames": 13,
+      "fps": 12.219,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 838,
+      "seconds": 1.075096,
+      "frames": 13,
+      "fps": 12.092,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 851,
+      "seconds": 1.058107,
+      "frames": 13,
+      "fps": 12.286,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 864,
+      "seconds": 1.071028,
+      "frames": 13,
+      "fps": 12.138,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 877,
+      "seconds": 1.069261,
+      "frames": 13,
+      "fps": 12.158,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 890,
+      "seconds": 1.111123,
+      "frames": 13,
+      "fps": 11.7,
+      "interval_counts": [
+        0,
+        0,
+        12,
+        1
+      ]
+    },
+    {
+      "end_frame": 903,
+      "seconds": 1.0295,
+      "frames": 13,
+      "fps": 12.627,
+      "interval_counts": [
+        0,
+        1,
+        12,
+        0
+      ]
+    },
+    {
+      "end_frame": 916,
+      "seconds": 1.068836,
+      "frames": 13,
+      "fps": 12.163,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 929,
+      "seconds": 1.068504,
+      "frames": 13,
+      "fps": 12.167,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 942,
+      "seconds": 1.068258,
+      "frames": 13,
+      "fps": 12.169,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 955,
+      "seconds": 1.067447,
+      "frames": 13,
+      "fps": 12.179,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 968,
+      "seconds": 1.0689,
+      "frames": 13,
+      "fps": 12.162,
+      "interval_counts": [
+        0,
+        0,
+        12,
+        1
+      ]
+    },
+    {
+      "end_frame": 982,
+      "seconds": 1.071398,
+      "frames": 14,
+      "fps": 13.067,
+      "interval_counts": [
+        1,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 995,
+      "seconds": 1.068122,
+      "frames": 13,
+      "fps": 12.171,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1008,
+      "seconds": 1.066348,
+      "frames": 13,
+      "fps": 12.191,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1021,
+      "seconds": 1.06961,
+      "frames": 13,
+      "fps": 12.154,
+      "interval_counts": [
+        0,
+        1,
+        11,
+        1
+      ]
+    },
+    {
+      "end_frame": 1034,
+      "seconds": 1.066739,
+      "frames": 13,
+      "fps": 12.187,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1047,
+      "seconds": 1.064268,
+      "frames": 13,
+      "fps": 12.215,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1060,
+      "seconds": 1.067875,
+      "frames": 13,
+      "fps": 12.174,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1073,
+      "seconds": 1.06766,
+      "frames": 13,
+      "fps": 12.176,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1086,
+      "seconds": 1.068368,
+      "frames": 13,
+      "fps": 12.168,
+      "interval_counts": [
+        0,
+        0,
+        12,
+        1
+      ]
+    },
+    {
+      "end_frame": 1099,
+      "seconds": 1.067138,
+      "frames": 13,
+      "fps": 12.182,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1112,
+      "seconds": 1.064699,
+      "frames": 13,
+      "fps": 12.21,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1125,
+      "seconds": 1.068264,
+      "frames": 13,
+      "fps": 12.169,
+      "interval_counts": [
+        0,
+        0,
+        13,
+        0
+      ]
+    },
+    {
+      "end_frame": 1130,
+      "seconds": 2.18585,
+      "frames": 5,
+      "fps": 2.287,
+      "interval_counts": [
+        0,
+        0,
+        3,
+        2
+      ]
+    },
+    {
+      "end_frame": 1132,
+      "seconds": 1.024672,
+      "frames": 2,
+      "fps": 1.952,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        2
+      ]
+    },
+    {
+      "end_frame": 1137,
+      "seconds": 1.132287,
+      "frames": 5,
+      "fps": 4.416,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        5
+      ]
+    },
+    {
+      "end_frame": 1141,
+      "seconds": 1.104101,
+      "frames": 4,
+      "fps": 3.623,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1145,
+      "seconds": 1.16515,
+      "frames": 4,
+      "fps": 3.433,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1149,
+      "seconds": 1.164585,
+      "frames": 4,
+      "fps": 3.435,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1153,
+      "seconds": 1.166934,
+      "frames": 4,
+      "fps": 3.428,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1157,
+      "seconds": 1.166438,
+      "frames": 4,
+      "fps": 3.429,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1161,
+      "seconds": 1.16836,
+      "frames": 4,
+      "fps": 3.424,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1165,
+      "seconds": 1.168538,
+      "frames": 4,
+      "fps": 3.423,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1169,
+      "seconds": 1.168896,
+      "frames": 4,
+      "fps": 3.422,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1173,
+      "seconds": 1.16396,
+      "frames": 4,
+      "fps": 3.437,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1177,
+      "seconds": 1.1646,
+      "frames": 4,
+      "fps": 3.435,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1181,
+      "seconds": 1.165764,
+      "frames": 4,
+      "fps": 3.431,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1185,
+      "seconds": 1.167443,
+      "frames": 4,
+      "fps": 3.426,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1189,
+      "seconds": 1.168451,
+      "frames": 4,
+      "fps": 3.423,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1193,
+      "seconds": 1.165219,
+      "frames": 4,
+      "fps": 3.433,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1197,
+      "seconds": 1.138784,
+      "frames": 4,
+      "fps": 3.513,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1199,
+      "seconds": 4.156862,
+      "frames": 2,
+      "fps": 0.481,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        2
+      ]
+    },
+    {
+      "end_frame": 1200,
+      "seconds": 1.85674,
+      "frames": 1,
+      "fps": 0.539,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "end_frame": 1206,
+      "seconds": 1.316802,
+      "frames": 6,
+      "fps": 4.556,
+      "interval_counts": [
+        0,
+        0,
+        1,
+        5
+      ]
+    },
+    {
+      "end_frame": 1210,
+      "seconds": 1.184464,
+      "frames": 4,
+      "fps": 3.377,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1214,
+      "seconds": 1.193768,
+      "frames": 4,
+      "fps": 3.351,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1218,
+      "seconds": 1.170089,
+      "frames": 4,
+      "fps": 3.419,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1221,
+      "seconds": 1.189189,
+      "frames": 3,
+      "fps": 2.523,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        3
+      ]
+    },
+    {
+      "end_frame": 1226,
+      "seconds": 1.243227,
+      "frames": 5,
+      "fps": 4.022,
+      "interval_counts": [
+        0,
+        0,
+        2,
+        3
+      ]
+    },
+    {
+      "end_frame": 1230,
+      "seconds": 1.210301,
+      "frames": 4,
+      "fps": 3.305,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1234,
+      "seconds": 1.212493,
+      "frames": 4,
+      "fps": 3.299,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "end_frame": 1238,
+      "seconds": 1.878742,
+      "frames": 4,
+      "fps": 2.129,
+      "interval_counts": [
+        0,
+        0,
+        0,
+        4
+      ]
+    }
+  ],
+  "measured_seconds": 167.222553,
+  "completion_fps": 7.403307614852645,
+  "seconds_by_window_fps": {
+    "below10": 110.324158,
+    "10to20": 47.709213,
+    "20to25": 3.106383,
+    "25plus": 6.082799
+  },
+  "clock_reports": [
+    "[2026-11-05 14:03:25.852] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=307200000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:03:33.139] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:03:43.165] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:03:53.316] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:03.538] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:13.733] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:23.944] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:34.143] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:44.345] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:04:54.344] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:04.392] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:14.406] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:24.436] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:35.911] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:46.179] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:05:59.627] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization",
+    "[2026-11-05 14:06:09.667] [info] [core] [t1857456588064350431] [gl-clocks-v1] operation_mode=0 performance_mode=0 CPU=1020000000Hz rc=00000000 GPU=460800000Hz rc=00000000 RAM=1331200000Hz rc=00000000; read-only requested rates, not utilization"
+  ],
+  "warning": "Host-observed completion intervals. Bands classify one-second averages, not individual frames or screen scanout. Includes menus/loading unless filtered by frame. Partial final window omitted."
+}
