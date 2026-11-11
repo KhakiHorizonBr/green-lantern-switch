@@ -7,6 +7,8 @@ Não é um port concluído; estabilidade e gráficos de todas as fases não fora
 
 ## Encerramento do desenvolvimento local — 11/11/2026
 
+Infelizmente, não consegui continuar o desenvolvimento por questões pessoais, mas deixei tudo aqui para quem quiser continuar. Boa sorte!
+
 O acervo inclui o renderer Vulkan, o protótipo deko3d, overlays de dependências, diagnósticos e experimentos até o hardware 092. No Vulkan, use 100% de resolução interna e submissões parciais desativadas como referência. A escala de 75% foi testada e não apresentou ganho sustentado. O protótipo deko3d chegou ao gameplay, com custo alto de sincronização e lacunas na cobertura de shaders.
 
 **[Guia de retomada, cronologia e dependências](docs/RETOMADA.md)**
